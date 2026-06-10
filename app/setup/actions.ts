@@ -22,7 +22,15 @@ export async function createOwnerAction(
   const name = String(formData.get("name") ?? "");
 
   if (!email || !name) return { error: "Name and email are required." };
-  if (!verifyBootstrapToken(token)) return { error: "Invalid bootstrap token." };
+  if (!verifyBootstrapToken(token)) {
+    // Lengths only — never log the values. 0 expected = env var absent/empty;
+    // off-by-two usually means quotes survived .env parsing.
+    console.warn(
+      `[setup] bootstrap token rejected: submitted length ${token.length}, ` +
+        `expected length ${(process.env.SETUP_BOOTSTRAP_TOKEN ?? "").trim().length}`,
+    );
+    return { error: "Invalid bootstrap token." };
+  }
   if (!(await needsSetup())) return { error: "Setup has already been completed." };
 
   const h = await headers();

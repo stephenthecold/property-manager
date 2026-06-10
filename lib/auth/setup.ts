@@ -15,9 +15,11 @@ export async function needsSetup(): Promise<boolean> {
  * wiped User table cannot silently re-expose unauthenticated owner creation.
  */
 export function verifyBootstrapToken(token: string | undefined | null): boolean {
-  const expected = getEnv().SETUP_BOOTSTRAP_TOKEN;
-  if (!expected || !token) return false;
-  return constantTimeEqual(token, expected);
+  // Trim both sides: env files / terminals can smuggle stray whitespace or CRs.
+  const expected = getEnv().SETUP_BOOTSTRAP_TOKEN?.trim();
+  const submitted = token?.trim();
+  if (!expected || !submitted) return false;
+  return constantTimeEqual(submitted, expected);
 }
 
 /**
