@@ -8,6 +8,8 @@ export interface PutObjectInput {
 export interface FileStorage {
   readonly name: string;
   put(input: PutObjectInput): Promise<{ key: string }>;
+  /** Download object contents. */
+  get(key: string): Promise<Buffer>;
   /** Signed URL to download a private object. */
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
   /** Signed URL the browser can PUT directly to (presigned upload). */

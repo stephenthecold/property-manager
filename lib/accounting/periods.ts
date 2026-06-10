@@ -71,6 +71,19 @@ export function listExpectedPeriods(opts: {
   return result;
 }
 
+/**
+ * Parse a date-only form value ("YYYY-MM-DD") as midnight in the property tz.
+ * `new Date("YYYY-MM-DD")` is UTC midnight, which is the PREVIOUS civil day in
+ * behind-UTC timezones — receipts/ledgers/income reports interpret instants in
+ * the property tz, so payment dates must be minted there too (like due dates).
+ * Returns null for anything that is not a valid YYYY-MM-DD.
+ */
+export function parseDateOnlyInZone(raw: string, tz: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const dt = DateTime.fromISO(raw, { zone: tz });
+  return dt.isValid ? dt.startOf("day").toJSDate() : null;
+}
+
 /** Whole days `b - a` (positive if b is after a), measured in the property tz. */
 export function daysBetween(a: Date, b: Date, tz: string): number {
   const da = DateTime.fromJSDate(a, { zone: tz }).startOf("day");

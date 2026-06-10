@@ -22,7 +22,11 @@
 
 # misc
 .DS_Store
+._*
 *.pem
+
+# local file-storage provider (STORAGE_PROVIDER=local)
+/.data/
 
 # debug
 npm-debug.log*

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { prisma } from "@/lib/db";
 import { generateChargesForLease, assessLateFeesForLease } from "@/lib/services/billing";
 import { postPayment, voidPayment } from "@/lib/services/payments";
+import { ensureReceiptForPayment } from "@/lib/services/receipts";
 import type { Lease } from "@/lib/generated/prisma/client";
 
 /**
@@ -140,6 +141,16 @@ async function main() {
     where: { id: "seed-prop-oak-bldg-A-unit-3" },
     data: { occupancyStatus: "maintenance" },
   });
+
+  // Phase 2: digital receipts. postPayment auto-creates them for NEW payments;
+  // this backfills receipts when re-seeding a DB whose payments already existed.
+  // Voided payments are excluded — their receipt would postdate the reversal.
+  const postedPayments = await prisma.payment.findMany({
+    where: { status: "posted" },
+  });
+  for (const p of postedPayments) {
+    await ensureReceiptForPayment(p.id, SYSTEM);
+  }
 
   console.log("Seed complete.");
 }

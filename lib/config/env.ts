@@ -44,7 +44,9 @@ const envSchema = z.object({
   TRUSTED_PROXY_COUNT: z.coerce.number().int().min(0).default(1),
 
   // File storage provider (stub default → nothing external required in Phase 1).
-  STORAGE_PROVIDER: z.enum(["stub", "s3"]).default("stub"),
+  // "local" stores files on the app server's disk (single-node, dev/small installs).
+  STORAGE_PROVIDER: z.enum(["stub", "s3", "local"]).default("stub"),
+  LOCAL_STORAGE_DIR: z.string().default(".data/uploads"),
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().optional(),
@@ -54,6 +56,8 @@ const envSchema = z.object({
 
   // SMS provider (stub default).
   SMS_PROVIDER: z.enum(["stub", "twilio", "telnyx"]).default("stub"),
+  // How many days before the due date the scheduled "rent due soon" reminder fires.
+  REMINDER_DUE_SOON_DAYS: z.coerce.number().int().min(0).default(3),
   SMS_ACCOUNT_SID: z.string().optional(),
   SMS_AUTH_TOKEN: z.string().optional(),
   SMS_FROM_NUMBER: z.string().optional(),

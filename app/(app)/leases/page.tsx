@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import type { LeaseStatus } from "@/lib/generated/prisma/enums";
 import { terminateLease } from "./actions";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -14,8 +17,37 @@ import {
 
 export const runtime = "nodejs";
 
-export default async function LeasesPage() {
+const LEASE_STATUSES = ["draft", "active", "month_to_month", "ended", "eviction"] as const;
+
+export default async function LeasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const first = (key: string): string => {
+    const v = sp[key];
+    return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  };
+
+  const statusRaw = first("status");
+  const status = (LEASE_STATUSES as readonly string[]).includes(statusRaw)
+    ? (statusRaw as LeaseStatus)
+    : undefined;
+  const propertyId = first("propertyId") || undefined;
+
+  const where: Prisma.LeaseWhereInput = {};
+  if (status) where.status = status;
+  if (propertyId) where.unit = { propertyId };
+  const filtering = Boolean(status || propertyId);
+
+  const properties = await prisma.property.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
   const leases = await prisma.lease.findMany({
+    where,
     orderBy: [{ status: "asc" }, { startDate: "desc" }],
     include: { tenant: true, unit: { include: { property: true } } },
   });
@@ -26,6 +58,49 @@ export default async function LeasesPage() {
         <h1 className="text-2xl font-semibold">Leases</h1>
         <Button render={<Link href="/leases/new" />}>Create lease</Button>
       </div>
+
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="status">Status</Label>
+          <select
+            id="status"
+            name="status"
+            defaultValue={status ?? ""}
+            className="h-9 w-44 rounded-md border bg-transparent px-3 text-sm capitalize"
+          >
+            <option value="">All statuses</option>
+            {LEASE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="propertyId">Property</Label>
+          <select
+            id="propertyId"
+            name="propertyId"
+            defaultValue={propertyId ?? ""}
+            className="h-9 w-48 rounded-md border bg-transparent px-3 text-sm"
+          >
+            <option value="">All properties</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {filtering && (
+          <Button variant="ghost" size="sm" render={<Link href="/leases" />}>
+            Clear
+          </Button>
+        )}
+      </form>
 
       <Table>
         <TableHeader>

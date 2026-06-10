@@ -3,9 +3,18 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
+import { listDocuments } from "@/lib/services/documents";
+import {
+  buildReminderVars,
+  DEFAULT_TEMPLATES,
+  renderTemplate,
+} from "@/lib/reminders/templates";
 import { voidPaymentAction } from "@/app/(app)/payments/actions";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
+import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
+import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,6 +27,13 @@ import {
 } from "@/components/ui/table";
 
 export const runtime = "nodejs";
+
+function formatBytes(bytes: number | null): string {
+  if (bytes == null) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function summary(label: string, value: string) {
   return (
@@ -75,6 +91,55 @@ export default async function TenantDetail({
 
   const currency = activeLease?.unit.property.currency ?? "USD";
 
+  const documents = await listDocuments({ tenantId: tenant.id });
+
+  const reminders = await prisma.reminder.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+
+  // Pre-render the default SMS template bodies server-side (the dialog is a
+  // client component and must not import lib/reminders). With no active lease,
+  // fall back to the most recent lease's figures, else empty strings.
+  const templateLease = activeLease ?? tenant.leases[0] ?? null;
+  const templateCurrency = templateLease?.unit.property.currency ?? "USD";
+  const templateVars = buildReminderVars({
+    tenantFirstName: tenant.firstName,
+    tenantLastName: tenant.lastName,
+    propertyName: templateLease?.unit.property.name ?? "",
+    unitLabel: templateLease?.unit.unitNumber ?? "",
+    amountDueFormatted: templateLease
+      ? formatCurrency(
+          snap && snap.currentPeriodOutstandingCents > 0n
+            ? snap.currentPeriodOutstandingCents
+            : templateLease.rentAmountCents,
+          templateCurrency,
+        )
+      : "",
+    dueDateFormatted:
+      activeLease && snap?.currentPeriodDueDate
+        ? snap.currentPeriodDueDate.toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            timeZone: activeLease.unit.property.timezone,
+          })
+        : "",
+    balanceFormatted: snap
+      ? formatCurrency(snap.netBalanceCents, templateCurrency)
+      : "",
+  });
+  const defaultBodies: Record<string, string> = {};
+  for (const t of [
+    "rent_due_soon",
+    "rent_overdue",
+    "partial_balance",
+    "payment_receipt",
+  ] as const) {
+    defaultBodies[t] = renderTemplate(DEFAULT_TEMPLATES[t], templateVars);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -82,17 +147,41 @@ export default async function TenantDetail({
           <h1 className="text-2xl font-semibold">
             {tenant.firstName} {tenant.lastName}
           </h1>
-          <p className="text-muted-foreground">
-            {[tenant.phone, tenant.email].filter(Boolean).join(" · ") || "No contact info"}
-            {tenant.smsConsent ? " · SMS OK" : " · no SMS consent"}
+          <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
+            <span>
+              {[tenant.phone, tenant.email].filter(Boolean).join(" · ") ||
+                "No contact info"}
+            </span>
+            {tenant.smsConsent ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+              >
+                SMS consent
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground">
+                No SMS consent
+              </Badge>
+            )}
           </p>
         </div>
-        {activeLease && (
-          <RecordPaymentDialog
-            leaseId={activeLease.id}
-            defaultAmount={(Number(activeLease.rentAmountCents) / 100).toFixed(2)}
+        <div className="flex items-center gap-2">
+          <SendReminderDialog
+            tenantId={tenant.id}
+            leaseId={activeLease?.id}
+            tenantName={`${tenant.firstName} ${tenant.lastName}`}
+            hasConsent={tenant.smsConsent}
+            hasPhone={!!tenant.phone?.trim()}
+            defaultBodies={defaultBodies}
           />
-        )}
+          {activeLease && (
+            <RecordPaymentDialog
+              leaseId={activeLease.id}
+              defaultAmount={(Number(activeLease.rentAmountCents) / 100).toFixed(2)}
+            />
+          )}
+        </div>
       </div>
 
       {activeLease && snap ? (
@@ -236,6 +325,89 @@ export default async function TenantDetail({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Documents</CardTitle>
+          <UploadDocumentDialog tenantId={tenant.id} trigger="Upload" />
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>File</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Size</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documents.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell>{d.createdAt.toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/documents/${d.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {d.fileName ?? "Untitled file"}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="capitalize">
+                    {d.uploadType.replace(/_/g, " ")}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{formatBytes(d.fileSize)}</TableCell>
+                </TableRow>
+              ))}
+              {documents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    No documents yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Reminders</CardTitle>
+          <Link href="/reminders" className="text-sm font-medium hover:underline">
+            View all
+          </Link>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reminders.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.createdAt.toLocaleDateString()}</TableCell>
+                  <TableCell className="capitalize">
+                    {r.reminderType.replace(/_/g, " ")}
+                  </TableCell>
+                  <TableCell className="capitalize">{r.status}</TableCell>
+                </TableRow>
+              ))}
+              {reminders.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    No reminders yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

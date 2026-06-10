@@ -7,6 +7,7 @@ import {
   type OpenCharge,
   planFifoAllocation,
 } from "@/lib/accounting/allocation";
+import { ensureReceiptForPayment } from "@/lib/services/receipts";
 
 /**
  * Record a payment: one interactive transaction creates the Payment row, its
@@ -70,11 +71,14 @@ export interface PostPaymentResult {
 export async function postPayment(
   input: PostPaymentInput,
 ): Promise<PostPaymentResult> {
-  // Idempotency fast-path.
+  // Idempotency fast-path. Also heals a missing receipt: a crash between the
+  // payment commit and receipt creation would otherwise be permanent, since
+  // every retry takes this path.
   const existing = await prisma.payment.findUnique({
     where: { idempotencyKey: input.idempotencyKey },
   });
   if (existing) {
+    if (existing.status === "posted") await ensureReceiptBestEffort(existing.id, input.actor);
     return { paymentId: existing.id, alreadyExisted: true, leftoverCreditCents: 0n };
   }
 
@@ -85,7 +89,7 @@ export async function postPayment(
   if (!lease) throw new Error("Lease not found");
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({
         data: {
           leaseId: lease.id,
@@ -151,6 +155,12 @@ export async function postPayment(
         leftoverCreditCents: plan.leftoverCents,
       };
     });
+
+    // Best-effort after the payment commits: a receipt failure must never
+    // fail or re-run the payment.
+    await ensureReceiptBestEffort(result.paymentId, input.actor);
+
+    return result;
   } catch (e) {
     // Lost the idempotency race: another request created it first.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -158,10 +168,22 @@ export async function postPayment(
         where: { idempotencyKey: input.idempotencyKey },
       });
       if (dup) {
+        await ensureReceiptBestEffort(dup.id, input.actor);
         return { paymentId: dup.id, alreadyExisted: true, leftoverCreditCents: 0n };
       }
     }
     throw e;
+  }
+}
+
+async function ensureReceiptBestEffort(
+  paymentId: string,
+  actor: AuditContext,
+): Promise<void> {
+  try {
+    await ensureReceiptForPayment(paymentId, actor);
+  } catch (receiptError) {
+    console.warn(`Receipt creation failed for payment ${paymentId}`, receiptError);
   }
 }
 

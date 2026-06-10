@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   SendSmsInput,
   SendSmsResult,
@@ -20,7 +21,8 @@ export class StubSmsProvider implements SmsProvider {
     return {
       provider: this.name,
       status: "queued",
-      providerMessageId: `stub-${input.to}-${input.body.length}`,
+      // Random so synthetic ids are unique and never derivable from the phone.
+      providerMessageId: `stub-${randomUUID()}`,
     };
   }
 }

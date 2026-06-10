@@ -17,6 +17,9 @@ export class StubFileStorage implements FileStorage {
   async put(_input: PutObjectInput): Promise<{ key: string }> {
     this.unavailable();
   }
+  async get(_key: string): Promise<Buffer> {
+    this.unavailable();
+  }
   async getSignedUrl(_key: string): Promise<string> {
     this.unavailable();
   }

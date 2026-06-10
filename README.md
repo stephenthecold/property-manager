@@ -7,10 +7,20 @@ overdue detection, a dashboard, and reports.
 - **Ledger-based accounting** — every balance is a pure sum of an append-only ledger; payments
   are never hard-deleted (corrections are reversals). Strict per-charge **FIFO** allocation with
   aging, idempotent rent-charge + late-fee generation, money as exact integer cents.
+- **Digital receipts & document uploads** — every payment gets a numbered, printable receipt
+  (`RCT-YYYYMMDD-NNNN`); photo/PDF uploads attach to tenants/payments/receipts with a
+  create-payment-from-document review flow and an optional OCR scaffold. Local-disk or
+  S3-compatible storage.
+- **SMS reminders** — manual, bulk-overdue, and scheduled (due-soon/overdue) reminders with
+  consent enforcement, idempotent sends, Twilio support (stub by default), and a
+  delivery-status webhook.
+- **Reports & audit** — rent roll, overdue, cash income summary, lease expirations,
+  payments-by-method, tenant/unit ledgers (CSV + on-screen), list search/filters, and a
+  read-only audit-log viewer over the append-only audit trail.
 - **Self-hosted auth** — Authentik (OIDC) with a web config UI, an installer, and a hardened
   **break-glass** emergency login for when SSO is unavailable.
-- **Runs as Docker Compose** — Postgres + app + billing worker; Authentik, MinIO, and Caddy
-  behind optional profiles.
+- **Runs as Docker Compose** — Postgres + app + billing/reminder worker; Authentik, MinIO, and
+  Caddy behind optional profiles.
 
 ## Quick start
 

@@ -1,43 +1,138 @@
 import { NextResponse } from "next/server";
+import { DateTime } from "luxon";
 import { getSessionUser } from "@/lib/auth/session";
+import { getEnv } from "@/lib/config/env";
+import { prisma } from "@/lib/db";
 import {
+  EXPIRATION_HEADERS,
+  getIncomeSummary,
+  getLeaseExpirations,
   getOverdue,
+  getPaymentMethodSummary,
   getRentRoll,
+  getTenantLedger,
+  getUnitLedger,
+  INCOME_HEADERS,
+  LEDGER_HEADERS,
+  METHOD_HEADERS,
   RENT_ROLL_HEADERS,
+  UNIT_LEDGER_HEADERS,
   toCsv,
 } from "@/lib/services/reports";
 
 export const runtime = "nodejs";
 
+const INVALID = Symbol("invalid");
+
+/**
+ * Parse an optional "yyyy-MM-dd" param as a bound in `tz`; `endOfDay` makes it
+ * inclusive. Bounds are civil days in the report's timezone (the property's tz
+ * when a property is selected, else DEFAULT_TIMEZONE) so they line up with the
+ * property-tz month bucketing instead of dropping boundary rows at UTC edges.
+ */
+function parseDay(
+  v: string | null,
+  tz: string,
+  endOfDay = false,
+): Date | undefined | typeof INVALID {
+  if (v == null || v === "") return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return INVALID;
+  const dt = DateTime.fromISO(v, { zone: tz });
+  if (!dt.isValid) return INVALID;
+  return (endOfDay ? dt.endOf("day") : dt.startOf("day")).toJSDate();
+}
+
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ type: string }> },
 ) {
   const user = await getSessionUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const { type } = await params;
+  const q = new URL(req.url).searchParams;
   const now = new Date();
-  let rows;
-  let filename;
+
+  let rows: Record<string, string>[];
+  let headers: readonly string[];
   if (type === "rent-roll") {
-    rows = await getRentRoll(now);
-    filename = "rent-roll.csv";
+    rows = (await getRentRoll(now)) as unknown as Record<string, string>[];
+    headers = RENT_ROLL_HEADERS;
   } else if (type === "overdue") {
-    rows = await getOverdue(now);
-    filename = "overdue.csv";
+    rows = (await getOverdue(now)) as unknown as Record<string, string>[];
+    headers = RENT_ROLL_HEADERS;
+  } else if (type === "tenant-ledger") {
+    const tenantId = q.get("tenantId");
+    if (!tenantId) {
+      return new NextResponse("tenantId is required", { status: 400 });
+    }
+    rows = (await getTenantLedger(tenantId)) as unknown as Record<
+      string,
+      string
+    >[];
+    headers = LEDGER_HEADERS;
+  } else if (type === "unit-ledger") {
+    const unitId = q.get("unitId");
+    if (!unitId) {
+      return new NextResponse("unitId is required", { status: 400 });
+    }
+    rows = (await getUnitLedger(unitId)) as unknown as Record<string, string>[];
+    headers = UNIT_LEDGER_HEADERS;
+  } else if (type === "income") {
+    const propertyId = q.get("propertyId") ?? undefined;
+    const property = propertyId
+      ? await prisma.property.findUnique({ where: { id: propertyId } })
+      : null;
+    const tz = property?.timezone ?? getEnv().DEFAULT_TIMEZONE;
+    const from = parseDay(q.get("from"), tz);
+    const to = parseDay(q.get("to"), tz, true);
+    if (from === INVALID || to === INVALID) {
+      return new NextResponse("Invalid date (expected yyyy-MM-dd)", {
+        status: 400,
+      });
+    }
+    rows = (await getIncomeSummary(
+      { from, to, propertyId },
+      now,
+    )) as unknown as Record<string, string>[];
+    headers = INCOME_HEADERS;
+  } else if (type === "lease-expirations") {
+    const raw = q.get("windowDays");
+    let windowDays: number | undefined;
+    if (raw != null && raw !== "") {
+      if (!/^\d+$/.test(raw)) {
+        return new NextResponse("Invalid windowDays", { status: 400 });
+      }
+      windowDays = Number(raw);
+    }
+    rows = (await getLeaseExpirations({ windowDays }, now)) as unknown as Record<
+      string,
+      string
+    >[];
+    headers = EXPIRATION_HEADERS;
+  } else if (type === "payment-methods") {
+    const tz = getEnv().DEFAULT_TIMEZONE;
+    const from = parseDay(q.get("from"), tz);
+    const to = parseDay(q.get("to"), tz, true);
+    if (from === INVALID || to === INVALID) {
+      return new NextResponse("Invalid date (expected yyyy-MM-dd)", {
+        status: 400,
+      });
+    }
+    rows = (await getPaymentMethodSummary({ from, to })) as unknown as Record<
+      string,
+      string
+    >[];
+    headers = METHOD_HEADERS;
   } else {
     return new NextResponse("Unknown report", { status: 404 });
   }
 
-  const csv = toCsv(
-    [...RENT_ROLL_HEADERS],
-    rows as unknown as Record<string, string>[],
-  );
+  const csv = toCsv([...headers], rows);
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${type}.csv"`,
     },
   });
 }

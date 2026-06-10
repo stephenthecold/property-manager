@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/integration/**/*.test.ts"],
+    // macOS AppleDouble metadata files (._foo.test.ts) are not test code.
+    exclude: ["**/._*"],
     setupFiles: ["tests/integration/setup.ts"],
     hookTimeout: 30_000,
     testTimeout: 30_000,

@@ -20,7 +20,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b bg-card">
+      <header className="print-hidden border-b bg-card">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="font-semibold">
@@ -29,6 +29,11 @@ export default async function AppLayout({
             <NavLinks />
           </div>
           <div className="flex items-center gap-3 text-sm">
+            {roleAtLeast(user.role, "admin") && (
+              <Link href="/audit" className="text-muted-foreground hover:underline">
+                Audit
+              </Link>
+            )}
             {isOwner && (
               <Link href="/settings/auth" className="text-muted-foreground hover:underline">
                 Settings
@@ -52,7 +57,7 @@ export default async function AppLayout({
       </header>
 
       {settings.breakGlassEnabled && !user.viaBreakGlass && (
-        <div className="mx-auto mt-4 w-full max-w-6xl px-4">
+        <div className="print-hidden mx-auto mt-4 w-full max-w-6xl px-4">
           <Alert variant="destructive">
             <AlertTitle>Break-glass is enabled</AlertTitle>
             <AlertDescription>

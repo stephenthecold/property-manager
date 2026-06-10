@@ -10,6 +10,8 @@ const LINKS = [
   { href: "/tenants", label: "Tenants" },
   { href: "/leases", label: "Leases" },
   { href: "/payments", label: "Payments" },
+  { href: "/documents", label: "Documents" },
+  { href: "/reminders", label: "Reminders" },
   { href: "/reports", label: "Reports" },
 ];
 

@@ -47,13 +47,20 @@ export function RecordPaymentDialog({
   useEffect(() => {
     if (state.ok) {
       router.refresh();
+      // When a receipt link is shown, stay open so it can be clicked; the user
+      // closes the dialog manually. The form stays live, so mint the next
+      // payment's key NOW — a blank key would fail any further submit.
+      if (state.receiptId) {
+        setIdemKey(crypto.randomUUID());
+        return;
+      }
       const t = setTimeout(() => {
         setOpen(false);
         setIdemKey(""); // fresh key for the next payment
       }, 900);
       return () => clearTimeout(t);
     }
-  }, [state.ok, router]);
+  }, [state.ok, state.receiptId, router]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -114,7 +121,17 @@ export function RecordPaymentDialog({
           )}
           {state.ok && (
             <Alert>
-              <AlertDescription>{state.message}</AlertDescription>
+              <AlertDescription>
+                {state.message}
+                {state.receiptId && state.receiptNumber && (
+                  <>
+                    {" "}
+                    <a href={`/receipts/${state.receiptId}`}>
+                      View receipt {state.receiptNumber}
+                    </a>
+                  </>
+                )}
+              </AlertDescription>
             </Alert>
           )}
           <Button type="submit" disabled={pending} className="w-full">

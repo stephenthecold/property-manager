@@ -9,7 +9,13 @@ import { roleAtLeast } from "@/lib/auth/rbac";
  * never imports Prisma at the edge.
  */
 
-const PUBLIC_PREFIXES = ["/login", "/emergency", "/setup", "/api/auth"];
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/emergency",
+  "/setup",
+  "/api/auth",
+  "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

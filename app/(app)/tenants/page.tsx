@@ -2,8 +2,11 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -15,9 +18,29 @@ import {
 
 export const runtime = "nodejs";
 
-export default async function TenantsPage() {
+export default async function TenantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const qRaw = sp.q;
+  const q = (Array.isArray(qRaw) ? qRaw[0] : qRaw)?.trim() ?? "";
+
+  const where: Prisma.TenantWhereInput = q
+    ? {
+        OR: [
+          { firstName: { contains: q, mode: "insensitive" } },
+          { lastName: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } },
+          { phone: { contains: q, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
+    where,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     include: {
       leases: {
@@ -27,6 +50,8 @@ export default async function TenantsPage() {
       },
     },
   });
+  // Cheap second count for "N of M" when a search is active.
+  const total = q ? await prisma.tenant.count() : tenants.length;
 
   const rows = await Promise.all(
     tenants.map(async (t) => {
@@ -44,6 +69,33 @@ export default async function TenantsPage() {
         <h1 className="text-2xl font-semibold">Tenants</h1>
         <Button render={<Link href="/tenants/new" />}>Add tenant</Button>
       </div>
+
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="q">Search</Label>
+          <Input
+            id="q"
+            name="q"
+            defaultValue={q}
+            placeholder="Search name, email, phone"
+            className="w-64"
+          />
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {q && (
+          <Button variant="ghost" size="sm" render={<Link href="/tenants" />}>
+            Clear
+          </Button>
+        )}
+      </form>
+
+      {q && (
+        <p className="text-sm text-muted-foreground">
+          {tenants.length} of {total} tenants
+        </p>
+      )}
 
       <Table>
         <TableHeader>

@@ -18,7 +18,20 @@ x-app-env: &app-env
   TRUSTED_PROXY_COUNT: "${TRUSTED_PROXY_COUNT:-1}"
   OIDC_SCOPES: "${OIDC_SCOPES:-openid email profile}"
   STORAGE_PROVIDER: "${STORAGE_PROVIDER:-stub}"
+  LOCAL_STORAGE_DIR: "${LOCAL_STORAGE_DIR:-.data/uploads}"
+  S3_ENDPOINT: "${S3_ENDPOINT:-}"
+  S3_REGION: "${S3_REGION:-}"
+  S3_BUCKET: "${S3_BUCKET:-}"
+  S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID:-}"
+  S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY:-}"
+  S3_FORCE_PATH_STYLE: "${S3_FORCE_PATH_STYLE:-true}"
   SMS_PROVIDER: "${SMS_PROVIDER:-stub}"
+  SMS_ACCOUNT_SID: "${SMS_ACCOUNT_SID:-}"
+  SMS_AUTH_TOKEN: "${SMS_AUTH_TOKEN:-}"
+  SMS_FROM_NUMBER: "${SMS_FROM_NUMBER:-}"
+  REMINDER_DUE_SOON_DAYS: "${REMINDER_DUE_SOON_DAYS:-3}"
+  OCR_ENABLED: "${OCR_ENABLED:-false}"
+  OCR_PROVIDER: "${OCR_PROVIDER:-}"
   DEFAULT_TIMEZONE: "${DEFAULT_TIMEZONE:-America/New_York}"
   DEFAULT_CURRENCY: "${DEFAULT_CURRENCY:-USD}"
 
@@ -63,6 +76,7 @@ services:
     environment:
       <<: *app-env
       BILLING_CRON: "${BILLING_CRON:-0 1 * * *}"
+      REMINDER_CRON: "${REMINDER_CRON:-0 9 * * *}"
     command: ["npm", "run", "worker"]
 
   # --- Authentik (profile: idp) -------------------------------------------

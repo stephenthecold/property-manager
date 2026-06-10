@@ -444,6 +444,8 @@ model Payment {
 model Receipt {
   id                String         @id @default(cuid())
   receiptNumber     String         @unique
+  // Partial unique (paymentId WHERE receiptType='digital') added via raw SQL so
+  // ensureReceiptForPayment is idempotent at the DB level.
   paymentId         String?
   tenantId          String?
   unitId            String?
@@ -459,6 +461,9 @@ model Receipt {
   createdBy         String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+
+  @@index([paymentId])
+  @@index([tenantId])
 }
 
 /// Phase 2: uploaded files (paper receipt photos, leases, docs).
@@ -477,6 +482,10 @@ model UploadedDocument {
   ocrConfidence Float?
   createdBy     String?
   createdAt     DateTime   @default(now())
+
+  @@index([tenantId])
+  @@index([paymentId])
+  @@index([receiptId])
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.
@@ -486,6 +495,9 @@ model Reminder {
   leaseId           String?
   paymentId         String?
   reminderType      ReminderType
+  // 'YYYY-MM-DD' due-date key (property tz) for scheduled sends; a raw-SQL partial
+  // unique on (leaseId, reminderType, periodKey) makes worker re-runs converge.
+  periodKey         String?
   destinationPhone  String?
   messageBody       String
   status            ReminderStatus @default(queued)
@@ -496,4 +508,6 @@ model Reminder {
   createdAt         DateTime       @default(now())
 
   @@index([tenantId])
+  @@index([leaseId])
+  @@index([providerMessageId])
 }

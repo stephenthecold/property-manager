@@ -1,15 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
 import { auditActor, requireRole } from "@/lib/auth/session";
 import { postPayment, voidPayment } from "@/lib/services/payments";
+import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 
 export interface RecordPaymentState {
   ok?: boolean;
   error?: string;
   message?: string;
+  receiptId?: string;
+  receiptNumber?: string;
 }
 
 export async function recordPayment(
@@ -30,8 +34,18 @@ export async function recordPayment(
   }
   if (amountCents <= 0n) return { error: "Amount must be positive." };
 
+  // Date-only form values must become midnight in the PROPERTY timezone —
+  // receipts, ledger reports, and income bucketing all interpret instants there.
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    include: { unit: { include: { property: true } } },
+  });
+  if (!lease) return { error: "Lease not found." };
+  const tz = lease.unit.property.timezone;
   const dateRaw = String(fd.get("paymentDate") ?? "");
-  const paymentDate = dateRaw ? new Date(dateRaw) : new Date();
+  const paymentDate = dateRaw
+    ? (parseDateOnlyInZone(dateRaw, tz) ?? new Date(dateRaw))
+    : new Date();
   const method = (String(fd.get("method") ?? "cash") || "cash") as PaymentMethod;
   const reference = String(fd.get("referenceNumber") ?? "").trim() || null;
   const appliedPeriodKey = String(fd.get("appliedPeriodKey") ?? "").trim() || null;
@@ -49,6 +63,11 @@ export async function recordPayment(
       idempotencyKey,
       actor: await auditActor(),
     });
+    // A digital receipt is auto-created after posting; look it up for the link.
+    const receipt = await prisma.receipt.findFirst({
+      where: { paymentId: res.paymentId, receiptType: "digital" },
+      select: { id: true, receiptNumber: true },
+    });
     revalidatePath("/dashboard");
     revalidatePath("/payments");
     revalidatePath("/tenants", "layout");
@@ -59,6 +78,8 @@ export async function recordPayment(
         : res.leftoverCreditCents > 0n
           ? "Payment recorded; overpayment added as tenant credit."
           : "Payment recorded.",
+      receiptId: receipt?.id,
+      receiptNumber: receipt?.receiptNumber,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to record payment." };
@@ -74,4 +95,6 @@ export async function voidPaymentAction(fd: FormData): Promise<void> {
   revalidatePath("/dashboard");
   revalidatePath("/payments");
   revalidatePath("/tenants", "layout");
+  // Receipt pages render the payment's voided state.
+  revalidatePath("/receipts", "layout");
 }
