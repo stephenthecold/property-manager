@@ -16,8 +16,13 @@ export async function createOwnerAction(
   _prev: SetupState,
   formData: FormData,
 ): Promise<SetupState> {
-  // Trim: tokens copied from a line-wrapped terminal often pick up whitespace.
-  const token = String(formData.get("token") ?? "").trim();
+  // Trim (line-wrapped terminal copies smuggle whitespace) and take the first
+  // non-empty value, so a stray empty token field can't shadow the real one.
+  const token =
+    formData
+      .getAll("token")
+      .map((v) => String(v).trim())
+      .find(Boolean) ?? "";
   const email = String(formData.get("email") ?? "");
   const name = String(formData.get("name") ?? "");
 

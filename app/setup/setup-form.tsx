@@ -15,7 +15,11 @@ export function SetupForm({ token }: { token: string }) {
 
   return (
     <form action={formAction} className="space-y-4">
-      <input type="hidden" name="token" defaultValue={token} />
+      {/* Exactly one field may carry name="token": with duplicates, FormData.get
+          returns the first (the empty hidden one), rejecting every submission. */}
+      {token ? (
+        <input type="hidden" name="token" defaultValue={token} />
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="name">Owner name</Label>
         <Input id="name" name="name" required />
