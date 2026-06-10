@@ -1,0 +1,16 @@
+# Bundled Caddy config (profile: proxy). Most operators run their own Caddy
+# instead — this is a working template. Caddy auto-provisions TLS for real domains.
+#
+# Set APP_DOMAIN in your environment (e.g. APP_DOMAIN=pm.example.com). Defaults to
+# localhost for local testing (self-signed). Caddy sets X-Forwarded-Proto, which
+# the app trusts for secure-cookie handling (HTTPS-only posture).
+
+{$APP_DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy app:3000
+}
+
+# Serve self-hosted Authentik on a subdomain (uncomment when using --profile idp):
+# auth.{$APP_DOMAIN} {
+# 	reverse_proxy authentik-server:9000
+# }

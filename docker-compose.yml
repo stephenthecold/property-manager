@@ -1,0 +1,167 @@
+# Property Manager — Docker Compose stack.
+#
+# Default (lean) stack:  docker compose up -d            -> app + db + worker
+# With self-hosted IdP:  docker compose --profile idp up -d        (adds Authentik)
+# With object storage:   docker compose --profile storage up -d    (adds MinIO, Phase 2)
+# With bundled TLS proxy:docker compose --profile proxy up -d      (adds Caddy)
+#
+# Most operators run their own reverse proxy (e.g. Caddy) and terminate TLS there,
+# forwarding to app:3000 with X-Forwarded-Proto=https. See docs/DEPLOYMENT.md.
+
+x-app-env: &app-env
+  DATABASE_URL: "postgresql://${POSTGRES_USER:-pm}:${POSTGRES_PASSWORD:-pm}@db:5432/${POSTGRES_DB:-property_manager}?schema=public"
+  APP_URL: "${APP_URL:-http://localhost:3000}"
+  AUTH_SECRET: "${AUTH_SECRET:?set AUTH_SECRET in .env (run: npm run bootstrap)}"
+  AUTH_TRUST_HOST: "true"
+  SETTINGS_ENC_KEY: "${SETTINGS_ENC_KEY:?set SETTINGS_ENC_KEY in .env (run: npm run bootstrap)}"
+  SETUP_BOOTSTRAP_TOKEN: "${SETUP_BOOTSTRAP_TOKEN:-}"
+  TRUSTED_PROXY_COUNT: "${TRUSTED_PROXY_COUNT:-1}"
+  OIDC_SCOPES: "${OIDC_SCOPES:-openid email profile}"
+  STORAGE_PROVIDER: "${STORAGE_PROVIDER:-stub}"
+  SMS_PROVIDER: "${SMS_PROVIDER:-stub}"
+  DEFAULT_TIMEZONE: "${DEFAULT_TIMEZONE:-America/New_York}"
+  DEFAULT_CURRENCY: "${DEFAULT_CURRENCY:-USD}"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-pm}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pm}"
+      POSTGRES_DB: "${POSTGRES_DB:-property_manager}"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pm} -d ${POSTGRES_DB:-property_manager}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "1"
+      SEED_ON_START: "${SEED_ON_START:-false}"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    command: ["npm", "run", "start"]
+
+  worker:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    environment:
+      <<: *app-env
+      BILLING_CRON: "${BILLING_CRON:-0 1 * * *}"
+    command: ["npm", "run", "worker"]
+
+  # --- Authentik (profile: idp) -------------------------------------------
+  authentik-db:
+    image: postgres:17-alpine
+    profiles: ["idp"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: "${AUTHENTIK_PG_PASS:-authentik}"
+      POSTGRES_DB: authentik
+    volumes:
+      - authentik-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik -d authentik"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authentik-redis:
+    image: redis:7-alpine
+    profiles: ["idp"]
+    restart: unless-stopped
+    volumes:
+      - authentik-redis:/data
+
+  authentik-server:
+    image: "ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2}"
+    profiles: ["idp"]
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret}"
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: "${AUTHENTIK_PG_PASS:-authentik}"
+      AUTHENTIK_REDIS__HOST: authentik-redis
+    ports:
+      - "${AUTHENTIK_PORT:-9000}:9000"
+      - "${AUTHENTIK_PORT_HTTPS:-9443}:9443"
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+
+  authentik-worker:
+    image: "ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2}"
+    profiles: ["idp"]
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret}"
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: "${AUTHENTIK_PG_PASS:-authentik}"
+      AUTHENTIK_REDIS__HOST: authentik-redis
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+
+  # --- MinIO object storage (profile: storage, Phase 2) -------------------
+  minio:
+    image: minio/minio:latest
+    profiles: ["storage"]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${S3_ACCESS_KEY_ID:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${S3_SECRET_ACCESS_KEY:-minioadmin}"
+    ports:
+      - "${MINIO_PORT:-9002}:9000"
+      - "${MINIO_CONSOLE_PORT:-9003}:9001"
+    volumes:
+      - minio-data:/data
+
+  # --- Bundled Caddy reverse proxy (profile: proxy) -----------------------
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  db-data:
+  authentik-db:
+  authentik-redis:
+  minio-data:
+  caddy-data:
+  caddy-config:

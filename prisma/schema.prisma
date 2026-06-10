@@ -1,0 +1,499 @@
+// Rental Property Management Platform — data model.
+//
+// Conventions:
+//   * All money is stored as signed integer minor units (cents) in BIGINT (Prisma `BigInt`),
+//     in fields suffixed `Cents`. Never floats. See lib/money.ts and docs/accounting.md.
+//   * LedgerEntry is the single source of financial truth. Balance = SUM(amountCents) over
+//     ALL physical rows for a lease (immutable, append-only). Corrections are offsetting
+//     `reversal` entries — entries are never deleted or mutated for balance purposes.
+//   * Phase 2/3 models (Receipt, UploadedDocument, Reminder) are committed now but unused in
+//     Phase 1, so later phases attach without a destructive migration on live financial data.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  owner
+  admin
+  manager
+  viewer
+}
+
+enum UnitType {
+  apartment
+  house
+  duplex
+  storage
+  commercial
+  other
+}
+
+enum OccupancyStatus {
+  vacant
+  occupied
+  maintenance
+  unavailable
+}
+
+enum LeaseStatus {
+  draft
+  active
+  ended
+  eviction
+  month_to_month
+}
+
+enum LateFeeType {
+  none
+  fixed
+  percentage
+}
+
+enum PaymentMethod {
+  cash
+  check
+  money_order
+  card
+  ach
+  online
+  other
+}
+
+enum PaymentStatus {
+  pending
+  posted
+  voided
+  reversed
+}
+
+enum LedgerEntryType {
+  rent_charge
+  payment
+  late_fee
+  adjustment
+  credit
+  reversal
+}
+
+enum AuditActorType {
+  user
+  breakglass
+  system
+}
+
+// Phase 2 / 3 enums
+enum ReceiptType {
+  digital
+  uploaded_paper
+}
+
+enum SentMethod {
+  sms
+  email
+  printed
+  not_sent
+}
+
+enum UploadType {
+  receipt_photo
+  lease
+  tenant_document
+  other
+}
+
+enum ReminderType {
+  rent_due_soon
+  rent_overdue
+  partial_balance
+  payment_receipt
+  manual
+}
+
+enum ReminderStatus {
+  queued
+  sent
+  delivered
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Auth / identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(viewer)
+  isActive      Boolean   @default(true)
+  // Bumped to invalidate outstanding JWTs (role change, disable, break-glass use).
+  securityStamp String    @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/// Single-row table (id is always "singleton") holding web-editable OIDC config.
+/// The client secret is AES-256-GCM encrypted at rest (ciphertext + nonce + tag + key version).
+model AuthSettings {
+  id                         String    @id @default("singleton")
+  oidcEnabled                Boolean   @default(false)
+  oidcIssuer                 String?
+  oidcClientId               String?
+  oidcClientSecretCiphertext String?
+  oidcClientSecretNonce      String?
+  oidcClientSecretTag        String?
+  oidcSecretKeyVersion       Int       @default(1)
+  oidcScopes                 String    @default("openid email profile")
+  // JSON map of Authentik group name -> Role, e.g. {"managers":"manager"}.
+  groupMappings              Json      @default("{}")
+  allowOwnerFromGroup        Boolean   @default(false)
+  breakGlassEnabled          Boolean   @default(false)
+  breakGlassExpiresAt        DateTime?
+  updatedBy                  String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+}
+
+/// Single-row break-glass emergency credential. Off unless AuthSettings.breakGlassEnabled.
+model BreakGlassCredential {
+  id                  String    @id @default("singleton")
+  passwordHash        String? // argon2id of the passphrase (null until set)
+  setupTokenHash      String? // sha-256 of the one-time setup token (null once consumed)
+  setupTokenExpiresAt DateTime?
+  setupTokenUsedAt    DateTime?
+  failedAttempts      Int       @default(0)
+  lockedUntil         DateTime?
+  rotatedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+/// Append-only audit trail. The app DB role is granted INSERT/SELECT only (see migration).
+model AuditLog {
+  id            String         @id @default(cuid())
+  actorType     AuditActorType @default(system)
+  actorId       String?
+  actorEmail    String?
+  action        String
+  entityType    String?
+  entityId      String?
+  before        Json?
+  after         Json?
+  ip            String?
+  userAgent     String?
+  viaBreakGlass Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Property hierarchy
+// ---------------------------------------------------------------------------
+
+model Property {
+  id           String   @id @default(cuid())
+  name         String
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  zip          String?
+  notes        String?
+  timezone     String   @default("America/New_York") // IANA tz for due-date / overdue math
+  currency     String   @default("USD")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  buildings Building[]
+  units     Unit[]
+}
+
+model Building {
+  id          String   @id @default(cuid())
+  propertyId  String
+  name        String
+  description String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  units    Unit[]
+
+  @@index([propertyId])
+}
+
+model Unit {
+  id                     String          @id @default(cuid())
+  propertyId             String
+  buildingId             String?
+  unitNumber             String
+  unitType               UnitType        @default(apartment)
+  bedrooms               Int?
+  bathrooms              Float?
+  squareFeet             Int?
+  defaultRentAmountCents BigInt          @default(0)
+  occupancyStatus        OccupancyStatus @default(vacant)
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  leases   Lease[]
+
+  @@index([propertyId])
+  @@index([buildingId])
+}
+
+// ---------------------------------------------------------------------------
+// Tenant / lease
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id                    String   @id @default(cuid())
+  firstName             String
+  lastName              String
+  phone                 String?
+  email                 String?
+  mailingAddress        String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  smsConsent            Boolean  @default(false)
+  notes                 String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  leases Lease[]
+
+  @@index([lastName, firstName])
+}
+
+model Lease {
+  id                   String      @id @default(cuid())
+  tenantId             String
+  unitId               String
+  startDate            DateTime
+  endDate              DateTime?
+  rentAmountCents      BigInt
+  dueDay               Int         @default(1) // 1..31, clamped to last day of short months
+  gracePeriodDays      Int         @default(0)
+  lateFeeType          LateFeeType @default(none)
+  lateFeeAmountCents   BigInt? // for fixed
+  lateFeeBps           Int? // basis points for percentage (e.g. 500 = 5%)
+  securityDepositCents BigInt      @default(0)
+  status               LeaseStatus @default(draft)
+  notes                String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  unit          Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  payments      Payment[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([tenantId])
+  @@index([unitId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Ledger (source of financial truth)
+// ---------------------------------------------------------------------------
+
+model LedgerEntry {
+  id              String          @id @default(cuid())
+  leaseId         String
+  tenantId        String
+  entryType       LedgerEntryType
+  amountCents     BigInt // signed: + increases what the tenant owes, - decreases it
+  currency        String          @default("USD")
+  periodKey       String? // 'YYYY-MM-DD' (due date in property tz) for rent_charge / late_fee
+  effectiveDate   DateTime // economic date — drives aging / overdue
+  description     String?
+  sourceType      String? // 'payment' | 'charge' | 'adjustment' | 'late_fee' | ...
+  sourceId        String? // e.g. Payment.id
+  reversesEntryId String?
+  reason          String?
+  createdBy       String?
+  createdAt       DateTime        @default(now())
+
+  lease         Lease         @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  reversesEntry LedgerEntry?  @relation("LedgerReversal", fields: [reversesEntryId], references: [id])
+  reversedBy    LedgerEntry[] @relation("LedgerReversal")
+
+  // FIFO allocation links: this entry can be a charge (allocationsAsCharge)
+  // or the payment that funds allocations (allocationsAsPayment).
+  allocationsAsCharge  ChargeAllocation[] @relation("ChargeAllocations")
+  allocationsAsPayment ChargeAllocation[] @relation("PaymentAllocations")
+
+  @@index([leaseId, effectiveDate])
+  @@index([tenantId])
+  @@index([reversesEntryId])
+  // Partial unique indexes (rent_charge & late_fee per lease+period) are added via raw SQL
+  // in the migration — @@unique cannot express the WHERE predicate.
+}
+
+/// FIFO breakdown: how much of a payment ledger entry was applied to a given charge entry.
+/// Append-only: an over-applied or reversed allocation is undone by a reversing allocation.
+model ChargeAllocation {
+  id                   String   @id @default(cuid())
+  chargeEntryId        String
+  paymentEntryId       String
+  amountCents          BigInt // positive amount applied to the charge
+  reversesAllocationId String?
+  createdAt            DateTime @default(now())
+
+  chargeEntry        LedgerEntry        @relation("ChargeAllocations", fields: [chargeEntryId], references: [id], onDelete: Cascade)
+  paymentEntry       LedgerEntry        @relation("PaymentAllocations", fields: [paymentEntryId], references: [id], onDelete: Cascade)
+  reversesAllocation ChargeAllocation?  @relation("AllocationReversal", fields: [reversesAllocationId], references: [id])
+  reversedBy         ChargeAllocation[] @relation("AllocationReversal")
+
+  @@index([chargeEntryId])
+  @@index([paymentEntryId])
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  leaseId          String
+  tenantId         String
+  unitId           String?
+  propertyId       String?
+  buildingId       String?
+  paymentDate      DateTime
+  amountCents      BigInt
+  method           PaymentMethod @default(cash)
+  referenceNumber  String?
+  status           PaymentStatus @default(posted)
+  appliedPeriodKey String? // non-authoritative hint for receipts/reports
+  // Client-minted UUID; UNIQUE so a double-submit cannot create two payments.
+  idempotencyKey   String        @unique
+  notes            String?
+  createdBy        String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
+  @@index([tenantId])
+  @@index([paymentDate])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 / 3 (committed now, unused in Phase 1)
+// ---------------------------------------------------------------------------
+
+/// Phase 2: digital + uploaded paper receipts.
+model Receipt {
+  id                String         @id @default(cuid())
+  receiptNumber     String         @unique
+  paymentId         String?
+  tenantId          String?
+  unitId            String?
+  propertyId        String?
+  receiptType       ReceiptType    @default(digital)
+  amountCents       BigInt         @default(0)
+  paymentDate       DateTime?
+  paymentMethod     PaymentMethod?
+  fileUrl           String?
+  balanceAfterCents BigInt?
+  sentAt            DateTime?
+  sentMethod        SentMethod     @default(not_sent)
+  createdBy         String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+/// Phase 2: uploaded files (paper receipt photos, leases, docs).
+model UploadedDocument {
+  id            String     @id @default(cuid())
+  tenantId      String?
+  paymentId     String?
+  receiptId     String?
+  fileUrl       String
+  fileName      String?
+  fileType      String?
+  fileSize      Int?
+  uploadType    UploadType @default(other)
+  notes         String?
+  ocrText       String?
+  ocrConfidence Float?
+  createdBy     String?
+  createdAt     DateTime   @default(now())
+}
+
+/// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.
+model Reminder {
+  id                String         @id @default(cuid())
+  tenantId          String
+  leaseId           String?
+  paymentId         String?
+  reminderType      ReminderType
+  destinationPhone  String?
+  messageBody       String
+  status            ReminderStatus @default(queued)
+  provider          String?
+  providerMessageId String?
+  sentBy            String?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+
+  @@index([tenantId])
+}
