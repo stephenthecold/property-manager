@@ -16,7 +16,8 @@ export async function createOwnerAction(
   _prev: SetupState,
   formData: FormData,
 ): Promise<SetupState> {
-  const token = String(formData.get("token") ?? "");
+  // Trim: tokens copied from a line-wrapped terminal often pick up whitespace.
+  const token = String(formData.get("token") ?? "").trim();
   const email = String(formData.get("email") ?? "");
   const name = String(formData.get("name") ?? "");
 
