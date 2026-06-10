@@ -1,0 +1,24 @@
+# Override: attach the app to an EXTERNAL reverse-proxy network (your own
+# Caddy/Traefik container) so it can reach the app as `property-manager:3000`.
+#
+# Enable it from .env (no CLI flags needed):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.caddy.yml
+#   CADDY_NETWORK=<docker network your proxy is on>     # default: caddy
+#   APP_URL=https://pm.example.com
+#   APP_BIND=127.0.0.1   # optional: stop publishing plain :3000 on the LAN
+#
+# Caddyfile site block:   pm.example.com { reverse_proxy property-manager:3000 }
+#
+# The alias is deliberately `property-manager`, not `app` — service names are
+# generic and collide between stacks sharing one proxy network.
+services:
+  app:
+    networks:
+      default: {}
+      caddy:
+        aliases: [property-manager]
+
+networks:
+  caddy:
+    external: true
+    name: "${CADDY_NETWORK:-caddy}"

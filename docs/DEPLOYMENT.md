@@ -57,11 +57,25 @@ docker compose --profile idp --profile storage up -d
 ## TLS / reverse proxy (HTTPS-only)
 
 The app listens on plain HTTP and expects a **trusted reverse proxy** to terminate TLS and set
-`X-Forwarded-Proto=https`. Set `AUTH_TRUST_HOST=true`, `APP_URL=https://your-domain`, and
-`TRUSTED_PROXY_COUNT` to the number of proxy hops. Two options:
+`X-Forwarded-Proto=https`. Set `APP_URL=https://your-domain` in `.env` (`AUTH_TRUST_HOST=true`
+and `TRUSTED_PROXY_COUNT=1` are already the compose defaults). Three options:
 
-- **Bring your own Caddy/Nginx/Traefik** (recommended). Forward `:443 → app:3000`. Example
-  Caddy: `your-domain { reverse_proxy app:3000 }`.
+- **Your own Caddy container** (recommended). Attach the app to the proxy's Docker network via
+  the shipped override — in `.env`:
+
+  ```bash
+  COMPOSE_FILE=docker-compose.yml:docker-compose.caddy.yml
+  CADDY_NETWORK=caddy        # the network your Caddy container is on (docker network ls)
+  APP_URL=https://pm.example.com
+  APP_BIND=127.0.0.1         # optional: stop exposing plain :3000 on the LAN
+  ```
+
+  then `docker compose up -d` (recreates the app attached to that network), add a site block
+  to your Caddyfile — `pm.example.com { reverse_proxy property-manager:3000 }` — and reload
+  Caddy. The override publishes the app on that network under the alias `property-manager`
+  (not `app`, which would collide with other stacks behind the same proxy).
+- **Host-level proxy** (Caddy/Nginx running on the host, not in Docker): proxy to
+  `127.0.0.1:3000` and set `APP_BIND=127.0.0.1`.
 - **Bundled Caddy**: `docker compose --profile proxy up -d` (set `APP_DOMAIN`). See
   [`Caddyfile`](../Caddyfile).
 
