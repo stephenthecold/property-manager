@@ -3,6 +3,7 @@
 ## Quick start (Docker Compose)
 
 ```bash
+git clone https://github.com/stephenthecold/property-manager.git && cd property-manager
 cp .env.example .env
 npm install            # for the bootstrap/CLI tools (or run bootstrap in the container)
 npm run bootstrap      # generates AUTH_SECRET, SETTINGS_ENC_KEY, SETUP_BOOTSTRAP_TOKEN into .env
@@ -25,6 +26,18 @@ On first start the **app** container waits for the DB, runs `prisma migrate depl
 
 `/setup` is gated by **both** the bootstrap token **and** a zero-users check (with a DB advisory
 lock against races), so it cannot be re-opened by wiping the users table.
+
+## Updating
+
+Two modes; both apply migrations automatically on app start:
+
+- **Build from source** (default): `git pull && docker compose up -d --build`.
+- **Pulled image**: CI ([`docker-publish.yml`](../.github/workflows/docker-publish.yml)) pushes
+  the image to GHCR on every push to main (`:latest`, `:sha-<commit>`) and on `v*` tags. Set
+  `APP_IMAGE=ghcr.io/<owner>/property-manager:latest` in `.env`, then
+  `docker compose pull app worker && docker compose up -d`. The deploy host needs no Node and
+  never compiles anything; pin a `:sha-`/version tag instead of `:latest` for controlled
+  rollouts. If the GHCR package is private, `docker login ghcr.io` with a read-only PAT first.
 
 ## Compose profiles
 
@@ -84,30 +97,26 @@ during active recovery.
 
 ## Moving to another machine
 
-Everything the app needs is the project directory + `.env` + (optionally) a database dump.
-`node_modules/`, `.next/`, and `lib/generated/` are disposable — they're rebuilt by
-`npm install` / the Docker build.
+The code comes from git — only two things move by hand: **`.env`** (secrets; gitignored) and,
+if you're keeping your data, a **database dump**. `node_modules/`, `.next/`, and
+`lib/generated/` are disposable — they're rebuilt by `npm install` / the Docker build.
+(No git remote available? Tar the project directory minus those rebuildable dirs instead.)
 
 **On the old machine:**
 
 ```bash
-# 1. Dump the database (skip if you're starting fresh on the new machine):
+# Dump the database (skip if you're starting fresh on the new machine):
 docker compose exec -T db pg_dump -U pm -d property_manager > backup.sql
-
-# 2. Archive the project (keeps .env and .git; drops rebuildable dirs):
-tar -czf property-manager.tar.gz \
-  --exclude node_modules --exclude .next --exclude lib/generated \
-  --exclude '*.tsbuildinfo' --exclude .DS_Store \
-  -C "$(dirname "$PWD")" "$(basename "$PWD")"
 ```
 
-> The archive contains `.env` — **AUTH_SECRET, SETTINGS_ENC_KEY, and the setup token**.
-> Transfer it over a secure channel (scp/AirDrop/USB), not email or a public share.
+> `.env` holds **AUTH_SECRET, SETTINGS_ENC_KEY, and the setup token**. Transfer it (and the
+> dump) over a secure channel (scp/AirDrop/USB), not email or a public share.
 
 **On the new machine** (needs Docker + Node 20+):
 
 ```bash
-tar -xzf property-manager.tar.gz && cd "Property Manager"
+git clone https://github.com/stephenthecold/property-manager.git && cd property-manager
+# …copy .env into the project root…
 npm install                       # CLI tooling (bootstrap/break-glass/dev)
 docker compose up -d --build      # app + db + worker; migrations run automatically
 

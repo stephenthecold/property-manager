@@ -35,6 +35,14 @@ x-app-env: &app-env
   DEFAULT_TIMEZONE: "${DEFAULT_TIMEZONE:-America/New_York}"
   DEFAULT_CURRENCY: "${DEFAULT_CURRENCY:-USD}"
 
+# One image serves both app and worker. Default is a locally-built tag; set
+# APP_IMAGE to a registry ref (e.g. ghcr.io/<owner>/property-manager:latest,
+# published by .github/workflows/docker-publish.yml) to run a pulled image:
+#   docker compose pull app worker && docker compose up -d
+x-app-image: &app-image
+  image: "${APP_IMAGE:-property-manager:local}"
+  build: .
+
 services:
   db:
     image: postgres:17-alpine
@@ -52,7 +60,7 @@ services:
       retries: 10
 
   app:
-    build: .
+    <<: *app-image
     restart: unless-stopped
     depends_on:
       db:
@@ -66,7 +74,7 @@ services:
     command: ["npm", "run", "start"]
 
   worker:
-    build: .
+    <<: *app-image
     restart: unless-stopped
     depends_on:
       db:

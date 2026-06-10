@@ -28,10 +28,12 @@ overdue detection, a dashboard, and reports.
 ## Quick start
 
 ```bash
+git clone https://github.com/stephenthecold/property-manager.git
+cd property-manager
 cp .env.example .env
 npm install
 npm run bootstrap          # generate AUTH_SECRET / SETTINGS_ENC_KEY / SETUP_BOOTSTRAP_TOKEN
-docker compose up -d       # app + db + worker
+docker compose up -d       # app + db + worker (builds the image on first run)
 ```
 
 Then open `http://localhost:3000/setup?token=<SETUP_BOOTSTRAP_TOKEN>` (the token is printed by
@@ -44,6 +46,16 @@ docker compose exec app npm run breakglass issue   # run INSIDE the stack — th
 and configure SSO under **Settings → Authentication**. Full steps: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 Seed demo data: set `SEED_ON_START=true` (or `npm run db:seed`).
+
+## Updating
+
+```bash
+git pull && docker compose up -d --build   # rebuild from source; migrations run on start
+```
+
+Or skip local builds entirely: CI publishes the image to GHCR on every push to main
+(`.github/workflows/docker-publish.yml`). Set `APP_IMAGE=ghcr.io/<owner>/property-manager:latest`
+in `.env`, then update with `docker compose pull app worker && docker compose up -d`.
 
 ## Local development
 
