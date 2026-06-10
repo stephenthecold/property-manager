@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { getAuthSettings } from "@/lib/auth/settings";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { roleAtLeast } from "@/lib/auth/rbac";
 import { doSignOut } from "@/app/login/actions";
 import { NavLinks } from "@/components/app/nav-links";
@@ -15,7 +16,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
-  const settings = await getAuthSettings();
+  const [settings, app] = await Promise.all([
+    getAuthSettings(),
+    getAppSettings(),
+  ]);
   const isOwner = roleAtLeast(user.role, "owner");
 
   return (
@@ -24,7 +28,7 @@ export default async function AppLayout({
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="font-semibold">
-              Property Manager
+              {app.businessName}
             </Link>
             <NavLinks />
           </div>
@@ -35,7 +39,7 @@ export default async function AppLayout({
               </Link>
             )}
             {isOwner && (
-              <Link href="/settings/auth" className="text-muted-foreground hover:underline">
+              <Link href="/settings" className="text-muted-foreground hover:underline">
                 Settings
               </Link>
             )}

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getEnv } from "@/lib/config/env";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { toCents } from "@/lib/money";
 import { requireRole, auditActor } from "@/lib/auth/session";
 import { writeAudit } from "@/lib/audit/audit";
@@ -18,7 +18,8 @@ function str(fd: FormData, key: string): string {
 
 export async function createProperty(fd: FormData): Promise<void> {
   await requireRole("manager");
-  const env = getEnv();
+  // DB-configured org defaults win over env (Settings -> Organization).
+  const app = await getAppSettings();
   const name = str(fd, "name");
   if (!name) throw new Error("Property name is required.");
   const property = await prisma.property.create({
@@ -29,8 +30,8 @@ export async function createProperty(fd: FormData): Promise<void> {
       state: str(fd, "state") || null,
       zip: str(fd, "zip") || null,
       notes: str(fd, "notes") || null,
-      timezone: str(fd, "timezone") || env.DEFAULT_TIMEZONE,
-      currency: str(fd, "currency") || env.DEFAULT_CURRENCY,
+      timezone: str(fd, "timezone") || app.defaultTimezone,
+      currency: str(fd, "currency") || app.defaultCurrency,
     },
   });
   await writeAudit(prisma, {

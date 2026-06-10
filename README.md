@@ -17,6 +17,9 @@ overdue detection, a dashboard, and reports.
 - **Reports & audit** — rent roll, overdue, cash income summary, lease expirations,
   payments-by-method, tenant/unit ledgers (CSV + on-screen), list search/filters, and a
   read-only audit-log viewer over the append-only audit trail.
+- **Web-configurable settings** — white-labeling (business name, logo, receipt footer, org
+  defaults) and messaging (SMS provider with encrypted Twilio credentials, reminder behavior,
+  editable message templates, test send) under Settings; owner-only and fully audited.
 - **Self-hosted auth** — Authentik (OIDC) with a web config UI, an installer, and a hardened
   **break-glass** emergency login for when SSO is unavailable.
 - **Runs as Docker Compose** — Postgres + app + billing/reminder worker; Authentik, MinIO, and

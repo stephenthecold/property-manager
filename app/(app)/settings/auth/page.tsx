@@ -13,11 +13,13 @@ export default async function AuthSettingsPage() {
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-2xl p-6">
-      <h1 className="mb-1 text-2xl font-semibold">Authentication</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
-        Configure Authentik (OIDC) sign-in and manage break-glass emergency access.
-      </p>
+    <div className="w-full max-w-2xl space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Authentication</h2>
+        <p className="text-sm text-muted-foreground">
+          Configure Authentik (OIDC) sign-in and manage break-glass emergency access.
+        </p>
+      </div>
       <AuthSettingsForm
         viaBreakGlass={!!user.viaBreakGlass}
         breakGlassEnabled={resolved.breakGlassEnabled}

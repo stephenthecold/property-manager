@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getAuthSettings } from "@/lib/auth/settings";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { needsSetup } from "@/lib/auth/setup";
 import { signInWithAuthentik } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -16,13 +17,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  const [settings, setup] = await Promise.all([getAuthSettings(), needsSetup()]);
+  const [settings, setup, app] = await Promise.all([
+    getAuthSettings(),
+    needsSetup(),
+    getAppSettings(),
+  ]);
 
   return (
     <div className="flex flex-1 items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Property Manager</CardTitle>
+          <CardTitle className="text-2xl">{app.businessName}</CardTitle>
           <CardDescription>Sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

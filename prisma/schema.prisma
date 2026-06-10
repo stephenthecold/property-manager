@@ -205,6 +205,41 @@ model AuthSettings {
   updatedAt                  DateTime  @updatedAt
 }
 
+/// Single-row app-level settings: white-labeling, messaging, org defaults.
+/// Mirrors AuthSettings: DB config wins, env is the fallback; the Twilio auth
+/// token is AES-256-GCM encrypted at rest with SETTINGS_ENC_KEY.
+model AppSettings {
+  id                String  @id @default("singleton")
+  // Organization / white-label (header, receipts, reports)
+  businessName      String?
+  businessLegalName String?
+  businessAddress   String? // multiline
+  businessPhone     String?
+  businessEmail     String?
+  logoDocumentId    String? // UploadedDocument.id (loose ref)
+  receiptFooter     String? // free text printed at the bottom of receipts
+  // Defaults applied when creating new properties (override env defaults)
+  defaultTimezone   String?
+  defaultCurrency   String?
+  // Messaging (SMS). smsProvider null -> env config; "stub" | "twilio" -> DB.
+  smsEnabled              Boolean @default(true) // master switch for ALL sends
+  smsProvider             String?
+  smsAccountSid           String?
+  smsAuthTokenCiphertext  String?
+  smsAuthTokenNonce       String?
+  smsAuthTokenTag         String?
+  smsFromNumber           String?
+  reminderDueSoonDays     Int? // null -> env REMINDER_DUE_SOON_DAYS
+  dueSoonRemindersEnabled Boolean @default(true)
+  overdueRemindersEnabled Boolean @default(true)
+  // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
+  smsTemplates Json @default("{}")
+
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Single-row break-glass emergency credential. Off unless AuthSettings.breakGlassEnabled.
 model BreakGlassCredential {
   id                  String    @id @default("singleton")

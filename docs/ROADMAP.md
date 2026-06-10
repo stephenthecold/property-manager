@@ -46,6 +46,11 @@ report filters (property/date range/window), list search & filters (tenants/paym
 and the read-only **audit-log viewer** (`/audit`, admin+). Printable pages stand in for PDF
 generation (no headless-browser dependency); CSV cells are formula-injection-guarded.
 
+Also: a **Settings hub** (owner-only, audited) — Organization (white-label name/logo/receipt
+footer, default tz/currency for new properties) and Messaging (SMS provider with the Twilio
+auth token AES-GCM-encrypted at rest, scheduled-reminder toggles and due-soon window,
+per-type SMS template overrides, test send). DB config wins over env, mirroring AuthSettings.
+
 ## Phase 5 — Optional enhancements
 
 Tenant portal, online payments (ACH/card), email reminders, maintenance tickets, lease

@@ -1,0 +1,250 @@
+import { prisma } from "@/lib/db";
+import { getEnv } from "@/lib/config/env";
+import { decryptSecret, encryptSecret } from "@/lib/auth/crypto";
+import { writeAudit, type AuditContext } from "@/lib/audit/audit";
+import { getSmsProvider } from "@/lib/providers/sms";
+import { StubSmsProvider } from "@/lib/providers/sms/stub";
+import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
+import type { SmsProvider } from "@/lib/providers/sms/types";
+import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
+import type { ReminderType } from "@/lib/generated/prisma/enums";
+
+/** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
+export const SMS_TOKEN_AAD = "appsettings:smsAuthToken:singleton";
+
+export interface ResolvedAppSettings {
+  /** White-label brand shown in the header, receipts, and reports. */
+  businessName: string;
+  businessLegalName: string | null;
+  businessAddress: string | null;
+  businessPhone: string | null;
+  businessEmail: string | null;
+  logoDocumentId: string | null;
+  receiptFooter: string | null;
+  defaultTimezone: string;
+  defaultCurrency: string;
+  /** Master switch for ALL SMS sends (manual, bulk, scheduled). */
+  smsEnabled: boolean;
+  /** Effective provider name after DB-over-env resolution. */
+  smsProvider: "stub" | "twilio" | "telnyx";
+  smsConfigSource: "db" | "env";
+  smsFromNumber: string | null;
+  smsHasAuthToken: boolean;
+  dueSoonDays: number;
+  dueSoonRemindersEnabled: boolean;
+  overdueRemindersEnabled: boolean;
+  /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
+  templates: Record<ReminderType, string>;
+}
+
+let cache: { value: ResolvedAppSettings; at: number } | null = null;
+const TTL_MS = 30_000;
+
+export function invalidateAppSettingsCache(): void {
+  cache = null;
+}
+
+export async function getAppSettings(): Promise<ResolvedAppSettings> {
+  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+  const value = await resolve();
+  cache = { value, at: Date.now() };
+  return value;
+}
+
+async function resolve(): Promise<ResolvedAppSettings> {
+  const env = getEnv();
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+
+  const overrides = (row?.smsTemplates as Partial<Record<ReminderType, string>>) ?? {};
+  const templates = { ...DEFAULT_TEMPLATES };
+  for (const [key, body] of Object.entries(overrides)) {
+    if (key in templates && typeof body === "string" && body.trim() !== "") {
+      templates[key as ReminderType] = body;
+    }
+  }
+
+  const dbSms = row?.smsProvider === "twilio" || row?.smsProvider === "stub";
+
+  return {
+    businessName: row?.businessName?.trim() || "Property Manager",
+    businessLegalName: row?.businessLegalName ?? null,
+    businessAddress: row?.businessAddress ?? null,
+    businessPhone: row?.businessPhone ?? null,
+    businessEmail: row?.businessEmail ?? null,
+    logoDocumentId: row?.logoDocumentId ?? null,
+    receiptFooter: row?.receiptFooter ?? null,
+    defaultTimezone: row?.defaultTimezone || env.DEFAULT_TIMEZONE,
+    defaultCurrency: row?.defaultCurrency || env.DEFAULT_CURRENCY,
+    smsEnabled: row?.smsEnabled ?? true,
+    smsProvider: dbSms
+      ? (row!.smsProvider as "stub" | "twilio")
+      : env.SMS_PROVIDER,
+    smsConfigSource: dbSms ? "db" : "env",
+    smsFromNumber: row?.smsFromNumber ?? env.SMS_FROM_NUMBER ?? null,
+    smsHasAuthToken: !!row?.smsAuthTokenCiphertext,
+    dueSoonDays: row?.reminderDueSoonDays ?? env.REMINDER_DUE_SOON_DAYS,
+    dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
+    overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+    templates,
+  };
+}
+
+/**
+ * Effective SMS provider: DB-configured Twilio (decrypted token) or stub wins
+ * over the env-selected provider, mirroring how AuthSettings overrides OIDC env.
+ */
+export async function resolveSmsProvider(): Promise<SmsProvider> {
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+
+  if (row?.smsProvider === "stub") return new StubSmsProvider();
+  if (
+    row?.smsProvider === "twilio" &&
+    row.smsAccountSid &&
+    row.smsFromNumber &&
+    row.smsAuthTokenCiphertext &&
+    row.smsAuthTokenNonce &&
+    row.smsAuthTokenTag
+  ) {
+    const authToken = decryptSecret(
+      {
+        ciphertext: row.smsAuthTokenCiphertext,
+        nonce: row.smsAuthTokenNonce,
+        tag: row.smsAuthTokenTag,
+      },
+      SMS_TOKEN_AAD,
+    );
+    return new TwilioSmsProvider({
+      accountSid: row.smsAccountSid,
+      authToken,
+      fromNumber: row.smsFromNumber,
+    });
+  }
+
+  return getSmsProvider();
+}
+
+export interface OrganizationSettingsInput {
+  businessName: string | null;
+  businessLegalName: string | null;
+  businessAddress: string | null;
+  businessPhone: string | null;
+  businessEmail: string | null;
+  logoDocumentId?: string | null; // undefined = leave unchanged
+  receiptFooter: string | null;
+  defaultTimezone: string | null;
+  defaultCurrency: string | null;
+}
+
+export async function saveOrganizationSettings(
+  input: OrganizationSettingsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    businessName: input.businessName,
+    businessLegalName: input.businessLegalName,
+    businessAddress: input.businessAddress,
+    businessPhone: input.businessPhone,
+    businessEmail: input.businessEmail,
+    ...(input.logoDocumentId !== undefined
+      ? { logoDocumentId: input.logoDocumentId }
+      : {}),
+    receiptFooter: input.receiptFooter,
+    defaultTimezone: input.defaultTimezone,
+    defaultCurrency: input.defaultCurrency,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.organization.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? { businessName: before.businessName, logoDocumentId: before.logoDocumentId }
+        : undefined,
+      after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface MessagingSettingsInput {
+  smsEnabled: boolean;
+  /** null = use env config; "stub" | "twilio" = DB config. */
+  smsProvider: "stub" | "twilio" | null;
+  smsAccountSid: string | null;
+  /** undefined = keep the stored token; a string replaces it. */
+  smsAuthToken?: string;
+  smsFromNumber: string | null;
+  reminderDueSoonDays: number | null;
+  dueSoonRemindersEnabled: boolean;
+  overdueRemindersEnabled: boolean;
+  /** Per-type overrides; empty/missing values fall back to defaults. */
+  smsTemplates: Partial<Record<ReminderType, string>>;
+}
+
+export async function saveMessagingSettings(
+  input: MessagingSettingsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const tokenFields =
+    input.smsAuthToken !== undefined
+      ? input.smsAuthToken === ""
+        ? {
+            smsAuthTokenCiphertext: null,
+            smsAuthTokenNonce: null,
+            smsAuthTokenTag: null,
+          }
+        : (() => {
+            const enc = encryptSecret(input.smsAuthToken, SMS_TOKEN_AAD);
+            return {
+              smsAuthTokenCiphertext: enc.ciphertext,
+              smsAuthTokenNonce: enc.nonce,
+              smsAuthTokenTag: enc.tag,
+            };
+          })()
+      : {};
+
+  const data = {
+    smsEnabled: input.smsEnabled,
+    smsProvider: input.smsProvider,
+    smsAccountSid: input.smsAccountSid,
+    smsFromNumber: input.smsFromNumber,
+    reminderDueSoonDays: input.reminderDueSoonDays,
+    dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
+    overdueRemindersEnabled: input.overdueRemindersEnabled,
+    smsTemplates: input.smsTemplates,
+    ...tokenFields,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    // Never audit the token itself — only whether one is now stored.
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.messaging.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: {
+        smsEnabled: input.smsEnabled,
+        smsProvider: input.smsProvider,
+        smsFromNumber: input.smsFromNumber,
+        reminderDueSoonDays: input.reminderDueSoonDays,
+        dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
+        overdueRemindersEnabled: input.overdueRemindersEnabled,
+        tokenChanged: input.smsAuthToken !== undefined,
+      },
+    });
+  });
+  invalidateAppSettingsCache();
+}

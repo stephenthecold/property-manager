@@ -4,18 +4,16 @@ import { Prisma } from "@/lib/generated/prisma/client";
 import type { Lease, Property, Tenant, Unit } from "@/lib/generated/prisma/client";
 import type { ReminderStatus, ReminderType } from "@/lib/generated/prisma/enums";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
-import { getEnv } from "@/lib/config/env";
 import { formatCurrency } from "@/lib/money";
-import { getSmsProvider } from "@/lib/providers/sms";
+import {
+  getAppSettings,
+  resolveSmsProvider,
+} from "@/lib/services/app-settings";
 import type { SendSmsResult } from "@/lib/providers/sms/types";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { leaseSnapshot, loadLeaseAccounting } from "@/lib/services/accounting";
-import {
-  buildReminderVars,
-  DEFAULT_TEMPLATES,
-  renderTemplate,
-} from "@/lib/reminders/templates";
+import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
 
 /**
@@ -66,8 +64,9 @@ async function renderDefaultBody(
       ? snapshot.currentPeriodOutstandingCents
       : lease.rentAmountCents;
 
+  const { templates } = await getAppSettings();
   return renderTemplate(
-    DEFAULT_TEMPLATES[reminderType],
+    templates[reminderType],
     buildReminderVars({
       tenantFirstName: tenant.firstName,
       tenantLastName: tenant.lastName,
@@ -101,6 +100,14 @@ export async function sendReminder(
   i: SendReminderInput,
 ): Promise<SendReminderResult> {
   const now = i.now ?? new Date();
+
+  if (!(await getAppSettings()).smsEnabled) {
+    return {
+      reminderId: null,
+      status: "skipped",
+      error: "SMS sending is disabled in Settings → Messaging",
+    };
+  }
 
   const tenant = await prisma.tenant.findUnique({ where: { id: i.tenantId } });
   if (!tenant) {
@@ -179,7 +186,7 @@ export async function sendReminder(
 
   let result: SendSmsResult;
   try {
-    result = await getSmsProvider().send({ to: phone, body });
+    result = await (await resolveSmsProvider()).send({ to: phone, body });
   } catch (e) {
     result = { provider: "unknown", status: "failed", error: errorMessage(e) };
   }
@@ -247,7 +254,10 @@ async function retryExistingSlot(
 
   let result: SendSmsResult;
   try {
-    result = await getSmsProvider().send({ to: phone, body: row.messageBody });
+    result = await (await resolveSmsProvider()).send({
+      to: phone,
+      body: row.messageBody,
+    });
   } catch (e) {
     result = { provider: "unknown", status: "failed", error: errorMessage(e) };
   }
@@ -363,7 +373,11 @@ export async function runScheduledReminders(
   now: Date,
 ): Promise<ScheduledRemindersResult> {
   const actor: AuditContext = { actorType: "system", actorId: null };
-  const dueSoonDays = getEnv().REMINDER_DUE_SOON_DAYS;
+  const settings = await getAppSettings();
+  if (!settings.smsEnabled) {
+    return { dueSoon: 0, overdue: 0, failed: 0, skipped: 0 };
+  }
+  const dueSoonDays = settings.dueSoonDays;
 
   const leases = await prisma.lease.findMany({
     where: { status: { in: ["active", "month_to_month"] } },
