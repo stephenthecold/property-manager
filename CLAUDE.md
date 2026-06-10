@@ -12,7 +12,7 @@ npm run typecheck      # tsc --noEmit
 npm run prisma:deploy  # apply migrations    | npm run prisma:migrate (create in dev)
 npm run db:seed        # idempotent seed
 npm run worker         # billing worker (charges + late fees)
-npm run bootstrap      # generate secrets into .env
+npm run bootstrap      # generate secrets into .env (deploy hosts: ./scripts/bootstrap.sh, no Node)
 npm run breakglass issue|rotate|disable
 docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
 ```

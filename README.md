@@ -30,11 +30,13 @@ overdue detection, a dashboard, and reports.
 ```bash
 git clone https://github.com/stephenthecold/property-manager.git
 cd property-manager
-cp .env.example .env
-npm install
-npm run bootstrap          # generate AUTH_SECRET / SETTINGS_ENC_KEY / SETUP_BOOTSTRAP_TOKEN
+./scripts/bootstrap.sh     # create .env + generate secrets (needs only openssl — no Node)
+# edit .env: set POSTGRES_PASSWORD (and APP_URL for production)
 docker compose up -d       # app + db + worker (builds the image on first run)
 ```
+
+A Docker host needs only git, Docker, and openssl — Node is **not** required (it runs inside
+the image). On a dev machine, `npm run bootstrap` does the same secret generation.
 
 Then open `http://localhost:3000/setup?token=<SETUP_BOOTSTRAP_TOKEN>` (the token is printed by
 `npm run bootstrap`) to create the first owner, get an emergency login with
@@ -59,7 +61,10 @@ in `.env`, then update with `docker compose pull app worker && docker compose up
 
 ## Local development
 
+Needs Node **20.19+** (Prisma 7's minimum; Debian/Ubuntu's distro Node 18 is too old).
+
 ```bash
+npm install
 # Postgres (or use the compose db):
 docker run -d --name pm-postgres-dev -e POSTGRES_USER=pm -e POSTGRES_PASSWORD=pm \
   -e POSTGRES_DB=property_manager -p 5433:5432 postgres:17-alpine

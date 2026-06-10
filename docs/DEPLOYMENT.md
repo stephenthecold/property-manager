@@ -4,13 +4,15 @@
 
 ```bash
 git clone https://github.com/stephenthecold/property-manager.git && cd property-manager
-cp .env.example .env
-npm install            # for the bootstrap/CLI tools (or run bootstrap in the container)
-npm run bootstrap      # generates AUTH_SECRET, SETTINGS_ENC_KEY, SETUP_BOOTSTRAP_TOKEN into .env
+./scripts/bootstrap.sh # creates .env + generates AUTH_SECRET, SETTINGS_ENC_KEY, SETUP_BOOTSTRAP_TOKEN
 # edit .env: set POSTGRES_PASSWORD, APP_URL, and (for prod) your domain
 
 docker compose up -d            # app + db + worker (the lean stack)
 ```
+
+The host needs only git, Docker, and openssl — **no Node**: the app runs inside the image, and
+break-glass/seed commands run via `docker compose exec app …`. (`npm run bootstrap` is the
+equivalent for dev machines, which need Node 20.19+.)
 
 On first start the **app** container waits for the DB, runs `prisma migrate deploy`, and
 (if `SEED_ON_START=true`) seeds sample data, then serves on port 3000.
@@ -112,12 +114,11 @@ docker compose exec -T db pg_dump -U pm -d property_manager > backup.sql
 > `.env` holds **AUTH_SECRET, SETTINGS_ENC_KEY, and the setup token**. Transfer it (and the
 > dump) over a secure channel (scp/AirDrop/USB), not email or a public share.
 
-**On the new machine** (needs Docker + Node 20+):
+**On the new machine** (needs Docker; Node 20.19+ only if you'll develop there):
 
 ```bash
 git clone https://github.com/stephenthecold/property-manager.git && cd property-manager
 # …copy .env into the project root…
-npm install                       # CLI tooling (bootstrap/break-glass/dev)
 docker compose up -d --build      # app + db + worker; migrations run automatically
 
 # Fresh start: open  http://localhost:3000/setup?token=<SETUP_BOOTSTRAP_TOKEN from .env>
