@@ -7,9 +7,10 @@ export const runtime = "nodejs";
 
 export default async function AuthSettingsPage() {
   const { user } = await requireRole("owner");
-  const [row, resolved] = await Promise.all([
+  const [row, resolved, oidcAccountCount] = await Promise.all([
     prisma.authSettings.findUnique({ where: { id: "singleton" } }),
     getAuthSettings(),
+    prisma.account.count(),
   ]);
 
   return (
@@ -22,6 +23,7 @@ export default async function AuthSettingsPage() {
       </div>
       <AuthSettingsForm
         viaBreakGlass={!!user.viaBreakGlass}
+        authLocked={!!user.viaBreakGlass && oidcAccountCount > 0}
         breakGlassEnabled={resolved.breakGlassEnabled}
         breakGlassExpiresAt={row?.breakGlassExpiresAt?.toISOString() ?? null}
         initial={{

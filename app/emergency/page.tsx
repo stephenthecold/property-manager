@@ -27,8 +27,8 @@ export default function EmergencyPage() {
           <CardTitle>Emergency access</CardTitle>
           <CardDescription>
             Break-glass owner login for when single sign-on is unavailable. Every
-            attempt is audited. This session is short-lived and cannot change
-            authentication settings.
+            attempt is audited. This session is short-lived; once SSO is in use
+            it cannot change authentication settings.
           </CardDescription>
         </CardHeader>
         <CardContent>

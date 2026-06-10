@@ -28,11 +28,14 @@ interface Initial {
 export function AuthSettingsForm({
   initial,
   viaBreakGlass,
+  authLocked,
   breakGlassEnabled,
   breakGlassExpiresAt,
 }: {
   initial: Initial;
   viaBreakGlass: boolean;
+  /** Break-glass session AND OIDC already in use — settings are read-only. */
+  authLocked: boolean;
   breakGlassEnabled: boolean;
   breakGlassExpiresAt: string | null;
 }) {
@@ -45,16 +48,25 @@ export function AuthSettingsForm({
     FormData
   >(testConnectionAction, { ok: false });
 
-  const disabled = viaBreakGlass;
+  const disabled = authLocked;
 
   return (
     <div className="space-y-8">
-      {viaBreakGlass && (
+      {authLocked && (
         <Alert variant="destructive">
           <AlertTitle>Break-glass session</AlertTitle>
           <AlertDescription>
             Authentication settings are read-only while signed in via emergency
             access. Sign in through your IdP to make changes.
+          </AlertDescription>
+        </Alert>
+      )}
+      {viaBreakGlass && !authLocked && (
+        <Alert>
+          <AlertTitle>Break-glass session — initial setup</AlertTitle>
+          <AlertDescription>
+            You can configure and enable OIDC now. Once the first SSO sign-in
+            succeeds, these settings become read-only for break-glass sessions.
           </AlertDescription>
         </Alert>
       )}

@@ -100,8 +100,10 @@ docker compose exec app npm run breakglass disable         # turn off + clear cr
 
 Break-glass is **off by default**, **owner-only**, argon2id-hashed, rate-limited, fully audited,
 and **auto-expires**. A break-glass session is short-lived (30 min) and **cannot change auth
-settings**. The `BREAK_GLASS=on` env override forces it on and bypasses auto-expiry — use only
-during active recovery.
+settings once any SSO sign-in has occurred** — during first-run bootstrap (no OIDC account
+exists yet) it may perform the initial OIDC configuration, which is the only way to bring up
+SSO on a fresh instance. The `BREAK_GLASS=on` env override forces it on and bypasses
+auto-expiry — use only during active recovery.
 
 ## Backups & migrations
 

@@ -34,7 +34,8 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
 - **Auth**: `proxy.ts` (edge) uses `auth.config.ts` (JWT-only, no Prisma, fails closed);
   `auth.ts` (Node) has the adapter + dynamic OIDC provider built from the DB `AuthSettings`.
   JWT role is a hint — use `requireRole` (DB-authoritative + `securityStamp`) for sensitive ops.
-  Break-glass is off by default, owner-only, auto-expiring, and cannot change auth settings.
+  Break-glass is off by default, owner-only, auto-expiring, and cannot change auth settings
+  once any OIDC sign-in exists (first-run bootstrap may do the initial OIDC configuration).
 - **Every mutation is audited** in-transaction via `withAudit`/`writeAudit`; `AuditLog` is
   append-only (DB trigger).
 

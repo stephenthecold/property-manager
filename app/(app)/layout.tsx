@@ -55,7 +55,7 @@ export default async function AppLayout({
         </div>
         {user.viaBreakGlass && (
           <div className="bg-red-600 px-4 py-1.5 text-center text-sm font-medium text-white">
-            Break-glass session — auth settings are locked. Restore SSO and disable break-glass.
+            Break-glass session — get SSO sign-in working, then disable break-glass.
           </div>
         )}
       </header>

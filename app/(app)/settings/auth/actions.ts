@@ -24,8 +24,11 @@ export async function saveOidcSettings(
   formData: FormData,
 ): Promise<SaveState> {
   const { user } = await requireRole("owner");
-  // A break-glass session is the IdP bypass; it must NOT be able to repoint auth.
-  if (user.viaBreakGlass) {
+  // A break-glass session is the IdP bypass; once OIDC has actually been used
+  // (any Account row exists) it must NOT be able to repoint auth. Before that —
+  // the first-run bootstrap — break-glass is the only session that can exist,
+  // so it is allowed to perform the initial configuration.
+  if (user.viaBreakGlass && (await prisma.account.count()) > 0) {
     return {
       error:
         "Authentication settings cannot be changed during a break-glass session. Sign in via your IdP first.",
