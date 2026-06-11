@@ -5,16 +5,27 @@ import { formatCurrency, fromCents } from "@/lib/money";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { createBuilding, createUnit, updateProperty } from "../actions";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/app/data-table";
+import { FormDialog } from "@/components/app/form-dialog";
 
 export const runtime = "nodejs";
 
 const UNIT_TYPES = ["apartment", "house", "duplex", "storage", "commercial", "other"];
 const OCC = ["vacant", "occupied", "maintenance", "unavailable"];
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-medium">{value}</div>
+    </div>
+  );
+}
 
 export default async function PropertyDetail({
   params,
@@ -51,122 +62,10 @@ export default async function PropertyDetail({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Units</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            emptyMessage="No units yet."
-            defaultSort={{ key: "unit", dir: "asc" }}
-            columns={[
-              { key: "unit", label: "Unit" },
-              { key: "building", label: "Building", className: "hidden md:table-cell" },
-              { key: "type", label: "Type", className: "hidden sm:table-cell" },
-              { key: "occupancy", label: "Occupancy" },
-              {
-                key: "internet",
-                label: "Internet",
-                numeric: true,
-                className: "hidden lg:table-cell",
-              },
-              { key: "rent", label: "Default rent", align: "right", numeric: true },
-            ]}
-            rows={property.units.map((u) => ({
-              key: u.id,
-              sortValues: [
-                u.unitNumber,
-                u.building?.name ?? null,
-                u.unitType,
-                u.occupancyStatus,
-                u.internetEnabled ? String(u.internetFeeCents) : null,
-                String(u.defaultRentAmountCents),
-              ],
-              cells: [
-                <Link key="u" href={`/units/${u.id}`} className="font-medium hover:underline">
-                  {u.unitNumber}
-                </Link>,
-                u.building?.name ?? "—",
-                <span key="t" className="capitalize">
-                  {u.unitType}
-                </span>,
-                <span
-                  key="o"
-                  className={
-                    u.occupancyStatus === "occupied"
-                      ? "capitalize text-emerald-700 dark:text-emerald-400"
-                      : u.occupancyStatus === "vacant"
-                        ? "capitalize text-amber-700 dark:text-amber-400"
-                        : "capitalize text-muted-foreground"
-                  }
-                >
-                  {u.occupancyStatus}
-                </span>,
-                <span key="i" className="tabular-nums">
-                  {u.internetEnabled
-                    ? `+${formatCurrency(u.internetFeeCents, property.currency)}`
-                    : "—"}
-                </span>,
-                <span key="r" className="tabular-nums">
-                  {formatCurrency(u.defaultRentAmountCents, property.currency)}
-                </span>,
-              ],
-            }))}
-          />
-        </CardContent>
-      </Card>
-
-      {property.buildings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Buildings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              columns={[
-                { key: "name", label: "Name" },
-                { key: "description", label: "Description", className: "hidden sm:table-cell" },
-                { key: "purchased", label: "Purchased" },
-                { key: "units", label: "Units", align: "right", numeric: true },
-              ]}
-              rows={property.buildings.map((b) => ({
-                key: b.id,
-                sortValues: [
-                  b.name,
-                  b.description,
-                  b.purchaseDate?.toISOString() ?? null,
-                  b._count.units,
-                ],
-                cells: [
-                  <Link
-                    key="n"
-                    href={`/buildings/${b.id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {b.name}
-                  </Link>,
-                  b.description ?? "—",
-                  b.purchaseDate
-                    ? b.purchaseDate.toLocaleDateString("en-US", {
-                        timeZone: property.timezone,
-                      })
-                    : "—",
-                  <span key="u" className="tabular-nums">
-                    {b._count.units}
-                  </span>,
-                ],
-              }))}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardContent className="py-4">
-          <details>
-            <summary className="cursor-pointer text-base font-semibold">
-              Edit property
-            </summary>
-            <form action={updateProperty} className="mt-4 space-y-3">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Property details</CardTitle>
+          <FormDialog trigger="Edit property" title="Edit property" wide>
+            <form action={updateProperty} className="space-y-3">
               <input type="hidden" name="propertyId" value={property.id} />
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
@@ -232,40 +131,60 @@ export default async function PropertyDetail({
                 Save property
               </Button>
             </form>
-          </details>
+          </FormDialog>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+            <Field
+              label="Address"
+              value={
+                [property.addressLine1, property.addressLine2]
+                  .filter(Boolean)
+                  .join(", ") || "—"
+              }
+            />
+            <Field
+              label="City / State / ZIP"
+              value={
+                [property.city, property.state, property.zip]
+                  .filter(Boolean)
+                  .join(", ") || "—"
+              }
+            />
+            <Field label="Timezone" value={property.timezone} />
+            <Field label="Currency" value={property.currency} />
+            <Field
+              label="Status"
+              value={
+                property.isActive ? (
+                  <Badge
+                    variant="outline"
+                    className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+                  >
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Archived
+                  </Badge>
+                )
+              }
+            />
+            <Field
+              label="Size"
+              value={`${property.buildings.length} building(s) · ${property.units.length} unit(s)`}
+            />
+          </div>
+          {property.notes && (
+            <p className="mt-3 text-sm text-muted-foreground">{property.notes}</p>
+          )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Add building</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createBuilding} className="space-y-3">
-              <input type="hidden" name="propertyId" value={property.id} />
-              <div className="space-y-2">
-                <Label htmlFor="bname">Name</Label>
-                <Input id="bname" name="name" placeholder="Building A" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bdesc">Description</Label>
-                <Input id="bdesc" name="description" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bpurchase">Purchase date</Label>
-                <Input id="bpurchase" name="purchaseDate" type="date" />
-              </div>
-              <Button type="submit" size="sm">Add building</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Add unit</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Units</CardTitle>
+          <FormDialog trigger="Add unit" triggerVariant="default" title="Add unit">
             <form action={createUnit} className="space-y-3">
               <input type="hidden" name="propertyId" value={property.id} />
               <div className="space-y-2">
@@ -341,9 +260,130 @@ export default async function PropertyDetail({
               </div>
               <Button type="submit" size="sm">Add unit</Button>
             </form>
-          </CardContent>
-        </Card>
-      </div>
+          </FormDialog>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            emptyMessage="No units yet."
+            defaultSort={{ key: "unit", dir: "asc" }}
+            columns={[
+              { key: "unit", label: "Unit" },
+              { key: "building", label: "Building", className: "hidden md:table-cell" },
+              { key: "type", label: "Type", className: "hidden sm:table-cell" },
+              { key: "occupancy", label: "Occupancy" },
+              {
+                key: "internet",
+                label: "Internet",
+                numeric: true,
+                className: "hidden lg:table-cell",
+              },
+              { key: "rent", label: "Default rent", align: "right", numeric: true },
+            ]}
+            rows={property.units.map((u) => ({
+              key: u.id,
+              sortValues: [
+                u.unitNumber,
+                u.building?.name ?? null,
+                u.unitType,
+                u.occupancyStatus,
+                u.internetEnabled ? String(u.internetFeeCents) : null,
+                String(u.defaultRentAmountCents),
+              ],
+              cells: [
+                <Link key="u" href={`/units/${u.id}`} className="font-medium hover:underline">
+                  {u.unitNumber}
+                </Link>,
+                u.building?.name ?? "—",
+                <span key="t" className="capitalize">
+                  {u.unitType}
+                </span>,
+                <span
+                  key="o"
+                  className={
+                    u.occupancyStatus === "occupied"
+                      ? "capitalize text-emerald-700 dark:text-emerald-400"
+                      : u.occupancyStatus === "vacant"
+                        ? "capitalize text-amber-700 dark:text-amber-400"
+                        : "capitalize text-muted-foreground"
+                  }
+                >
+                  {u.occupancyStatus}
+                </span>,
+                <span key="i" className="tabular-nums">
+                  {u.internetEnabled
+                    ? `+${formatCurrency(u.internetFeeCents, property.currency)}`
+                    : "—"}
+                </span>,
+                <span key="r" className="tabular-nums">
+                  {formatCurrency(u.defaultRentAmountCents, property.currency)}
+                </span>,
+              ],
+            }))}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Buildings</CardTitle>
+          <FormDialog trigger="Add building" triggerVariant="default" title="Add building">
+            <form action={createBuilding} className="space-y-3">
+              <input type="hidden" name="propertyId" value={property.id} />
+              <div className="space-y-2">
+                <Label htmlFor="bname">Name</Label>
+                <Input id="bname" name="name" placeholder="Building A" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bdesc">Description</Label>
+                <Input id="bdesc" name="description" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bpurchase">Purchase date</Label>
+                <Input id="bpurchase" name="purchaseDate" type="date" />
+              </div>
+              <Button type="submit" size="sm">Add building</Button>
+            </form>
+          </FormDialog>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            emptyMessage="No buildings yet."
+            columns={[
+              { key: "name", label: "Name" },
+              { key: "description", label: "Description", className: "hidden sm:table-cell" },
+              { key: "purchased", label: "Purchased" },
+              { key: "units", label: "Units", align: "right", numeric: true },
+            ]}
+            rows={property.buildings.map((b) => ({
+              key: b.id,
+              sortValues: [
+                b.name,
+                b.description,
+                b.purchaseDate?.toISOString() ?? null,
+                b._count.units,
+              ],
+              cells: [
+                <Link
+                  key="n"
+                  href={`/buildings/${b.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {b.name}
+                </Link>,
+                b.description ?? "—",
+                b.purchaseDate
+                  ? b.purchaseDate.toLocaleDateString("en-US", {
+                      timeZone: property.timezone,
+                    })
+                  : "—",
+                <span key="u" className="tabular-nums">
+                  {b._count.units}
+                </span>,
+              ],
+            }))}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
