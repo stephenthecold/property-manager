@@ -6,6 +6,7 @@ import { leaseSnapshot } from "@/lib/services/accounting";
 import { updateUnit, deleteUnit } from "../actions";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,15 @@ export const runtime = "nodejs";
 
 const UNIT_TYPES = ["apartment", "house", "duplex", "storage", "commercial", "other"];
 const OCC = ["vacant", "occupied", "maintenance", "unavailable"];
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-medium">{value}</div>
+    </div>
+  );
+}
 
 export default async function UnitDetail({
   params,
@@ -97,145 +107,176 @@ export default async function UnitDetail({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Edit unit</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Unit details</CardTitle>
+          <FormDialog trigger="Edit unit" title="Edit unit" wide>
+            <form action={updateUnit} className="space-y-3">
+              <input type="hidden" name="unitId" value={unit.id} />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="unitNumber">Unit number</Label>
+                  <Input
+                    id="unitNumber"
+                    name="unitNumber"
+                    defaultValue={unit.unitNumber}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="buildingId">Building</Label>
+                  <select
+                    id="buildingId"
+                    name="buildingId"
+                    defaultValue={unit.buildingId ?? ""}
+                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  >
+                    <option value="">— none —</option>
+                    {unit.property.buildings.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unitType">Type</Label>
+                  <select
+                    id="unitType"
+                    name="unitType"
+                    defaultValue={unit.unitType}
+                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                  >
+                    {UNIT_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="occupancyStatus">Occupancy</Label>
+                  <select
+                    id="occupancyStatus"
+                    name="occupancyStatus"
+                    defaultValue={unit.occupancyStatus}
+                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                  >
+                    {OCC.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bedrooms">Bedrooms</Label>
+                  <Input
+                    id="bedrooms"
+                    name="bedrooms"
+                    inputMode="numeric"
+                    defaultValue={unit.bedrooms ?? ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bathrooms">Bathrooms</Label>
+                  <Input
+                    id="bathrooms"
+                    name="bathrooms"
+                    inputMode="decimal"
+                    defaultValue={unit.bathrooms ?? ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="squareFeet">Square feet</Label>
+                  <Input
+                    id="squareFeet"
+                    name="squareFeet"
+                    inputMode="numeric"
+                    defaultValue={unit.squareFeet ?? ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="defaultRent">Default rent</Label>
+                  <Input
+                    id="defaultRent"
+                    name="defaultRent"
+                    inputMode="decimal"
+                    defaultValue={fromCents(unit.defaultRentAmountCents)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-md border p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="internetEnabled"
+                    name="internetEnabled"
+                    type="checkbox"
+                    defaultChecked={unit.internetEnabled}
+                    className="size-4 accent-primary"
+                  />
+                  <Label htmlFor="internetEnabled">
+                    Internet service — default for new leases on this unit
+                  </Label>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="internetFee">Monthly internet fee</Label>
+                  <Input
+                    id="internetFee"
+                    name="internetFee"
+                    inputMode="decimal"
+                    defaultValue={fromCents(unit.internetFeeCents)}
+                    className="max-w-40"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Billing is controlled per lease (Edit lease on the tenant page);
+                    this only prefills new leases for this unit.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea id="notes" name="notes" defaultValue={unit.notes ?? ""} />
+              </div>
+              <Button type="submit" size="sm">
+                Save changes
+              </Button>
+            </form>
+          </FormDialog>
         </CardHeader>
         <CardContent>
-          <form action={updateUnit} className="space-y-3">
-            <input type="hidden" name="unitId" value={unit.id} />
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="unitNumber">Unit number</Label>
-                <Input
-                  id="unitNumber"
-                  name="unitNumber"
-                  defaultValue={unit.unitNumber}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="buildingId">Building</Label>
-                <select
-                  id="buildingId"
-                  name="buildingId"
-                  defaultValue={unit.buildingId ?? ""}
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-                >
-                  <option value="">— none —</option>
-                  {unit.property.buildings.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="unitType">Type</Label>
-                <select
-                  id="unitType"
-                  name="unitType"
-                  defaultValue={unit.unitType}
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
-                >
-                  {UNIT_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="occupancyStatus">Occupancy</Label>
-                <select
-                  id="occupancyStatus"
-                  name="occupancyStatus"
-                  defaultValue={unit.occupancyStatus}
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
-                >
-                  {OCC.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bedrooms">Bedrooms</Label>
-                <Input
-                  id="bedrooms"
-                  name="bedrooms"
-                  inputMode="numeric"
-                  defaultValue={unit.bedrooms ?? ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bathrooms">Bathrooms</Label>
-                <Input
-                  id="bathrooms"
-                  name="bathrooms"
-                  inputMode="decimal"
-                  defaultValue={unit.bathrooms ?? ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="squareFeet">Square feet</Label>
-                <Input
-                  id="squareFeet"
-                  name="squareFeet"
-                  inputMode="numeric"
-                  defaultValue={unit.squareFeet ?? ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="defaultRent">Default rent</Label>
-                <Input
-                  id="defaultRent"
-                  name="defaultRent"
-                  inputMode="decimal"
-                  defaultValue={fromCents(unit.defaultRentAmountCents)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="rounded-md border p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  id="internetEnabled"
-                  name="internetEnabled"
-                  type="checkbox"
-                  defaultChecked={unit.internetEnabled}
-                  className="size-4 accent-primary"
-                />
-                <Label htmlFor="internetEnabled">
-                  Internet service — default for new leases on this unit
-                </Label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="internetFee">Monthly internet fee</Label>
-                <Input
-                  id="internetFee"
-                  name="internetFee"
-                  inputMode="decimal"
-                  defaultValue={fromCents(unit.internetFeeCents)}
-                  className="max-w-40"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Billing is controlled per lease (Edit lease on the tenant page);
-                  this only prefills new leases for this unit.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" name="notes" defaultValue={unit.notes ?? ""} />
-            </div>
-            <Button type="submit" size="sm">
-              Save changes
-            </Button>
-          </form>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <Field
+              label="Type"
+              value={<span className="capitalize">{unit.unitType}</span>}
+            />
+            <Field
+              label="Occupancy"
+              value={<span className="capitalize">{unit.occupancyStatus}</span>}
+            />
+            <Field label="Building" value={unit.building?.name ?? "—"} />
+            <Field
+              label="Default rent"
+              value={formatCurrency(unit.defaultRentAmountCents, currency)}
+            />
+            <Field label="Bedrooms" value={unit.bedrooms ?? "—"} />
+            <Field label="Bathrooms" value={unit.bathrooms ?? "—"} />
+            <Field label="Square feet" value={unit.squareFeet ?? "—"} />
+            <Field
+              label="Internet default"
+              value={
+                unit.internetEnabled
+                  ? `+${formatCurrency(unit.internetFeeCents, currency)}/mo`
+                  : "Off"
+              }
+            />
+          </div>
+          {unit.notes && (
+            <p className="mt-3 text-sm text-muted-foreground">{unit.notes}</p>
+          )}
         </CardContent>
       </Card>
 
