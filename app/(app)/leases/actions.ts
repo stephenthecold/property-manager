@@ -9,6 +9,8 @@ import { requireRole, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 import { generateChargesForLease } from "@/lib/services/billing";
 import { daysBetween, parseDateOnlyInZone } from "@/lib/accounting/periods";
+import { sanitizeUtilities } from "@/lib/config/lease";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { DateTime } from "luxon";
 import type { LateFeeType, LeaseStatus } from "@/lib/generated/prisma/enums";
 
@@ -22,6 +24,53 @@ function centsOrNull(v: string): bigint | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse + validate the shared late-fee fields (type, amount/rate/bps, daily
+ * cap) with the same strictness as the billing-settings action: bad money
+ * input throws instead of silently disabling fees.
+ */
+function parseLateFeeTerms(fd: FormData): {
+  lateFeeType: LateFeeType;
+  lateFeeAmountCents: bigint | null;
+  lateFeeBps: number | null;
+  lateFeeMaxCents: bigint | null;
+} {
+  const lateFeeType = (str(fd, "lateFeeType") || "none") as LateFeeType;
+  let lateFeeAmountCents: bigint | null = null;
+  let lateFeeBps: number | null = null;
+  let lateFeeMaxCents: bigint | null = null;
+
+  if (lateFeeType === "fixed" || lateFeeType === "daily") {
+    const raw = str(fd, "lateFeeAmount");
+    if (!raw) {
+      throw new Error(
+        lateFeeType === "daily"
+          ? "Enter the daily late-fee rate."
+          : "Enter the fixed late-fee amount.",
+      );
+    }
+    lateFeeAmountCents = toCents(raw); // throws on garbage
+    if (lateFeeAmountCents < 0n) throw new Error("Late fee cannot be negative.");
+    if (lateFeeType === "daily") {
+      const capRaw = str(fd, "lateFeeMax");
+      if (capRaw) {
+        lateFeeMaxCents = toCents(capRaw);
+        if (lateFeeMaxCents < lateFeeAmountCents) {
+          throw new Error("The daily cap must be at least one day's rate.");
+        }
+      }
+    }
+  } else if (lateFeeType === "percentage") {
+    const bps = Number(str(fd, "lateFeeAmount") || "0");
+    if (!Number.isInteger(bps) || bps < 1 || bps > 10000) {
+      throw new Error("Late-fee percentage must be 1–10000 basis points (500 = 5%).");
+    }
+    lateFeeBps = bps;
+  }
+
+  return { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents };
 }
 
 export async function createLease(fd: FormData): Promise<void> {
@@ -39,7 +88,8 @@ export async function createLease(fd: FormData): Promise<void> {
   if (!unit) throw new Error("Unit not found.");
   const tz = unit.property.timezone;
 
-  const lateFeeType = (str(fd, "lateFeeType") || "none") as LateFeeType;
+  const { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents } =
+    parseLateFeeTerms(fd);
   const status = (str(fd, "status") || "active") as LeaseStatus;
   const now = new Date();
   const startDate = str(fd, "startDate")
@@ -73,6 +123,20 @@ export async function createLease(fd: FormData): Promise<void> {
     );
   }
 
+  // Internet add-on now lives on the LEASE; the fee falls back to the
+  // org-wide default rate.
+  const internetEnabled = fd.get("internetEnabled") === "on";
+  const internetFeeRaw = str(fd, "internetFee");
+  const internetFeeCents = internetFeeRaw
+    ? toCents(internetFeeRaw)
+    : (await getAppSettings()).billing.internetFeeCents;
+  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
+
+  const utilitiesPaid = sanitizeUtilities(
+    fd.getAll("utilities").map((v) => String(v)),
+  );
+  const prorateFirstPeriod = fd.get("prorateFirstPeriod") === "on";
+
   // Co-tenants: any additional tenants on the lease (primary excluded).
   const coTenantIds = [
     ...new Set(
@@ -97,13 +161,15 @@ export async function createLease(fd: FormData): Promise<void> {
           dueDay: Number(str(fd, "dueDay") || "1"),
           gracePeriodDays: Number(str(fd, "gracePeriodDays") || "0"),
           lateFeeType,
-          lateFeeAmountCents:
-            lateFeeType === "fixed" ? centsOrNull(str(fd, "lateFeeAmount")) : null,
-          lateFeeBps:
-            lateFeeType === "percentage"
-              ? Number(str(fd, "lateFeeAmount") || "0") || null
-              : null,
+          lateFeeAmountCents,
+          lateFeeBps,
+          lateFeeMaxCents,
           securityDepositCents: centsOrNull(str(fd, "securityDeposit")) ?? 0n,
+          internetEnabled,
+          internetFeeCents,
+          utilitiesPaid,
+          utilitiesNotes: str(fd, "utilitiesNotes") || null,
+          prorateFirstPeriod,
           status,
           notes: str(fd, "notes") || null,
         },
@@ -154,10 +220,109 @@ export async function createLease(fd: FormData): Promise<void> {
       where: { id: unitId },
       data: { occupancyStatus: "occupied" },
     });
-    await generateChargesForLease(lease, unit, tz, now);
+    await generateChargesForLease(lease, tz, now);
   }
 
   redirect(`/tenants/${tenantId}`);
+}
+
+/**
+ * Edit a lease's billing terms. Changes affect FUTURE generated charges only
+ * (already-billed periods are immutable); use a scheduled rent increase for
+ * date-effective rate changes and renewLease for term/status changes. The due
+ * day is locked once anything has been billed — periodKeys derive from it, so
+ * changing it would re-key (and re-bill) every elapsed period.
+ */
+export async function updateLease(fd: FormData): Promise<void> {
+  await requireRole("manager");
+  const leaseId = str(fd, "leaseId");
+  if (!leaseId) throw new Error("Missing lease id.");
+  const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
+  if (!lease) throw new Error("Lease not found.");
+
+  const rentRaw = str(fd, "rentAmount");
+  if (!rentRaw) throw new Error("Monthly rent is required.");
+  const rentAmountCents = toCents(rentRaw);
+  if (rentAmountCents <= 0n) throw new Error("Monthly rent must be positive.");
+
+  const dueDay = Number(str(fd, "dueDay") || String(lease.dueDay));
+  if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+    throw new Error("Due day must be between 1 and 31.");
+  }
+  if (dueDay !== lease.dueDay) {
+    const charged = await prisma.ledgerEntry.findFirst({
+      where: { leaseId: lease.id, entryType: "rent_charge" },
+      select: { id: true },
+    });
+    if (charged) {
+      throw new Error(
+        "The due day cannot be changed once rent has been charged — period " +
+          "identity derives from it, and changing it would re-bill every past " +
+          "period. End this lease and create a new one instead.",
+      );
+    }
+  }
+  const gracePeriodDays = Number(str(fd, "gracePeriodDays") || "0");
+  if (!Number.isInteger(gracePeriodDays) || gracePeriodDays < 0) {
+    throw new Error("Grace period must be 0 or more days.");
+  }
+
+  const { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents } =
+    parseLateFeeTerms(fd);
+
+  const internetEnabled = fd.get("internetEnabled") === "on";
+  const internetFeeRaw = str(fd, "internetFee");
+  if (!internetFeeRaw) throw new Error("Internet fee is required (enter 0 for none).");
+  const internetFeeCents = toCents(internetFeeRaw);
+  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
+
+  const data = {
+    rentAmountCents,
+    dueDay,
+    gracePeriodDays,
+    lateFeeType,
+    lateFeeAmountCents,
+    lateFeeBps,
+    lateFeeMaxCents,
+    securityDepositCents: centsOrNull(str(fd, "securityDeposit")) ?? 0n,
+    internetEnabled,
+    internetFeeCents,
+    utilitiesPaid: sanitizeUtilities(fd.getAll("utilities").map((v) => String(v))),
+    utilitiesNotes: str(fd, "utilitiesNotes") || null,
+    notes: str(fd, "notes") || null,
+  };
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "lease.updated",
+      entityType: "Lease",
+      entityId: lease.id,
+      before: {
+        rentAmountCents: lease.rentAmountCents,
+        dueDay: lease.dueDay,
+        gracePeriodDays: lease.gracePeriodDays,
+        lateFeeType: lease.lateFeeType,
+        lateFeeAmountCents: lease.lateFeeAmountCents,
+        lateFeeBps: lease.lateFeeBps,
+        lateFeeMaxCents: lease.lateFeeMaxCents,
+        securityDepositCents: lease.securityDepositCents,
+        internetEnabled: lease.internetEnabled,
+        internetFeeCents: lease.internetFeeCents,
+        utilitiesPaid: lease.utilitiesPaid,
+        utilitiesNotes: lease.utilitiesNotes,
+        notes: lease.notes,
+      },
+    },
+    async (tx) => {
+      const updated = await tx.lease.update({ where: { id: lease.id }, data });
+      return { result: updated, after: data };
+    },
+  );
+
+  revalidatePath(`/tenants/${lease.tenantId}`);
+  revalidatePath(`/units/${lease.unitId}`);
+  revalidatePath("/leases");
 }
 
 /**

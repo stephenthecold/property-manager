@@ -16,11 +16,13 @@ import {
   scheduleRentIncrease,
   cancelRentIncrease,
   renewLease,
+  updateLease,
   addCoTenant,
   removeCoTenant,
   addLeaseDeposit,
   removeLeaseDeposit,
 } from "@/app/(app)/leases/actions";
+import { UTILITY_OPTIONS } from "@/lib/config/lease";
 import { updateTenant } from "@/app/(app)/tenants/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,10 +156,7 @@ export default async function TenantDetail({
       ? formatCurrency(
           snap && snap.currentPeriodOutstandingCents > 0n
             ? snap.currentPeriodOutstandingCents
-            : expectedMonthlyChargeCents({
-                rentAmountCents: templateLease.rentAmountCents,
-                ...templateLease.unit,
-              }),
+            : expectedMonthlyChargeCents(templateLease),
           templateCurrency,
         )
       : "",
@@ -222,12 +221,7 @@ export default async function TenantDetail({
           {activeLease && (
             <RecordPaymentDialog
               leaseId={activeLease.id}
-              defaultAmount={fromCents(
-                expectedMonthlyChargeCents({
-                  rentAmountCents: activeLease.rentAmountCents,
-                  ...activeLease.unit,
-                }),
-              )}
+              defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
             />
           )}
         </div>
@@ -249,8 +243,8 @@ export default async function TenantDetail({
                 {summary("Current balance", formatCurrency(snap.netBalanceCents, currency))}
                 {summary(
                   "Monthly rent",
-                  activeLease.unit.internetEnabled
-                    ? `${formatCurrency(activeLease.rentAmountCents, currency)} + ${formatCurrency(activeLease.unit.internetFeeCents, currency)} internet`
+                  activeLease.internetEnabled
+                    ? `${formatCurrency(activeLease.rentAmountCents, currency)} + ${formatCurrency(activeLease.internetFeeCents, currency)} internet`
                     : formatCurrency(activeLease.rentAmountCents, currency),
                 )}
                 {summary("Total owed", formatCurrency(snap.totalOwedCents, currency))}
@@ -263,8 +257,23 @@ export default async function TenantDetail({
                     : `${snap.daysSinceLastPayment} days ago`,
                 )}
                 {summary("Past due (1–30)", formatCurrency(snap.aging.d1_30, currency))}
-                {summary("Past due (90+)", formatCurrency(snap.aging.d90plus, currency))}
+                {summary(
+                  "Past due (30+)",
+                  formatCurrency(
+                    snap.aging.d31_60 + snap.aging.d61_90 + snap.aging.d90plus,
+                    currency,
+                  ),
+                )}
               </div>
+              {(activeLease.utilitiesPaid as string[]).length > 0 && (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Utilities we pay:{" "}
+                  <span className="capitalize">
+                    {(activeLease.utilitiesPaid as string[]).join(", ")}
+                  </span>
+                  {activeLease.utilitiesNotes ? ` — ${activeLease.utilitiesNotes}` : ""}
+                </p>
+              )}
 
               <div className="mt-4 border-t pt-4">
                 {activeLease.scheduledRentAmountCents != null &&
@@ -292,55 +301,67 @@ export default async function TenantDetail({
                     </Button>
                   </form>
                 ) : (
-                  <form
-                    action={scheduleRentIncrease}
-                    className="flex flex-wrap items-end gap-3"
-                  >
-                    <input type="hidden" name="leaseId" value={activeLease.id} />
-                    <div className="space-y-1">
-                      <Label htmlFor="newRentAmount" className="text-xs">
-                        Schedule rent increase
-                      </Label>
-                      <Input
-                        id="newRentAmount"
-                        name="newRentAmount"
-                        inputMode="decimal"
-                        placeholder="New monthly rent"
-                        className="h-8 w-40"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="effectiveDate" className="text-xs">
-                        Effective date
-                      </Label>
-                      <Input
-                        id="effectiveDate"
-                        name="effectiveDate"
-                        type="date"
-                        min={DateTime.fromJSDate(now, {
-                          zone: activeLease.unit.property.timezone,
-                        }).toFormat("yyyy-MM-dd")}
-                        className="h-8 w-40"
-                        required
-                      />
-                    </div>
-                    <Button type="submit" variant="outline" size="sm">
-                      Schedule
-                    </Button>
-                  </form>
+                  <details>
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Schedule rent increase
+                    </summary>
+                    <form
+                      action={scheduleRentIncrease}
+                      className="mt-3 flex flex-wrap items-end gap-3"
+                    >
+                      <input type="hidden" name="leaseId" value={activeLease.id} />
+                      <div className="space-y-1">
+                        <Label htmlFor="newRentAmount" className="text-xs">
+                          New monthly rent
+                        </Label>
+                        <Input
+                          id="newRentAmount"
+                          name="newRentAmount"
+                          inputMode="decimal"
+                          placeholder="New monthly rent"
+                          className="h-8 w-40"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="effectiveDate" className="text-xs">
+                          Effective date
+                        </Label>
+                        <Input
+                          id="effectiveDate"
+                          name="effectiveDate"
+                          type="date"
+                          min={DateTime.fromJSDate(now, {
+                            zone: activeLease.unit.property.timezone,
+                          }).toFormat("yyyy-MM-dd")}
+                          className="h-8 w-40"
+                          required
+                        />
+                      </div>
+                      <Button type="submit" variant="outline" size="sm">
+                        Schedule
+                      </Button>
+                    </form>
+                  </details>
                 )}
               </div>
 
               <div className="mt-4 border-t pt-4">
-                <form action={renewLease} className="flex flex-wrap items-end gap-3">
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Lease term — ends{" "}
+                    {activeLease.endDate
+                      ? activeLease.endDate.toLocaleDateString("en-US", {
+                          timeZone: activeLease.unit.property.timezone,
+                        })
+                      : "open-ended"}{" "}
+                    · extend / renew
+                  </summary>
+                <form action={renewLease} className="mt-3 flex flex-wrap items-end gap-3">
                   <input type="hidden" name="leaseId" value={activeLease.id} />
                   <div className="space-y-1">
                     <Label htmlFor="leaseEndDate" className="text-xs">
-                      Lease ends{" "}
-                      {activeLease.endDate
-                        ? `(${activeLease.endDate.toLocaleDateString("en-US", { timeZone: activeLease.unit.property.timezone })})`
-                        : "(open-ended)"}
+                      New end date
                     </Label>
                     <Input
                       id="leaseEndDate"
@@ -379,6 +400,7 @@ export default async function TenantDetail({
                     their historical pricing.
                   </p>
                 </form>
+                </details>
               </div>
 
               <div className="mt-4 border-t pt-4 space-y-2">
@@ -413,27 +435,32 @@ export default async function TenantDetail({
                   ))}
                 </ul>
                 {addableCoTenants.length > 0 && (
-                  <form action={addCoTenant} className="flex items-center gap-2">
-                    <input type="hidden" name="leaseId" value={activeLease.id} />
-                    <select
-                      name="tenantId"
-                      defaultValue=""
-                      required
-                      className="h-8 rounded-md border bg-transparent px-2 text-sm"
-                    >
-                      <option value="" disabled>
-                        Add co-tenant…
-                      </option>
-                      {addableCoTenants.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.lastName}, {t.firstName}
+                  <details>
+                    <summary className="cursor-pointer text-xs text-muted-foreground">
+                      Add co-tenant
+                    </summary>
+                    <form action={addCoTenant} className="mt-2 flex items-center gap-2">
+                      <input type="hidden" name="leaseId" value={activeLease.id} />
+                      <select
+                        name="tenantId"
+                        defaultValue=""
+                        required
+                        className="h-8 rounded-md border bg-transparent px-2 text-sm"
+                      >
+                        <option value="" disabled>
+                          Add co-tenant…
                         </option>
-                      ))}
-                    </select>
-                    <Button type="submit" variant="outline" size="sm">
-                      Add
-                    </Button>
-                  </form>
+                        {addableCoTenants.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.lastName}, {t.firstName}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="submit" variant="outline" size="sm">
+                        Add
+                      </Button>
+                    </form>
+                  </details>
                 )}
                 {!isPrimaryOnActive && (
                   <p className="text-xs text-muted-foreground">
@@ -478,7 +505,11 @@ export default async function TenantDetail({
                     </li>
                   ))}
                 </ul>
-                <form action={addLeaseDeposit} className="flex flex-wrap items-end gap-2">
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                    Add deposit
+                  </summary>
+                <form action={addLeaseDeposit} className="mt-2 flex flex-wrap items-end gap-2">
                   <input type="hidden" name="leaseId" value={activeLease.id} />
                   <div className="space-y-1">
                     <Label htmlFor="depLabel" className="text-xs">
@@ -521,6 +552,162 @@ export default async function TenantDetail({
                     Add deposit
                   </Button>
                 </form>
+                </details>
+              </div>
+
+              <div className="mt-4 border-t pt-4">
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Edit lease (billing terms)
+                  </summary>
+                  <form action={updateLease} className="mt-3 space-y-3">
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="elRent">Monthly rent</Label>
+                        <Input
+                          id="elRent"
+                          name="rentAmount"
+                          inputMode="decimal"
+                          defaultValue={fromCents(activeLease.rentAmountCents)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elDueDay">Due day (1–31)</Label>
+                        <Input
+                          id="elDueDay"
+                          name="dueDay"
+                          type="number"
+                          min={1}
+                          max={31}
+                          defaultValue={activeLease.dueDay}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elGrace">Grace period (days)</Label>
+                        <Input
+                          id="elGrace"
+                          name="gracePeriodDays"
+                          type="number"
+                          min={0}
+                          defaultValue={activeLease.gracePeriodDays}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elFeeType">Late fee type</Label>
+                        <select
+                          id="elFeeType"
+                          name="lateFeeType"
+                          defaultValue={activeLease.lateFeeType}
+                          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                        >
+                          <option value="none">None</option>
+                          <option value="fixed">Fixed (one-time)</option>
+                          <option value="percentage">Percentage (one-time)</option>
+                          <option value="daily">Per day past grace</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elFeeAmount">Late fee ($ / $ per day / bps)</Label>
+                        <Input
+                          id="elFeeAmount"
+                          name="lateFeeAmount"
+                          defaultValue={
+                            activeLease.lateFeeType === "percentage"
+                              ? (activeLease.lateFeeBps ?? "")
+                              : activeLease.lateFeeAmountCents != null
+                                ? fromCents(activeLease.lateFeeAmountCents)
+                                : ""
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elFeeMax">Daily cap per period</Label>
+                        <Input
+                          id="elFeeMax"
+                          name="lateFeeMax"
+                          inputMode="decimal"
+                          defaultValue={
+                            activeLease.lateFeeMaxCents != null
+                              ? fromCents(activeLease.lateFeeMaxCents)
+                              : ""
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elDeposit">Security deposit</Label>
+                        <Input
+                          id="elDeposit"
+                          name="securityDeposit"
+                          inputMode="decimal"
+                          defaultValue={fromCents(activeLease.securityDepositCents)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="elInternetFee">Monthly internet fee</Label>
+                        <Input
+                          id="elInternetFee"
+                          name="internetFee"
+                          inputMode="decimal"
+                          defaultValue={fromCents(activeLease.internetFeeCents)}
+                          required
+                        />
+                      </div>
+                      <div className="flex items-end pb-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            name="internetEnabled"
+                            defaultChecked={activeLease.internetEnabled}
+                            className="size-4 accent-primary"
+                          />
+                          Internet service on this lease
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Utilities we pay</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm capitalize">
+                        {UTILITY_OPTIONS.map((u) => (
+                          <label key={u} className="flex items-center gap-1.5">
+                            <input
+                              type="checkbox"
+                              name="utilities"
+                              value={u}
+                              defaultChecked={(
+                                activeLease.utilitiesPaid as string[]
+                              ).includes(u)}
+                              className="size-4 accent-primary"
+                            />
+                            {u}
+                          </label>
+                        ))}
+                      </div>
+                      <Input
+                        name="utilitiesNotes"
+                        placeholder="Utility notes (optional)"
+                        defaultValue={activeLease.utilitiesNotes ?? ""}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="elNotes">Lease notes</Label>
+                      <Textarea
+                        id="elNotes"
+                        name="notes"
+                        defaultValue={activeLease.notes ?? ""}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Changes affect future charges only — already-billed periods
+                      never change. For a date-effective rate change, use a
+                      scheduled rent increase instead of editing the rent here.
+                    </p>
+                    <Button type="submit" size="sm">
+                      Save lease
+                    </Button>
+                  </form>
+                </details>
               </div>
             </CardContent>
           </Card>
@@ -721,11 +908,12 @@ export default async function TenantDetail({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Edit tenant</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={updateTenant} className="space-y-3">
+        <CardContent className="py-4">
+          <details>
+            <summary className="cursor-pointer text-base font-semibold">
+              Edit tenant
+            </summary>
+          <form action={updateTenant} className="mt-4 space-y-3">
             <input type="hidden" name="tenantId" value={tenant.id} />
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
@@ -814,6 +1002,7 @@ export default async function TenantDetail({
               Save tenant
             </Button>
           </form>
+          </details>
         </CardContent>
       </Card>
     </div>

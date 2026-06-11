@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { fromCents } from "@/lib/money";
+import { UTILITY_OPTIONS } from "@/lib/config/lease";
+import { LeaseInternetFields } from "@/components/app/lease-internet-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,11 +33,14 @@ export default async function NewLeasePage({
     getAppSettings(),
   ]);
   const defaultLateFeeValue =
-    billing.lateFeeType === "fixed" && billing.lateFeeAmountCents != null
+    (billing.lateFeeType === "fixed" || billing.lateFeeType === "daily") &&
+    billing.lateFeeAmountCents != null
       ? fromCents(billing.lateFeeAmountCents)
       : billing.lateFeeType === "percentage" && billing.lateFeeBps != null
         ? String(billing.lateFeeBps)
         : "";
+  const defaultLateFeeMax =
+    billing.lateFeeMaxCents != null ? fromCents(billing.lateFeeMaxCents) : "";
 
   return (
     <div className="mx-auto max-w-xl">
@@ -137,20 +142,74 @@ export default async function NewLeasePage({
                   defaultValue={billing.lateFeeType}
                 >
                   <option value="none">None</option>
-                  <option value="fixed">Fixed</option>
-                  <option value="percentage">Percentage</option>
+                  <option value="fixed">Fixed (one-time)</option>
+                  <option value="percentage">Percentage (one-time)</option>
+                  <option value="daily">Per day past grace</option>
                 </select>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="lateFeeAmount">Late fee (fixed $ or % bps)</Label>
-              <Input
-                id="lateFeeAmount"
-                name="lateFeeAmount"
-                placeholder="50.00"
-                defaultValue={defaultLateFeeValue}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="lateFeeAmount">Late fee ($ fixed / $ per day / % bps)</Label>
+                <Input
+                  id="lateFeeAmount"
+                  name="lateFeeAmount"
+                  placeholder="50.00"
+                  defaultValue={defaultLateFeeValue}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lateFeeMax">Daily cap per period (optional)</Label>
+                <Input
+                  id="lateFeeMax"
+                  name="lateFeeMax"
+                  inputMode="decimal"
+                  placeholder="100.00"
+                  defaultValue={defaultLateFeeMax}
+                />
+              </div>
+            </div>
+
+            <LeaseInternetFields
+              unitDefaults={Object.fromEntries(
+                units.map((u) => [
+                  u.id,
+                  { enabled: u.internetEnabled, fee: fromCents(u.internetFeeCents) },
+                ]),
+              )}
+              fallbackFee={fromCents(billing.internetFeeCents)}
+            />
+
+            <div className="rounded-md border p-3 space-y-2">
+              <p className="text-sm font-medium">Utilities we pay (informational)</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm capitalize">
+                {UTILITY_OPTIONS.map((u) => (
+                  <label key={u} className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      name="utilities"
+                      value={u}
+                      className="size-4 accent-primary"
+                    />
+                    {u}
+                  </label>
+                ))}
+              </div>
+              <Input name="utilitiesNotes" placeholder="Utility notes (optional)" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                id="prorateFirstPeriod"
+                name="prorateFirstPeriod"
+                type="checkbox"
+                defaultChecked
+                className="size-4 accent-primary"
               />
+              <Label htmlFor="prorateFirstPeriod">
+                Prorate the move-in month (mid-month start bills only the days occupied)
+              </Label>
             </div>
 
             <div className="rounded-md border p-3 space-y-3">

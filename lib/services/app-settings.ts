@@ -42,6 +42,7 @@ export interface ResolvedAppSettings {
     lateFeeType: LateFeeType;
     lateFeeAmountCents: bigint | null;
     lateFeeBps: number | null;
+    lateFeeMaxCents: bigint | null;
     internetFeeCents: bigint;
   };
 }
@@ -101,6 +102,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
       lateFeeType: row?.defaultLateFeeType ?? "none",
       lateFeeAmountCents: row?.defaultLateFeeAmountCents ?? null,
       lateFeeBps: row?.defaultLateFeeBps ?? null,
+      lateFeeMaxCents: row?.defaultLateFeeMaxCents ?? null,
       internetFeeCents: row?.defaultInternetFeeCents ?? 2500n,
     },
   };
@@ -146,6 +148,7 @@ export interface BillingDefaultsInput {
   lateFeeType: LateFeeType;
   lateFeeAmountCents: bigint | null;
   lateFeeBps: number | null;
+  lateFeeMaxCents: bigint | null;
   internetFeeCents: bigint;
 }
 
@@ -159,6 +162,7 @@ export async function saveBillingDefaults(
     defaultLateFeeType: input.lateFeeType,
     defaultLateFeeAmountCents: input.lateFeeAmountCents,
     defaultLateFeeBps: input.lateFeeBps,
+    defaultLateFeeMaxCents: input.lateFeeMaxCents,
     defaultInternetFeeCents: input.internetFeeCents,
     updatedBy: actor.actorId ?? null,
   };
@@ -181,6 +185,7 @@ export async function saveBillingDefaults(
             defaultLateFeeType: before.defaultLateFeeType,
             defaultLateFeeAmountCents: before.defaultLateFeeAmountCents,
             defaultLateFeeBps: before.defaultLateFeeBps,
+            defaultLateFeeMaxCents: before.defaultLateFeeMaxCents,
             defaultInternetFeeCents: before.defaultInternetFeeCents,
           }
         : undefined,

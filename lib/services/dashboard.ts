@@ -121,9 +121,7 @@ export async function getDashboard(
   const overdueBalanceCents = sumCents(leaseRows.map((r) => r.pastDueCents));
   const overdueTenants = leaseRows.filter((r) => r.status === "overdue").length;
   const monthExpectedCents = sumCents(
-    leases.map((l) =>
-      expectedMonthlyChargeCents({ rentAmountCents: l.rentAmountCents, ...l.unit }),
-    ),
+    leases.map((l) => expectedMonthlyChargeCents(l)),
   );
 
   return {

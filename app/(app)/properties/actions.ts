@@ -177,6 +177,77 @@ export async function createUnit(fd: FormData): Promise<void> {
   revalidatePath(`/properties/${propertyId}`);
 }
 
+export async function updateProperty(fd: FormData): Promise<void> {
+  await requireRole("manager");
+  const propertyId = str(fd, "propertyId");
+  const name = str(fd, "name");
+  if (!propertyId || !name) throw new Error("Property name is required.");
+  const property = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!property) throw new Error("Property not found.");
+
+  const timezone = str(fd, "timezone") || property.timezone;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+  } catch {
+    throw new Error(`Unknown IANA timezone: ${timezone}`);
+  }
+  // An invalid ISO-4217 code would make formatCurrency throw on every page
+  // that renders money for this property — validate like the timezone.
+  const currency = (str(fd, "currency") || property.currency).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(`Currency must be a 3-letter ISO 4217 code, got: ${currency}`);
+  }
+  try {
+    new Intl.NumberFormat("en-US", { style: "currency", currency });
+  } catch {
+    throw new Error(`Unknown ISO 4217 currency code: ${currency}`);
+  }
+
+  const data = {
+    name,
+    addressLine1: str(fd, "addressLine1") || null,
+    addressLine2: str(fd, "addressLine2") || null,
+    city: str(fd, "city") || null,
+    state: str(fd, "state") || null,
+    zip: str(fd, "zip") || null,
+    notes: str(fd, "notes") || null,
+    timezone,
+    currency,
+    isActive: fd.get("isActive") === "on",
+  };
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "property.updated",
+      entityType: "Property",
+      entityId: property.id,
+      before: {
+        name: property.name,
+        addressLine1: property.addressLine1,
+        addressLine2: property.addressLine2,
+        city: property.city,
+        state: property.state,
+        zip: property.zip,
+        notes: property.notes,
+        timezone: property.timezone,
+        currency: property.currency,
+        isActive: property.isActive,
+      },
+    },
+    async (tx) => {
+      const updated = await tx.property.update({
+        where: { id: property.id },
+        data,
+      });
+      return { result: updated, after: data };
+    },
+  );
+
+  revalidatePath(`/properties/${property.id}`);
+  revalidatePath("/properties");
+}
+
 export async function setPropertyActive(
   propertyId: string,
   isActive: boolean,

@@ -1,10 +1,18 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
-import type { Lease, Unit } from "@/lib/generated/prisma/client";
+import type { Lease } from "@/lib/generated/prisma/client";
 import { fromCents } from "@/lib/money";
-import { computeLateFeeCents } from "@/lib/accounting/fees";
+import {
+  computeLateFeeCents,
+  dailyLateFeeAccruals,
+  dailyLateFeePeriodKey,
+} from "@/lib/accounting/fees";
 import { graceDeadline, listExpectedPeriods } from "@/lib/accounting/periods";
-import { rentForPeriod, shouldApplyScheduledRent } from "@/lib/accounting/rent";
+import {
+  prorationForStart,
+  rentForPeriod,
+  shouldApplyScheduledRent,
+} from "@/lib/accounting/rent";
 import { writeAudit } from "@/lib/audit/audit";
 
 /**
@@ -23,10 +31,18 @@ function isUniqueViolation(e: unknown): boolean {
 
 export async function generateChargesForLease(
   lease: Lease,
-  unit: Pick<Unit, "internetEnabled" | "internetFeeCents">,
   tz: string,
   now: Date,
 ): Promise<number> {
+  // Internet add-on is billed at the LEASE level (the unit's fields are only
+  // the default for new leases).
+  const terms = {
+    rentAmountCents: lease.rentAmountCents,
+    scheduledRentAmountCents: lease.scheduledRentAmountCents,
+    scheduledRentEffectiveDate: lease.scheduledRentEffectiveDate,
+    internetEnabled: lease.internetEnabled,
+    internetFeeCents: lease.internetFeeCents,
+  };
   const periods = listExpectedPeriods({
     startDate: lease.startDate,
     endDate: lease.endDate,
@@ -37,17 +53,7 @@ export async function generateChargesForLease(
   });
   let created = 0;
   for (const p of periods) {
-    const rent = rentForPeriod(
-      {
-        rentAmountCents: lease.rentAmountCents,
-        scheduledRentAmountCents: lease.scheduledRentAmountCents,
-        scheduledRentEffectiveDate: lease.scheduledRentEffectiveDate,
-        internetEnabled: unit.internetEnabled,
-        internetFeeCents: unit.internetFeeCents,
-      },
-      p.periodKey,
-      tz,
-    );
+    const rent = rentForPeriod(terms, p.periodKey, tz);
     try {
       await prisma.ledgerEntry.create({
         data: {
@@ -68,6 +74,39 @@ export async function generateChargesForLease(
     } catch (e) {
       if (isUniqueViolation(e)) continue; // already generated for this period
       throw e;
+    }
+  }
+
+  // Opt-in prorated move-in charge for mid-period starts. Keyed to the
+  // otherwise-never-billed partial period, so the same idempotency index
+  // applies. Skipped for next-due-date imports (billingStartDate set) — there
+  // the opening balance carries any partial-month rent.
+  if (lease.prorateFirstPeriod && !lease.billingStartDate) {
+    const pro = prorationForStart({
+      startDate: lease.startDate,
+      dueDay: lease.dueDay,
+      tz,
+      terms,
+      endDate: lease.endDate,
+    });
+    if (pro && pro.amountCents > 0n && lease.startDate <= now) {
+      try {
+        await prisma.ledgerEntry.create({
+          data: {
+            leaseId: lease.id,
+            tenantId: lease.tenantId,
+            entryType: "rent_charge",
+            amountCents: pro.amountCents,
+            periodKey: pro.periodKey,
+            effectiveDate: lease.startDate,
+            sourceType: "charge",
+            description: `Prorated rent (move-in, ${pro.daysCharged}/${pro.daysInMonth} days)`,
+          },
+        });
+        created++;
+      } catch (e) {
+        if (!isUniqueViolation(e)) throw e;
+      }
     }
   }
   return created;
@@ -140,7 +179,7 @@ export async function assessLateFeesForLease(
     }),
     prisma.ledgerEntry.findMany({
       where: { leaseId: lease.id, entryType: "late_fee" },
-      select: { periodKey: true },
+      select: { periodKey: true, amountCents: true },
     }),
     prisma.chargeAllocation.findMany({
       where: { chargeEntry: { leaseId: lease.id } },
@@ -148,6 +187,18 @@ export async function assessLateFeesForLease(
   ]);
 
   const lateFeePeriods = new Set(lateFees.map((l) => l.periodKey));
+  // Per-period DAILY posted state: highest day index and actual posted total,
+  // so accrual resumes after what exists and the cap binds the real ledger sum
+  // even if the rate/cap changed mid-delinquency.
+  const dailyPosted = new Map<string, { lastDay: number; totalCents: bigint }>();
+  for (const lf of lateFees) {
+    const m = lf.periodKey?.match(/^(.+)\+d(\d+)$/);
+    if (!m) continue;
+    const cur = dailyPosted.get(m[1]) ?? { lastDay: 0, totalCents: 0n };
+    cur.lastDay = Math.max(cur.lastDay, Number(m[2]));
+    cur.totalCents += lf.amountCents;
+    dailyPosted.set(m[1], cur);
+  }
   const reversedIds = new Set(
     allocations.map((a) => a.reversesAllocationId).filter((x): x is string => !!x),
   );
@@ -160,11 +211,59 @@ export async function assessLateFeesForLease(
 
   let created = 0;
   for (const ch of rentCharges) {
-    if (!ch.periodKey || lateFeePeriods.has(ch.periodKey)) continue;
+    if (!ch.periodKey) continue;
     const outstanding = ch.amountCents - (allocated[ch.id] ?? 0n);
     if (outstanding <= 0n) continue;
     if (now <= graceDeadline(ch.effectiveDate, lease.gracePeriodDays, tz)) continue;
 
+    if (lease.lateFeeType === "daily") {
+      // A one-shot fee on this period means it was already assessed under a
+      // previous policy — never stack the daily shape on top of it.
+      if (lateFeePeriods.has(ch.periodKey)) continue;
+      // One row per day past grace ("$10/day after the first 5 days"),
+      // idempotent via a per-day period key; accrual resumes after the
+      // highest posted day and stops once the charge is paid (outstanding
+      // check above) or the cap — measured against the POSTED total — is hit.
+      const posted = dailyPosted.get(ch.periodKey);
+      const accruals = dailyLateFeeAccruals({
+        dueDate: ch.effectiveDate,
+        graceDays: lease.gracePeriodDays,
+        tz,
+        now,
+        dailyRateCents: lease.lateFeeAmountCents ?? 0n,
+        capCents: lease.lateFeeMaxCents,
+        fromDay: posted?.lastDay ?? 0,
+        alreadyAccruedCents: posted?.totalCents ?? 0n,
+      });
+      for (const a of accruals) {
+        const dayKey = dailyLateFeePeriodKey(ch.periodKey, a.day);
+        if (lateFeePeriods.has(dayKey)) continue;
+        try {
+          await prisma.ledgerEntry.create({
+            data: {
+              leaseId: lease.id,
+              tenantId: lease.tenantId,
+              entryType: "late_fee",
+              amountCents: a.amountCents,
+              periodKey: dayKey,
+              effectiveDate: a.accruedOn,
+              sourceType: "late_fee",
+              description: `Late fee day ${a.day} for ${ch.periodKey}`,
+            },
+          });
+          created++;
+        } catch (e) {
+          if (isUniqueViolation(e)) continue;
+          throw e;
+        }
+      }
+      continue;
+    }
+
+    if (lateFeePeriods.has(ch.periodKey)) continue;
+    // Daily rows already posted for this period (under a previous policy)
+    // mean it was assessed — never stack a one-shot fee on top.
+    if (dailyPosted.has(ch.periodKey)) continue;
     const fee = computeLateFeeCents({
       type: lease.lateFeeType,
       rentChargeCents: ch.amountCents,
@@ -213,7 +312,7 @@ export async function runBilling(now = new Date()): Promise<BillingRunResult> {
   let lateFeesCreated = 0;
   for (const lease of leases) {
     const tz = lease.unit.property.timezone;
-    chargesCreated += await generateChargesForLease(lease, lease.unit, tz, now);
+    chargesCreated += await generateChargesForLease(lease, tz, now);
     lateFeesCreated += await assessLateFeesForLease(lease, tz, now);
   }
   // After charging, so back-filled periods keep their historical pricing.

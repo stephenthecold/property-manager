@@ -42,9 +42,7 @@ export async function getRentRoll(now: Date): Promise<RentRollRow[]> {
         `${l.tenant.firstName} ${l.tenant.lastName}` +
         (l._count.coTenants > 0 ? ` +${l._count.coTenants}` : ""),
       status: s.status,
-      rent: fromCents(
-        expectedMonthlyChargeCents({ rentAmountCents: l.rentAmountCents, ...l.unit }),
-      ),
+      rent: fromCents(expectedMonthlyChargeCents(l)),
       balance: fromCents(s.netBalanceCents),
       pastDue: fromCents(pastDue),
       lastPaidDays: s.daysSinceLastPayment == null ? "" : String(s.daysSinceLastPayment),
@@ -305,9 +303,7 @@ export async function getLeaseExpirations(
       property: l.unit.property.name,
       unit: l.unit.unitNumber,
       tenant: `${l.tenant.firstName} ${l.tenant.lastName}`,
-      rent: fromCents(
-        expectedMonthlyChargeCents({ rentAmountCents: l.rentAmountCents, ...l.unit }),
-      ),
+      rent: fromCents(expectedMonthlyChargeCents(l)),
     };
     if (l.status === "month_to_month") {
       monthToMonth.push({
