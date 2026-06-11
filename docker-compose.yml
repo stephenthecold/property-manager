@@ -11,6 +11,10 @@
 x-app-env: &app-env
   DATABASE_URL: "postgresql://${POSTGRES_USER:-pm}:${POSTGRES_PASSWORD:-pm}@db:5432/${POSTGRES_DB:-property_manager}?schema=public"
   APP_URL: "${APP_URL:-http://localhost:3000}"
+  # Pin Auth.js to the public URL. Without this, trustHost derives the OAuth
+  # redirect_uri from per-request headers, which breaks the OIDC token exchange
+  # (redirect_uri mismatch) when any hop rewrites Host.
+  AUTH_URL: "${APP_URL:-http://localhost:3000}"
   AUTH_SECRET: "${AUTH_SECRET:?set AUTH_SECRET in .env (run: npm run bootstrap)}"
   AUTH_TRUST_HOST: "true"
   SETTINGS_ENC_KEY: "${SETTINGS_ENC_KEY:?set SETTINGS_ENC_KEY in .env (run: npm run bootstrap)}"
