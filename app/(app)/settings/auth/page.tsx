@@ -6,7 +6,7 @@ import { AuthSettingsForm } from "./auth-form";
 export const runtime = "nodejs";
 
 export default async function AuthSettingsPage() {
-  const { user } = await requireRole("owner");
+  const { user } = await requireRole("admin");
   const [row, resolved, oidcAccountCount] = await Promise.all([
     prisma.authSettings.findUnique({ where: { id: "singleton" } }),
     getAuthSettings(),

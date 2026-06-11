@@ -53,9 +53,11 @@ export const authConfig = {
           return false;
         }
 
-        // Owner-only: auth settings.
+        // Admin-minimum: auth settings (must match requireRole("admin") in
+        // settings/auth — the edge check is a coarse JWT hint, the page and
+        // actions re-verify against the DB).
         if (pathname.startsWith("/settings/auth")) {
-          return roleAtLeast(user.role ?? "viewer", "owner");
+          return roleAtLeast(user.role ?? "viewer", "admin");
         }
         return true;
       } catch {

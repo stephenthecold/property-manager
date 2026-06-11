@@ -33,7 +33,13 @@ async function loadOpenChargesTx(
   const charges = await tx.ledgerEntry.findMany({
     where: {
       leaseId,
-      entryType: { in: ["rent_charge", "late_fee"] },
+      // Positive adjustments (e.g. opening balance on a backdated lease) are
+      // charge-like and must receive FIFO allocations, matching the snapshot
+      // logic in lib/services/accounting.ts.
+      OR: [
+        { entryType: { in: ["rent_charge", "late_fee"] } },
+        { entryType: "adjustment", amountCents: { gt: 0 } },
+      ],
     },
   });
   const allocations = await tx.chargeAllocation.findMany({

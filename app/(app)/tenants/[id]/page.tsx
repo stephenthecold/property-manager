@@ -15,9 +15,16 @@ import { voidPaymentAction } from "@/app/(app)/payments/actions";
 import {
   scheduleRentIncrease,
   cancelRentIncrease,
+  renewLease,
+  addCoTenant,
+  removeCoTenant,
+  addLeaseDeposit,
+  removeLeaseDeposit,
 } from "@/app/(app)/leases/actions";
+import { updateTenant } from "@/app/(app)/tenants/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -59,20 +66,46 @@ export default async function TenantDetail({
 }) {
   const { id } = await params;
   const now = new Date();
+  const leaseInclude = {
+    unit: { include: { property: true } },
+    tenant: true,
+    coTenants: { include: { tenant: true }, orderBy: { createdAt: "asc" as const } },
+    deposits: { orderBy: { createdAt: "asc" as const } },
+  };
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     include: {
-      leases: {
-        orderBy: { startDate: "desc" },
-        include: { unit: { include: { property: true } } },
-      },
+      leases: { orderBy: { startDate: "desc" }, include: leaseInclude },
+      coLeases: { include: { lease: { include: leaseInclude } } },
     },
   });
   if (!tenant) notFound();
 
+  // Leases where this tenant is primary, plus ones where they are a co-tenant
+  // (sorted so the newest co-lease wins deterministically).
+  const coLeases = tenant.coLeases
+    .map((ct) => ct.lease)
+    .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  const allLeases = [...tenant.leases, ...coLeases];
   const activeLease =
-    tenant.leases.find((l) => l.status === "active" || l.status === "month_to_month") ??
+    allLeases.find((l) => l.status === "active" || l.status === "month_to_month") ??
     null;
+  const isPrimaryOnActive = activeLease?.tenantId === tenant.id;
+  // Tenants eligible to be added as co-tenants (not already on the lease).
+  const addableCoTenants = activeLease
+    ? await prisma.tenant.findMany({
+        where: {
+          isActive: true,
+          id: {
+            notIn: [
+              activeLease.tenantId,
+              ...activeLease.coTenants.map((ct) => ct.tenantId),
+            ],
+          },
+        },
+        orderBy: [{ lastName: "asc" }],
+      })
+    : [];
 
   const snap = activeLease
     ? await leaseSnapshot(
@@ -298,6 +331,197 @@ export default async function TenantDetail({
                   </form>
                 )}
               </div>
+
+              <div className="mt-4 border-t pt-4">
+                <form action={renewLease} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="leaseId" value={activeLease.id} />
+                  <div className="space-y-1">
+                    <Label htmlFor="leaseEndDate" className="text-xs">
+                      Lease ends{" "}
+                      {activeLease.endDate
+                        ? `(${activeLease.endDate.toLocaleDateString("en-US", { timeZone: activeLease.unit.property.timezone })})`
+                        : "(open-ended)"}
+                    </Label>
+                    <Input
+                      id="leaseEndDate"
+                      name="endDate"
+                      type="date"
+                      defaultValue={
+                        activeLease.endDate
+                          ? DateTime.fromJSDate(activeLease.endDate, {
+                              zone: activeLease.unit.property.timezone,
+                            }).toFormat("yyyy-MM-dd")
+                          : ""
+                      }
+                      className="h-8 w-40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="leaseStatus" className="text-xs">
+                      Status
+                    </Label>
+                    <select
+                      id="leaseStatus"
+                      name="status"
+                      defaultValue={activeLease.status}
+                      className="h-8 rounded-md border bg-transparent px-2 text-sm"
+                    >
+                      <option value="active">Active</option>
+                      <option value="month_to_month">Month-to-month</option>
+                    </select>
+                  </div>
+                  <Button type="submit" variant="outline" size="sm">
+                    Extend / renew
+                  </Button>
+                  <p className="basis-full text-xs text-muted-foreground">
+                    Clear the date for an open-ended term. For a new rate on
+                    re-signing, schedule a rent increase above so past periods keep
+                    their historical pricing.
+                  </p>
+                </form>
+              </div>
+
+              <div className="mt-4 border-t pt-4 space-y-2">
+                <p className="text-sm font-medium">Tenants on lease</p>
+                <ul className="space-y-1 text-sm">
+                  <li className="flex items-center gap-2">
+                    <Link
+                      href={`/tenants/${activeLease.tenantId}`}
+                      className="hover:underline"
+                    >
+                      {activeLease.tenant.firstName} {activeLease.tenant.lastName}
+                    </Link>
+                    <Badge variant="outline" className="text-muted-foreground">
+                      primary
+                    </Badge>
+                  </li>
+                  {activeLease.coTenants.map((ct) => (
+                    <li key={ct.id} className="flex items-center gap-2">
+                      <Link href={`/tenants/${ct.tenantId}`} className="hover:underline">
+                        {ct.tenant.firstName} {ct.tenant.lastName}
+                      </Link>
+                      <form action={removeCoTenant}>
+                        <input type="hidden" name="leaseTenantId" value={ct.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                        >
+                          remove
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+                {addableCoTenants.length > 0 && (
+                  <form action={addCoTenant} className="flex items-center gap-2">
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <select
+                      name="tenantId"
+                      defaultValue=""
+                      required
+                      className="h-8 rounded-md border bg-transparent px-2 text-sm"
+                    >
+                      <option value="" disabled>
+                        Add co-tenant…
+                      </option>
+                      {addableCoTenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.lastName}, {t.firstName}
+                        </option>
+                      ))}
+                    </select>
+                    <Button type="submit" variant="outline" size="sm">
+                      Add
+                    </Button>
+                  </form>
+                )}
+                {!isPrimaryOnActive && (
+                  <p className="text-xs text-muted-foreground">
+                    This tenant is a co-tenant; the ledger below is the shared lease
+                    ledger (billing contact: primary tenant).
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 border-t pt-4 space-y-2">
+                <p className="text-sm font-medium">Deposits</p>
+                <ul className="space-y-1 text-sm">
+                  <li>
+                    Security deposit:{" "}
+                    <span className="tabular-nums">
+                      {formatCurrency(activeLease.securityDepositCents, currency)}
+                    </span>
+                  </li>
+                  {activeLease.deposits.map((d) => (
+                    <li key={d.id} className="flex items-center gap-2">
+                      <span>
+                        {d.label}:{" "}
+                        <span className="tabular-nums">
+                          {formatCurrency(d.amountCents, currency)}
+                        </span>
+                        {d.nonRefundableCents > 0n && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            ({formatCurrency(d.nonRefundableCents, currency)} non-refundable)
+                          </span>
+                        )}
+                      </span>
+                      <form action={removeLeaseDeposit}>
+                        <input type="hidden" name="depositId" value={d.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                        >
+                          remove
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+                <form action={addLeaseDeposit} className="flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="leaseId" value={activeLease.id} />
+                  <div className="space-y-1">
+                    <Label htmlFor="depLabel" className="text-xs">
+                      Label
+                    </Label>
+                    <Input
+                      id="depLabel"
+                      name="label"
+                      placeholder="Pet deposit"
+                      className="h-8 w-36"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="depAmount" className="text-xs">
+                      Amount
+                    </Label>
+                    <Input
+                      id="depAmount"
+                      name="amount"
+                      inputMode="decimal"
+                      placeholder="500.00"
+                      className="h-8 w-28"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="depNonRef" className="text-xs">
+                      Non-refundable part
+                    </Label>
+                    <Input
+                      id="depNonRef"
+                      name="nonRefundable"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className="h-8 w-28"
+                    />
+                  </div>
+                  <Button type="submit" variant="outline" size="sm">
+                    Add deposit
+                  </Button>
+                </form>
+              </div>
             </CardContent>
           </Card>
 
@@ -493,6 +717,103 @@ export default async function TenantDetail({
               )}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Edit tenant</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={updateTenant} className="space-y-3">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First name</Label>
+                <Input
+                  id="firstName"
+                  name="firstName"
+                  defaultValue={tenant.firstName}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last name</Label>
+                <Input
+                  id="lastName"
+                  name="lastName"
+                  defaultValue={tenant.lastName}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input id="phone" name="phone" defaultValue={tenant.phone ?? ""} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  defaultValue={tenant.email ?? ""}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="mailingAddress">Mailing address</Label>
+                <Input
+                  id="mailingAddress"
+                  name="mailingAddress"
+                  defaultValue={tenant.mailingAddress ?? ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="emergencyContactName">Emergency contact</Label>
+                <Input
+                  id="emergencyContactName"
+                  name="emergencyContactName"
+                  defaultValue={tenant.emergencyContactName ?? ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="emergencyContactPhone">Emergency phone</Label>
+                <Input
+                  id="emergencyContactPhone"
+                  name="emergencyContactPhone"
+                  defaultValue={tenant.emergencyContactPhone ?? ""}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <input
+                  id="smsConsent"
+                  name="smsConsent"
+                  type="checkbox"
+                  defaultChecked={tenant.smsConsent}
+                  className="size-4 accent-primary"
+                />
+                <Label htmlFor="smsConsent">SMS consent</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="isActive"
+                  name="isActive"
+                  type="checkbox"
+                  defaultChecked={tenant.isActive}
+                  className="size-4 accent-primary"
+                />
+                <Label htmlFor="isActive">Active tenant</Label>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tenantNotes">Notes</Label>
+              <Textarea id="tenantNotes" name="notes" defaultValue={tenant.notes ?? ""} />
+            </div>
+            <Button type="submit" size="sm">
+              Save tenant
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

@@ -21,7 +21,7 @@ export async function saveOrganizationAction(
   _prev: OrganizationState,
   fd: FormData,
 ): Promise<OrganizationState> {
-  await requireRole("owner");
+  await requireRole("admin");
   const actor = await auditActor();
 
   // Logo: a new file replaces it, the checkbox removes it, otherwise unchanged.

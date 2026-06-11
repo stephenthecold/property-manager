@@ -15,7 +15,7 @@ const TEMPLATE_LABELS: Array<{ type: ReminderType; label: string }> = [
 ];
 
 export default async function MessagingSettingsPage() {
-  await requireRole("owner");
+  await requireRole("admin");
   const env = getEnv();
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
   const overrides =

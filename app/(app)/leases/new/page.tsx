@@ -1,6 +1,8 @@
 import { createLease } from "../actions";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { fromCents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +18,7 @@ export default async function NewLeasePage({
   await requireRole("manager");
   const { tenantId } = await searchParams;
 
-  const [tenants, units] = await Promise.all([
+  const [tenants, units, { billing }] = await Promise.all([
     prisma.tenant.findMany({
       where: { isActive: true },
       orderBy: [{ lastName: "asc" }],
@@ -26,7 +28,14 @@ export default async function NewLeasePage({
       include: { property: true, building: true },
       orderBy: { unitNumber: "asc" },
     }),
+    getAppSettings(),
   ]);
+  const defaultLateFeeValue =
+    billing.lateFeeType === "fixed" && billing.lateFeeAmountCents != null
+      ? fromCents(billing.lateFeeAmountCents)
+      : billing.lateFeeType === "percentage" && billing.lateFeeBps != null
+        ? String(billing.lateFeeBps)
+        : "";
 
   return (
     <div className="mx-auto max-w-xl">
@@ -75,6 +84,23 @@ export default async function NewLeasePage({
               </select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="coTenants">Co-tenants (optional, hold Ctrl/Cmd to multi-select)</Label>
+              <select
+                id="coTenants"
+                name="coTenants"
+                multiple
+                size={3}
+                className="w-full rounded-md border bg-transparent px-3 py-1 text-sm"
+              >
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.lastName}, {t.firstName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="rentAmount">Monthly rent</Label>
@@ -82,7 +108,7 @@ export default async function NewLeasePage({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dueDay">Due day (1–31)</Label>
-                <Input id="dueDay" name="dueDay" type="number" min={1} max={31} defaultValue={1} />
+                <Input id="dueDay" name="dueDay" type="number" min={1} max={31} defaultValue={billing.dueDay} />
               </div>
             </div>
 
@@ -92,29 +118,79 @@ export default async function NewLeasePage({
                 <Input id="startDate" name="startDate" type="date" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="gracePeriodDays">Grace period (days)</Label>
-                <Input id="gracePeriodDays" name="gracePeriodDays" type="number" min={0} defaultValue={5} />
+                <Label htmlFor="endDate">End date (optional)</Label>
+                <Input id="endDate" name="endDate" type="date" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="gracePeriodDays">Grace period (days)</Label>
+                <Input id="gracePeriodDays" name="gracePeriodDays" type="number" min={0} defaultValue={billing.graceDays} />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="lateFeeType">Late fee type</Label>
                 <select
                   id="lateFeeType"
                   name="lateFeeType"
                   className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-                  defaultValue="none"
+                  defaultValue={billing.lateFeeType}
                 >
                   <option value="none">None</option>
                   <option value="fixed">Fixed</option>
                   <option value="percentage">Percentage</option>
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lateFeeAmount">Late fee (fixed $ or % bps)</Label>
+              <Input
+                id="lateFeeAmount"
+                name="lateFeeAmount"
+                placeholder="50.00"
+                defaultValue={defaultLateFeeValue}
+              />
+            </div>
+
+            <div className="rounded-md border p-3 space-y-3">
+              <p className="text-sm font-medium">Backdated lease? Billing &amp; opening balance</p>
+              <div className="space-y-1 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="billingStart"
+                    value="start"
+                    defaultChecked
+                    className="accent-primary"
+                  />
+                  Bill every period since the start date (full history)
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="billingStart"
+                    value="current"
+                    className="accent-primary"
+                  />
+                  Start billing at the next due date (importing an existing tenancy)
+                </label>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="lateFeeAmount">Late fee (fixed $ or % bps)</Label>
-                <Input id="lateFeeAmount" name="lateFeeAmount" placeholder="50.00" />
-                <input type="hidden" name="lateFeeBps" id="lateFeeBps" />
+                <Label htmlFor="openingBalance">Opening balance still owed (optional)</Label>
+                <Input
+                  id="openingBalance"
+                  name="openingBalance"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="max-w-40"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Only with &ldquo;next due date&rdquo; billing: posted as an
+                  opening-balance adjustment that payments pay off oldest-first.
+                  Include any rent already due this period; leave empty if the
+                  tenant is caught up.
+                </p>
               </div>
             </div>
 

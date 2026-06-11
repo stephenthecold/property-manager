@@ -25,6 +25,7 @@ datasource db {
 enum Role {
   owner
   admin
+  finance // CFO-style: manager powers + billing-rate settings, no operational/auth settings
   manager
   viewer
 }
@@ -235,6 +236,16 @@ model AppSettings {
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
 
+  // Org-wide charge defaults ("rates"), editable in Settings -> Billing
+  // (finance+). Prefill new leases/units; an explicit bulk action can apply
+  // grace/late-fee terms to existing active leases.
+  defaultDueDay             Int?
+  defaultGraceDays          Int?
+  defaultLateFeeType        LateFeeType?
+  defaultLateFeeAmountCents BigInt?
+  defaultLateFeeBps         Int?
+  defaultInternetFeeCents   BigInt?
+
   updatedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -360,17 +371,22 @@ model Tenant {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  leases Lease[]
+  leases   Lease[]
+  coLeases LeaseTenant[]
 
   @@index([lastName, firstName])
 }
 
 model Lease {
   id                   String      @id @default(cuid())
-  tenantId             String
+  tenantId             String // primary/billing tenant; co-tenants via LeaseTenant
   unitId               String
   startDate            DateTime
   endDate              DateTime?
+  // Charges are generated from the LATER of startDate and billingStartDate.
+  // Lets a backdated lease (data migration) start billing at the current
+  // period, with any pre-existing debt posted as an opening-balance adjustment.
+  billingStartDate     DateTime?
   rentAmountCents      BigInt
   dueDay               Int         @default(1) // 1..31, clamped to last day of short months
   gracePeriodDays      Int         @default(0)
@@ -392,10 +408,42 @@ model Lease {
   unit          Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
   payments      Payment[]
   ledgerEntries LedgerEntry[]
+  coTenants     LeaseTenant[]
+  deposits      LeaseDeposit[]
 
   @@index([tenantId])
   @@index([unitId])
   @@index([status])
+}
+
+/// Additional (co-)tenants on a lease beyond the primary Lease.tenantId.
+model LeaseTenant {
+  id        String   @id @default(cuid())
+  leaseId   String
+  tenantId  String
+  createdAt DateTime @default(now())
+
+  lease  Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([leaseId, tenantId])
+  @@index([tenantId])
+}
+
+/// Itemized deposits beyond the base security deposit (e.g. pet deposit),
+/// with an explicitly non-refundable portion. Informational — not ledgered.
+model LeaseDeposit {
+  id                 String   @id @default(cuid())
+  leaseId            String
+  label              String
+  amountCents        BigInt
+  nonRefundableCents BigInt   @default(0)
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
 }
 
 // ---------------------------------------------------------------------------
@@ -541,7 +589,8 @@ model Reminder {
   paymentId         String?
   reminderType      ReminderType
   // 'YYYY-MM-DD' due-date key (property tz) for scheduled sends; a raw-SQL partial
-  // unique on (leaseId, reminderType, periodKey) makes worker re-runs converge.
+  // unique on (leaseId, tenantId, reminderType, periodKey) makes worker re-runs
+  // converge — per tenant, so co-tenants each get their own scheduled reminder.
   periodKey         String?
   destinationPhone  String?
   messageBody       String

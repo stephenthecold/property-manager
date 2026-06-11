@@ -50,6 +50,39 @@ describe("listExpectedPeriods", () => {
     ]);
   });
 
+  it("billingStart suppresses periods due before it (backdated-lease import)", () => {
+    const base = {
+      startDate: new Date("2025-06-01T00:00:00-04:00"), // a year back
+      endDate: null,
+      dueDay: 1,
+      tz: TZ,
+      now: new Date("2026-07-02T12:00:00-04:00"),
+    };
+    // Imported June 11: the June 1 period already passed, first bill is July 1.
+    const imported = listExpectedPeriods({
+      ...base,
+      billingStart: new Date("2026-06-11T12:00:00-04:00"),
+    });
+    expect(imported.map((p) => p.periodKey)).toEqual(["2026-07-01"]);
+    // billingStart before/equal to startDate is a no-op.
+    const noop = listExpectedPeriods({
+      ...base,
+      now: new Date("2025-08-15T12:00:00-04:00"),
+      billingStart: new Date("2025-05-01T00:00:00-04:00"),
+    });
+    expect(noop.map((p) => p.periodKey)).toEqual([
+      "2025-06-01",
+      "2025-07-01",
+      "2025-08-01",
+    ]);
+    // billingStart exactly on a due date includes that period.
+    const onDue = listExpectedPeriods({
+      ...base,
+      billingStart: new Date("2026-07-01T00:00:00-04:00"),
+    });
+    expect(onDue.map((p) => p.periodKey)).toEqual(["2026-07-01"]);
+  });
+
   it("does not generate a period whose due date hasn't arrived in the property tz (UTC day gap)", () => {
     // 2026-03-01T02:00Z is 2026-02-28 21:00 in New York -> March is NOT yet due.
     const periods = listExpectedPeriods({
