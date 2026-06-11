@@ -8,23 +8,28 @@ import {
   getPaymentMethodSummary,
   getRentRoll,
 } from "@/lib/services/reports";
+import { DataTable } from "@/components/app/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
 function money(v: string) {
   return `$${v}`;
+}
+
+/** Pre-formatted decimal string owes money (positive and nonzero). */
+function owed(v: string): boolean {
+  return !v.startsWith("-") && /[1-9]/.test(v);
+}
+
+function amountClass(v: string): string {
+  if (v.startsWith("-")) return "text-emerald-600 dark:text-emerald-400";
+  if (owed(v)) return "text-red-600 dark:text-red-400";
+  return "";
 }
 
 /** Parse an optional "yyyy-MM-dd" filter; invalid input -> undefined (ignored). */
@@ -152,7 +157,7 @@ export default async function ReportsPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-4 border-t-sky-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Rent roll</CardTitle>
           <Button render={<Link href="/api/reports/rent-roll" />} variant="outline" size="sm">
@@ -160,43 +165,51 @@ export default async function ReportsPage({
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Property</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Tenant</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Rent</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="text-right">Past due</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rentRoll.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>{r.property}</TableCell>
-                  <TableCell>{r.unit}</TableCell>
-                  <TableCell>{r.tenant}</TableCell>
-                  <TableCell className="capitalize">{r.status.replace("_", " ")}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.rent)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.balance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.pastDue)}</TableCell>
-                </TableRow>
-              ))}
-              {rentRoll.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    No active leases.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No active leases."
+            columns={[
+              { key: "property", label: "Property", className: "hidden md:table-cell" },
+              { key: "unit", label: "Unit" },
+              { key: "tenant", label: "Tenant" },
+              { key: "status", label: "Status" },
+              { key: "rent", label: "Rent", align: "right", numeric: true },
+              { key: "balance", label: "Balance", align: "right", numeric: true },
+              { key: "pastDue", label: "Past due", align: "right", numeric: true },
+            ]}
+            rows={rentRoll.map((r, i) => ({
+              key: String(i),
+              sortValues: [
+                r.property,
+                r.unit,
+                r.tenant,
+                r.status,
+                r.rent,
+                r.balance,
+                r.pastDue,
+              ],
+              cells: [
+                r.property,
+                r.unit,
+                r.tenant,
+                <span key="s" className="capitalize">
+                  {r.status.replace("_", " ")}
+                </span>,
+                <span key="r" className="tabular-nums">
+                  {money(r.rent)}
+                </span>,
+                <span key="b" className={cn("tabular-nums", amountClass(r.balance))}>
+                  {money(r.balance)}
+                </span>,
+                <span key="p" className={cn("tabular-nums", amountClass(r.pastDue))}>
+                  {money(r.pastDue)}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-4 border-t-red-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Overdue tenants</CardTitle>
           <div className="flex items-center gap-2">
@@ -211,41 +224,49 @@ export default async function ReportsPage({
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tenant</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="text-right">Past due</TableHead>
-                <TableHead className="text-right">Days since paid</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {overdue.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>{r.tenant}</TableCell>
-                  <TableCell>
-                    {r.property} · {r.unit}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.balance)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.pastDue)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.lastPaidDays || "—"}</TableCell>
-                </TableRow>
-              ))}
-              {overdue.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No overdue tenants.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No overdue tenants."
+            columns={[
+              { key: "tenant", label: "Tenant" },
+              { key: "unit", label: "Unit" },
+              { key: "balance", label: "Balance", align: "right", numeric: true },
+              { key: "pastDue", label: "Past due", align: "right", numeric: true },
+              {
+                key: "lastPaidDays",
+                label: "Days since paid",
+                align: "right",
+                numeric: true,
+                className: "hidden sm:table-cell",
+              },
+            ]}
+            rows={overdue.map((r, i) => ({
+              key: String(i),
+              sortValues: [
+                r.tenant,
+                `${r.property} · ${r.unit}`,
+                r.balance,
+                r.pastDue,
+                r.lastPaidDays || null,
+              ],
+              cells: [
+                r.tenant,
+                `${r.property} · ${r.unit}`,
+                <span key="b" className={cn("tabular-nums", amountClass(r.balance))}>
+                  {money(r.balance)}
+                </span>,
+                <span key="p" className={cn("tabular-nums", amountClass(r.pastDue))}>
+                  {money(r.pastDue)}
+                </span>,
+                <span key="d" className="tabular-nums">
+                  {r.lastPaidDays || "—"}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-4 border-t-emerald-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Income summary</CardTitle>
           <Button render={<Link href={incomeHref} />} variant="outline" size="sm">
@@ -253,47 +274,60 @@ export default async function ReportsPage({
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Month</TableHead>
-                <TableHead>Property</TableHead>
-                <TableHead className="text-right">Cash received</TableHead>
-                <TableHead className="text-right">Payments</TableHead>
-                <TableHead className="text-right">Charges billed</TableHead>
-                <TableHead className="text-right">Late fees billed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {income.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>{r.month}</TableCell>
-                  <TableCell>{r.property}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(r.cashReceived)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{r.paymentCount}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(r.chargesBilled)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {money(r.lateFeesBilled)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {income.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No income in this range.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No income in this range."
+            columns={[
+              { key: "month", label: "Month" },
+              { key: "property", label: "Property" },
+              { key: "cash", label: "Cash received", align: "right", numeric: true },
+              { key: "payments", label: "Payments", align: "right", numeric: true },
+              {
+                key: "charges",
+                label: "Charges billed",
+                align: "right",
+                numeric: true,
+                className: "hidden sm:table-cell",
+              },
+              {
+                key: "lateFees",
+                label: "Late fees billed",
+                align: "right",
+                numeric: true,
+                className: "hidden md:table-cell",
+              },
+            ]}
+            rows={income.map((r, i) => ({
+              key: String(i),
+              sortValues: [
+                r.month,
+                r.property,
+                r.cashReceived,
+                r.paymentCount,
+                r.chargesBilled,
+                r.lateFeesBilled,
+              ],
+              cells: [
+                r.month,
+                r.property,
+                <span key="c" className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {money(r.cashReceived)}
+                </span>,
+                <span key="n" className="tabular-nums">
+                  {r.paymentCount}
+                </span>,
+                <span key="ch" className="tabular-nums">
+                  {money(r.chargesBilled)}
+                </span>,
+                <span key="lf" className="tabular-nums">
+                  {money(r.lateFeesBilled)}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-4 border-t-amber-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Lease expirations (next {windowDays} days)</CardTitle>
           <Button render={<Link href={expirationsHref} />} variant="outline" size="sm">
@@ -301,43 +335,55 @@ export default async function ReportsPage({
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Property</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Tenant</TableHead>
-                <TableHead>End date</TableHead>
-                <TableHead className="text-right">Days left</TableHead>
-                <TableHead className="text-right">Rent</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {expirations.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>{r.property}</TableCell>
-                  <TableCell>{r.unit}</TableCell>
-                  <TableCell>{r.tenant}</TableCell>
-                  <TableCell>{r.endDate || "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.daysLeft || "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.rent)}</TableCell>
-                  <TableCell className="capitalize">{r.status.replace(/_/g, " ")}</TableCell>
-                </TableRow>
-              ))}
-              {expirations.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    No leases expiring in this window.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No leases expiring in this window."
+            columns={[
+              { key: "property", label: "Property", className: "hidden md:table-cell" },
+              { key: "unit", label: "Unit" },
+              { key: "tenant", label: "Tenant" },
+              { key: "endDate", label: "End date" },
+              { key: "daysLeft", label: "Days left", align: "right", numeric: true },
+              {
+                key: "rent",
+                label: "Rent",
+                align: "right",
+                numeric: true,
+                className: "hidden sm:table-cell",
+              },
+              { key: "status", label: "Status", className: "hidden lg:table-cell" },
+            ]}
+            rows={expirations.map((r, i) => ({
+              key: String(i),
+              sortValues: [
+                r.property,
+                r.unit,
+                r.tenant,
+                r.endDate || null,
+                r.daysLeft || null,
+                r.rent,
+                r.status,
+              ],
+              cells: [
+                r.property,
+                r.unit,
+                r.tenant,
+                r.endDate || "—",
+                <span key="d" className="tabular-nums">
+                  {r.daysLeft || "—"}
+                </span>,
+                <span key="r" className="tabular-nums">
+                  {money(r.rent)}
+                </span>,
+                <span key="s" className="capitalize">
+                  {r.status.replace(/_/g, " ")}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-t-4 border-t-violet-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Payments by method</CardTitle>
           <Button render={<Link href={methodsHref} />} variant="outline" size="sm">
@@ -345,31 +391,29 @@ export default async function ReportsPage({
           </Button>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Method</TableHead>
-                <TableHead className="text-right">Count</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {methods.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell className="capitalize">{r.method.replace(/_/g, " ")}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.count}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(r.total)}</TableCell>
-                </TableRow>
-              ))}
-              {methods.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No payments in this range.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No payments in this range."
+            columns={[
+              { key: "method", label: "Method" },
+              { key: "count", label: "Count", align: "right", numeric: true },
+              { key: "total", label: "Total", align: "right", numeric: true },
+            ]}
+            rows={methods.map((r, i) => ({
+              key: String(i),
+              sortValues: [r.method, r.count, r.total],
+              cells: [
+                <span key="m" className="capitalize">
+                  {r.method.replace(/_/g, " ")}
+                </span>,
+                <span key="c" className="tabular-nums">
+                  {r.count}
+                </span>,
+                <span key="t" className="tabular-nums">
+                  {money(r.total)}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 

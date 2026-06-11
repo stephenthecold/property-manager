@@ -4,19 +4,19 @@ import { formatCurrency } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
+import { DataTable } from "@/components/app/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
+
+function balanceClass(cents: bigint): string {
+  if (cents > 0n) return "text-red-600 dark:text-red-400";
+  if (cents < 0n) return "text-emerald-600 dark:text-emerald-400";
+  return "";
+}
 
 export default async function TenantsPage({
   searchParams,
@@ -71,14 +71,14 @@ export default async function TenantsPage({
       </div>
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
-        <div className="space-y-2">
+        <div className="w-full space-y-2 sm:w-auto">
           <Label htmlFor="q">Search</Label>
           <Input
             id="q"
             name="q"
             defaultValue={q}
             placeholder="Search name, email, phone"
-            className="w-64"
+            className="w-full sm:w-64"
           />
         </div>
         <Button type="submit" size="sm">
@@ -97,47 +97,58 @@ export default async function TenantsPage({
         </p>
       )}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Unit</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Balance</TableHead>
-            <TableHead className="text-right">Days since paid</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(({ tenant, lease, snap }) => (
-            <TableRow key={tenant.id}>
-              <TableCell>
-                <Link href={`/tenants/${tenant.id}`} className="font-medium hover:underline">
-                  {tenant.firstName} {tenant.lastName}
-                </Link>
-              </TableCell>
-              <TableCell>
-                {lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : "—"}
-              </TableCell>
-              <TableCell>
-                {snap ? <StatusBadge status={snap.status} /> : <span className="text-muted-foreground">No active lease</span>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {snap ? formatCurrency(snap.netBalanceCents) : "—"}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {snap?.daysSinceLastPayment ?? "—"}
-              </TableCell>
-            </TableRow>
-          ))}
-          {rows.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No tenants yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <DataTable
+        emptyMessage="No tenants yet."
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "unit", label: "Unit" },
+          { key: "status", label: "Status" },
+          { key: "balance", label: "Balance", align: "right", numeric: true },
+          {
+            key: "daysSincePaid",
+            label: "Days since paid",
+            align: "right",
+            numeric: true,
+            className: "hidden sm:table-cell",
+          },
+        ]}
+        rows={rows.map(({ tenant, lease, snap }) => ({
+          key: tenant.id,
+          sortValues: [
+            `${tenant.lastName}, ${tenant.firstName}`,
+            lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : null,
+            snap?.status ?? null,
+            snap ? String(snap.netBalanceCents) : null,
+            snap?.daysSinceLastPayment ?? null,
+          ],
+          cells: [
+            <Link
+              key="n"
+              href={`/tenants/${tenant.id}`}
+              className="font-medium hover:underline"
+            >
+              {tenant.firstName} {tenant.lastName}
+            </Link>,
+            lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : "—",
+            snap ? (
+              <StatusBadge key="s" status={snap.status} />
+            ) : (
+              <span key="s" className="text-muted-foreground">
+                No active lease
+              </span>
+            ),
+            <span
+              key="b"
+              className={cn("tabular-nums", snap && balanceClass(snap.netBalanceCents))}
+            >
+              {snap ? formatCurrency(snap.netBalanceCents) : "—"}
+            </span>,
+            <span key="d" className="tabular-nums">
+              {snap?.daysSinceLastPayment ?? "—"}
+            </span>,
+          ],
+        }))}
+      />
     </div>
   );
 }

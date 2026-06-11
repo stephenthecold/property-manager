@@ -7,14 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/app/data-table";
 
 export const runtime = "nodejs";
 
@@ -164,63 +157,62 @@ export default async function AuditPage({
         {entries.length} {entries.length === 1 ? "entry" : "entries"} on this page
       </p>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Time</TableHead>
-            <TableHead>Actor</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead>Entity</TableHead>
-            <TableHead>Details</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {entries.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="tabular-nums">
-                {e.createdAt.toISOString().slice(0, 19).replace("T", " ")}
-              </TableCell>
-              <TableCell>
-                <span className="inline-flex items-center gap-2">
-                  {e.actorEmail ?? e.actorType}
-                  {e.viaBreakGlass && (
-                    <Badge
-                      variant="outline"
-                      className="border-red-200 bg-red-100 font-medium text-red-800"
-                    >
-                      break-glass
-                    </Badge>
-                  )}
-                </span>
-              </TableCell>
-              <TableCell className="font-mono text-xs">{e.action}</TableCell>
-              <TableCell className="font-mono text-xs">
-                {e.entityType ?? "—"}
-                {e.entityId ? ` · ${truncate(e.entityId)}` : ""}
-              </TableCell>
-              <TableCell>
-                {e.before != null || e.after != null ? (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">view</summary>
-                    <pre className="mt-1 max-w-md overflow-auto rounded bg-muted/30 p-2">
-                      {JSON.stringify({ before: e.before, after: e.after }, null, 2)}
-                    </pre>
-                  </details>
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {entries.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                No audit entries yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <DataTable
+        emptyMessage="No audit entries yet."
+        defaultPageSize={50}
+        columns={[
+          { key: "time", label: "Time" },
+          { key: "actor", label: "Actor" },
+          { key: "action", label: "Action", className: "hidden sm:table-cell" },
+          { key: "entity", label: "Entity", className: "hidden md:table-cell" },
+          { key: "details", label: "Details", sortable: false },
+        ]}
+        rows={entries.map((e) => ({
+          key: e.id,
+          sortValues: [
+            e.createdAt.toISOString(),
+            e.actorEmail ?? e.actorType,
+            e.action,
+            e.entityType,
+            null,
+          ],
+          cells: [
+            <span key="t" className="tabular-nums">
+              {e.createdAt.toISOString().slice(0, 19).replace("T", " ")}
+            </span>,
+            <span key="a" className="inline-flex items-center gap-2">
+              {e.actorEmail ?? e.actorType}
+              {e.viaBreakGlass && (
+                <Badge
+                  variant="outline"
+                  className="border-red-200 bg-red-100 font-medium text-red-800"
+                >
+                  break-glass
+                </Badge>
+              )}
+            </span>,
+            <span key="ac" className="font-mono text-xs">
+              {e.action}
+            </span>,
+            <span key="e" className="font-mono text-xs">
+              {e.entityType ?? "—"}
+              {e.entityId ? ` · ${truncate(e.entityId)}` : ""}
+            </span>,
+            e.before != null || e.after != null ? (
+              <details key="d" className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground">view</summary>
+                <pre className="mt-1 max-w-md overflow-auto rounded bg-muted/30 p-2">
+                  {JSON.stringify({ before: e.before, after: e.after }, null, 2)}
+                </pre>
+              </details>
+            ) : (
+              <span key="d" className="text-xs text-muted-foreground">
+                —
+              </span>
+            ),
+          ],
+        }))}
+      />
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Page {page}</p>

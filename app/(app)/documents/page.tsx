@@ -3,17 +3,10 @@ import { prisma } from "@/lib/db";
 import { listDocuments } from "@/lib/services/documents";
 import type { UploadType } from "@/lib/generated/prisma/enums";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
+import { DataTable } from "@/components/app/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export const runtime = "nodejs";
 
@@ -58,7 +51,7 @@ export default async function DocumentsPage({
         <UploadDocumentDialog tenantId={tenantId} trigger="Upload document" />
       </div>
 
-      <form method="GET" className="flex items-end gap-3">
+      <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">
           <Label htmlFor="uploadType">Document type</Label>
           <select
@@ -81,77 +74,91 @@ export default async function DocumentsPage({
         </Button>
       </form>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Uploaded</TableHead>
-            <TableHead>File</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead>Linked to</TableHead>
-            <TableHead>OCR</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {documents.map((d) => (
-            <TableRow key={d.id}>
-              <TableCell>{d.createdAt.toLocaleDateString()}</TableCell>
-              <TableCell>
-                <Link href={`/documents/${d.id}`} className="font-medium hover:underline">
-                  {d.fileName ?? "Untitled file"}
-                </Link>
-              </TableCell>
-              <TableCell className="capitalize">
-                {d.uploadType.replace(/_/g, " ")}
-              </TableCell>
-              <TableCell className="tabular-nums">{formatBytes(d.fileSize)}</TableCell>
-              <TableCell>
-                {d.tenantId || d.paymentId || d.receiptId ? (
-                  <span className="flex gap-2">
-                    {d.tenantId && (
-                      <Link
-                        href={`/tenants/${d.tenantId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {tenantName.get(d.tenantId) ?? "Tenant"}
-                      </Link>
-                    )}
-                    {d.paymentId && (
-                      <Link href="/payments" className="font-medium hover:underline">
-                        Payment
-                      </Link>
-                    )}
-                    {d.receiptId && (
-                      <Link
-                        href={`/receipts/${d.receiptId}`}
-                        className="font-medium hover:underline"
-                      >
-                        Receipt
-                      </Link>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
+      <DataTable
+        emptyMessage="No documents yet."
+        columns={[
+          { key: "uploaded", label: "Uploaded" },
+          { key: "file", label: "File" },
+          { key: "type", label: "Type", className: "hidden sm:table-cell" },
+          {
+            key: "size",
+            label: "Size",
+            numeric: true,
+            className: "hidden md:table-cell",
+          },
+          { key: "linked", label: "Linked to", className: "hidden md:table-cell" },
+          { key: "ocr", label: "OCR", sortable: false, className: "hidden lg:table-cell" },
+        ]}
+        rows={documents.map((d) => ({
+          key: d.id,
+          sortValues: [
+            d.createdAt.toISOString(),
+            d.fileName ?? "Untitled file",
+            d.uploadType,
+            d.fileSize,
+            d.tenantId ? (tenantName.get(d.tenantId) ?? "Tenant") : null,
+            null,
+          ],
+          cells: [
+            d.createdAt.toLocaleDateString(),
+            <Link
+              key="f"
+              href={`/documents/${d.id}`}
+              className="font-medium hover:underline"
+            >
+              {d.fileName ?? "Untitled file"}
+            </Link>,
+            <span key="t" className="capitalize">
+              {d.uploadType.replace(/_/g, " ")}
+            </span>,
+            <span key="z" className="tabular-nums">
+              {formatBytes(d.fileSize)}
+            </span>,
+            d.tenantId || d.paymentId || d.receiptId ? (
+              <span key="l" className="flex gap-2">
+                {d.tenantId && (
+                  <Link
+                    href={`/tenants/${d.tenantId}`}
+                    className="font-medium hover:underline"
+                  >
+                    {tenantName.get(d.tenantId) ?? "Tenant"}
+                  </Link>
                 )}
-              </TableCell>
-              <TableCell>
-                {d.ocrText ? (
-                  <Badge variant="outline">OCR</Badge>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
+                {d.paymentId && (
+                  <Link href="/payments" className="font-medium hover:underline">
+                    Payment
+                  </Link>
                 )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {documents.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No documents yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+                {d.receiptId && (
+                  <Link
+                    href={`/receipts/${d.receiptId}`}
+                    className="font-medium hover:underline"
+                  >
+                    Receipt
+                  </Link>
+                )}
+              </span>
+            ) : (
+              <span key="l" className="text-muted-foreground">
+                —
+              </span>
+            ),
+            d.ocrText ? (
+              <Badge
+                key="o"
+                variant="outline"
+                className="border-sky-200 bg-sky-100 font-medium text-sky-800"
+              >
+                OCR
+              </Badge>
+            ) : (
+              <span key="o" className="text-muted-foreground">
+                —
+              </span>
+            ),
+          ],
+        }))}
+      />
     </div>
   );
 }

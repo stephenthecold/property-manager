@@ -6,14 +6,7 @@ import { setUserRole, setUserActive, startViewAs } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/app/data-table";
 
 export const runtime = "nodejs";
 
@@ -47,89 +40,92 @@ export default async function UsersSettingsPage() {
             operational settings. You cannot change your own role or deactivate
             yourself.
           </p>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => {
-                const isSelf = u.id === me.id;
-                const isOwnerRow = u.role === "owner" && me.role !== "owner";
-                const locked = isSelf || isOwnerRow;
-                return (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium">
-                      {u.email}
-                      {isSelf && (
-                        <span className="ml-2 text-xs text-muted-foreground">(you)</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{u.name ?? "—"}</TableCell>
-                    <TableCell>
-                      {locked ? (
-                        <span className="capitalize">{u.role}</span>
-                      ) : (
-                        <form action={setUserRole} className="flex items-center gap-2">
-                          <input type="hidden" name="userId" value={u.id} />
-                          <select
-                            name="role"
-                            defaultValue={u.role}
-                            className="h-8 rounded-md border bg-transparent px-2 text-sm capitalize"
-                          >
-                            {ASSIGNABLE_ROLES.map((r) => (
-                              <option key={r} value={r}>
-                                {r}
-                              </option>
-                            ))}
-                          </select>
-                          <Button type="submit" variant="outline" size="sm">
-                            Save
-                          </Button>
-                        </form>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {u.isActive ? (
-                        <Badge
-                          variant="outline"
-                          className="border-emerald-200 bg-emerald-100 text-emerald-800"
-                        >
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          Disabled
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {locked ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <form action={setUserActive} className="inline">
-                          <input type="hidden" name="userId" value={u.id} />
-                          <input
-                            type="hidden"
-                            name="isActive"
-                            value={u.isActive ? "false" : "true"}
-                          />
-                          <Button type="submit" variant="outline" size="sm">
-                            {u.isActive ? "Deactivate" : "Activate"}
-                          </Button>
-                        </form>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={[
+              { key: "email", label: "Email" },
+              { key: "name", label: "Name", className: "hidden sm:table-cell" },
+              { key: "role", label: "Role", numeric: true },
+              { key: "status", label: "Status" },
+              { key: "actions", label: "Actions", align: "right", sortable: false },
+            ]}
+            rows={users.map((u) => {
+              const isSelf = u.id === me.id;
+              const isOwnerRow = u.role === "owner" && me.role !== "owner";
+              const locked = isSelf || isOwnerRow;
+              return {
+                key: u.id,
+                sortValues: [
+                  u.email,
+                  u.name,
+                  roleRank(u.role as Role),
+                  u.isActive ? "Active" : "Disabled",
+                  null,
+                ],
+                cells: [
+                  <span key="e" className="font-medium">
+                    {u.email}
+                    {isSelf && (
+                      <span className="ml-2 text-xs text-muted-foreground">(you)</span>
+                    )}
+                  </span>,
+                  u.name ?? "—",
+                  locked ? (
+                    <span key="r" className="capitalize">
+                      {u.role}
+                    </span>
+                  ) : (
+                    <form key="r" action={setUserRole} className="flex items-center gap-2">
+                      <input type="hidden" name="userId" value={u.id} />
+                      <select
+                        name="role"
+                        defaultValue={u.role}
+                        className="h-8 rounded-md border bg-transparent px-2 text-sm capitalize"
+                      >
+                        {ASSIGNABLE_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="submit" variant="outline" size="sm">
+                        Save
+                      </Button>
+                    </form>
+                  ),
+                  u.isActive ? (
+                    <Badge
+                      key="s"
+                      variant="outline"
+                      className="border-emerald-200 bg-emerald-100 text-emerald-800"
+                    >
+                      Active
+                    </Badge>
+                  ) : (
+                    <Badge key="s" variant="outline" className="text-muted-foreground">
+                      Disabled
+                    </Badge>
+                  ),
+                  locked ? (
+                    <span key="a" className="text-xs text-muted-foreground">
+                      —
+                    </span>
+                  ) : (
+                    <form key="a" action={setUserActive} className="inline">
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input
+                        type="hidden"
+                        name="isActive"
+                        value={u.isActive ? "false" : "true"}
+                      />
+                      <Button type="submit" variant="outline" size="sm">
+                        {u.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                    </form>
+                  ),
+                ],
+              };
+            })}
+          />
         </CardContent>
       </Card>
 

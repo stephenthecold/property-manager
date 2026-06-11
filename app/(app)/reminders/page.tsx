@@ -8,14 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/app/data-table";
 
 export const runtime = "nodejs";
 
@@ -155,61 +148,65 @@ export default async function RemindersPage({
         </div>
       </form>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Created</TableHead>
-            <TableHead>Tenant</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Period</TableHead>
-            <TableHead>Destination</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Provider</TableHead>
-            <TableHead>Message</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {reminders.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell>{r.createdAt.toLocaleString()}</TableCell>
-              <TableCell>
-                <Link
-                  href={`/tenants/${r.tenantId}`}
-                  className="font-medium hover:underline"
-                >
-                  {tenantById.get(r.tenantId) ?? "Unknown tenant"}
-                </Link>
-              </TableCell>
-              <TableCell className="capitalize">
-                {r.reminderType.replace(/_/g, " ")}
-              </TableCell>
-              <TableCell>{r.periodKey ?? "—"}</TableCell>
-              <TableCell className="tabular-nums">
-                {maskPhone(r.destinationPhone)}
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="outline"
-                  className={`font-medium capitalize ${STATUS_CLASS[r.status]}`}
-                >
-                  {r.status}
-                </Badge>
-              </TableCell>
-              <TableCell>{r.provider ?? "—"}</TableCell>
-              <TableCell className="text-muted-foreground" title={r.messageBody}>
-                {truncate(r.messageBody)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {reminders.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground">
-                No reminders yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <DataTable
+        emptyMessage="No reminders yet."
+        columns={[
+          { key: "created", label: "Created" },
+          { key: "tenant", label: "Tenant" },
+          { key: "type", label: "Type", className: "hidden sm:table-cell" },
+          { key: "period", label: "Period", className: "hidden lg:table-cell" },
+          {
+            key: "destination",
+            label: "Destination",
+            sortable: false,
+            className: "hidden md:table-cell",
+          },
+          { key: "status", label: "Status" },
+          { key: "provider", label: "Provider", className: "hidden lg:table-cell" },
+          { key: "message", label: "Message", sortable: false, className: "hidden xl:table-cell" },
+        ]}
+        rows={reminders.map((r) => ({
+          key: r.id,
+          sortValues: [
+            r.createdAt.toISOString(),
+            tenantById.get(r.tenantId) ?? "Unknown tenant",
+            r.reminderType,
+            r.periodKey,
+            null,
+            r.status,
+            r.provider,
+            null,
+          ],
+          cells: [
+            r.createdAt.toLocaleString(),
+            <Link
+              key="t"
+              href={`/tenants/${r.tenantId}`}
+              className="font-medium hover:underline"
+            >
+              {tenantById.get(r.tenantId) ?? "Unknown tenant"}
+            </Link>,
+            <span key="ty" className="capitalize">
+              {r.reminderType.replace(/_/g, " ")}
+            </span>,
+            r.periodKey ?? "—",
+            <span key="d" className="tabular-nums">
+              {maskPhone(r.destinationPhone)}
+            </span>,
+            <Badge
+              key="s"
+              variant="outline"
+              className={`font-medium capitalize ${STATUS_CLASS[r.status]}`}
+            >
+              {r.status}
+            </Badge>,
+            r.provider ?? "—",
+            <span key="m" className="text-muted-foreground" title={r.messageBody}>
+              {truncate(r.messageBody)}
+            </span>,
+          ],
+        }))}
+      />
     </div>
   );
 }

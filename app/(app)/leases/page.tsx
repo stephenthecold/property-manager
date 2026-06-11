@@ -4,16 +4,9 @@ import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { LeaseStatus } from "@/lib/generated/prisma/enums";
 import { terminateLease } from "./actions";
+import { DataTable } from "@/components/app/data-table";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export const runtime = "nodejs";
 
@@ -102,54 +95,58 @@ export default async function LeasesPage({
         )}
       </form>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Tenant</TableHead>
-            <TableHead>Unit</TableHead>
-            <TableHead className="text-right">Rent</TableHead>
-            <TableHead>Due day</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {leases.map((l) => (
-            <TableRow key={l.id}>
-              <TableCell>
-                <Link href={`/tenants/${l.tenantId}`} className="font-medium hover:underline">
-                  {l.tenant.firstName} {l.tenant.lastName}
-                </Link>
-              </TableCell>
-              <TableCell>
-                {l.unit.property.name} · {l.unit.unitNumber}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatCurrency(l.rentAmountCents, l.unit.property.currency)}
-              </TableCell>
-              <TableCell>{l.dueDay}</TableCell>
-              <TableCell className="capitalize">{l.status.replace("_", " ")}</TableCell>
-              <TableCell className="text-right">
-                {(l.status === "active" || l.status === "month_to_month") && (
-                  <form action={terminateLease}>
-                    <input type="hidden" name="leaseId" value={l.id} />
-                    <Button type="submit" variant="outline" size="sm">
-                      Terminate
-                    </Button>
-                  </form>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-          {leases.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
-                No leases yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <DataTable
+        emptyMessage="No leases yet."
+        columns={[
+          { key: "tenant", label: "Tenant" },
+          { key: "unit", label: "Unit" },
+          { key: "rent", label: "Rent", align: "right", numeric: true },
+          {
+            key: "dueDay",
+            label: "Due day",
+            numeric: true,
+            className: "hidden sm:table-cell",
+          },
+          { key: "status", label: "Status" },
+          { key: "action", label: "Action", align: "right", sortable: false },
+        ]}
+        rows={leases.map((l) => ({
+          key: l.id,
+          sortValues: [
+            `${l.tenant.lastName}, ${l.tenant.firstName}`,
+            `${l.unit.property.name} · ${l.unit.unitNumber}`,
+            String(l.rentAmountCents),
+            l.dueDay,
+            l.status,
+            null,
+          ],
+          cells: [
+            <Link
+              key="t"
+              href={`/tenants/${l.tenantId}`}
+              className="font-medium hover:underline"
+            >
+              {l.tenant.firstName} {l.tenant.lastName}
+            </Link>,
+            `${l.unit.property.name} · ${l.unit.unitNumber}`,
+            <span key="r" className="tabular-nums">
+              {formatCurrency(l.rentAmountCents, l.unit.property.currency)}
+            </span>,
+            l.dueDay,
+            <span key="s" className="capitalize">
+              {l.status.replace("_", " ")}
+            </span>,
+            (l.status === "active" || l.status === "month_to_month") && (
+              <form key="a" action={terminateLease}>
+                <input type="hidden" name="leaseId" value={l.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  Terminate
+                </Button>
+              </form>
+            ),
+          ],
+        }))}
+      />
     </div>
   );
 }
