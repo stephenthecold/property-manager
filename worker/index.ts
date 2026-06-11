@@ -18,7 +18,7 @@ async function runOnce(): Promise<void> {
   try {
     const res = await runBilling(new Date());
     console.log(
-      `[worker] billing run: leases=${res.leasesProcessed} charges=${res.chargesCreated} lateFees=${res.lateFeesCreated}`,
+      `[worker] billing run: leases=${res.leasesProcessed} charges=${res.chargesCreated} lateFees=${res.lateFeesCreated} rentIncreases=${res.rentIncreasesApplied}`,
     );
   } catch (e) {
     console.error("[worker] billing run failed:", e);

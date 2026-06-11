@@ -57,6 +57,23 @@ only loads rows and persists results — it never re-implements money logic.
   is still net-unpaid past `due_date + grace`. The **percentage base is the immutable
   `rent_charge` amount** for that period — deterministic regardless of prior partials/credits.
   v1 is one fee per period (no compounding).
+- Since the unit **internet add-on is folded into the `rent_charge`** amount
+  (`rentForPeriod` in [`lib/accounting/rent.ts`](../lib/accounting/rent.ts)), a percentage
+  late fee is computed on the full charge **including the internet fee**. This is a
+  deliberate v1 decision (pinned by a unit test); the rent/internet split is recorded in
+  the charge's description string.
+
+## Monthly charge composition (internet add-on, scheduled increases)
+
+- Each generated `rent_charge` = base rent + the unit's internet fee (if enabled), priced
+  per period by the pure `rentForPeriod`. A **scheduled rent increase** applies to periods
+  whose due date falls on/after the effective date (property tz, no proration); once due,
+  the worker rolls `rentAmountCents` forward and clears the schedule (audited, CAS-guarded).
+- Already-charged periods are never repriced (append-only ledger + idempotency index), so
+  scheduling an increase into an already-charged period is rejected at the action layer.
+- **Simplification:** internet add-on changes are *not* effective-dated. A back-filled
+  period (worker downtime) prices at the unit's *current* internet config, unlike base rent
+  which back-fills historically via the schedule fields.
 
 ## Status derivation
 

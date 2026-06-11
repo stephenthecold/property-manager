@@ -298,14 +298,15 @@ model Property {
 }
 
 model Building {
-  id          String   @id @default(cuid())
-  propertyId  String
-  name        String
-  description String?
-  notes       String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  propertyId   String
+  name         String
+  description  String?
+  notes        String?
+  purchaseDate DateTime? // date the building was purchased (informational)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   units    Unit[]
@@ -324,6 +325,10 @@ model Unit {
   squareFeet             Int?
   defaultRentAmountCents BigInt          @default(0)
   occupancyStatus        OccupancyStatus @default(vacant)
+  // Internet add-on: when enabled, internetFeeCents is added to every generated
+  // monthly rent charge for the unit's active lease (default $25.00).
+  internetEnabled        Boolean         @default(false)
+  internetFeeCents       BigInt          @default(2500)
   notes                  String?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -373,6 +378,11 @@ model Lease {
   lateFeeAmountCents   BigInt? // for fixed
   lateFeeBps           Int? // basis points for percentage (e.g. 500 = 5%)
   securityDepositCents BigInt      @default(0)
+  // Scheduled rent increase: charges for periods due on/after the effective date
+  // use the new amount; once the date passes, the worker rolls rentAmountCents
+  // forward and clears these two fields (audited as lease.rent_increase_applied).
+  scheduledRentAmountCents    BigInt?
+  scheduledRentEffectiveDate  DateTime?
   status               LeaseStatus @default(draft)
   notes                String?
   createdAt            DateTime    @default(now())

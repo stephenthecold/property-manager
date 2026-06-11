@@ -30,7 +30,10 @@ export default async function PropertyDetail({
   const property = await prisma.property.findUnique({
     where: { id },
     include: {
-      buildings: { orderBy: { name: "asc" } },
+      buildings: {
+        orderBy: { name: "asc" },
+        include: { _count: { select: { units: true } } },
+      },
       units: {
         orderBy: { unitNumber: "asc" },
         include: { building: true },
@@ -63,6 +66,7 @@ export default async function PropertyDetail({
                 <TableHead>Building</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Occupancy</TableHead>
+                <TableHead>Internet</TableHead>
                 <TableHead className="text-right">Default rent</TableHead>
               </TableRow>
             </TableHeader>
@@ -77,6 +81,11 @@ export default async function PropertyDetail({
                   <TableCell>{u.building?.name ?? "—"}</TableCell>
                   <TableCell className="capitalize">{u.unitType}</TableCell>
                   <TableCell className="capitalize">{u.occupancyStatus}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {u.internetEnabled
+                      ? `+${formatCurrency(u.internetFeeCents, property.currency)}`
+                      : "—"}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatCurrency(u.defaultRentAmountCents, property.currency)}
                   </TableCell>
@@ -84,7 +93,7 @@ export default async function PropertyDetail({
               ))}
               {property.units.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No units yet.
                   </TableCell>
                 </TableRow>
@@ -93,6 +102,51 @@ export default async function PropertyDetail({
           </Table>
         </CardContent>
       </Card>
+
+      {property.buildings.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Buildings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Purchased</TableHead>
+                  <TableHead className="text-right">Units</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {property.buildings.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell>
+                      <Link
+                        href={`/buildings/${b.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {b.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{b.description ?? "—"}</TableCell>
+                    <TableCell>
+                      {b.purchaseDate
+                        ? b.purchaseDate.toLocaleDateString("en-US", {
+                            timeZone: property.timezone,
+                          })
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {b._count.units}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -109,6 +163,10 @@ export default async function PropertyDetail({
               <div className="space-y-2">
                 <Label htmlFor="bdesc">Description</Label>
                 <Input id="bdesc" name="description" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bpurchase">Purchase date</Label>
+                <Input id="bpurchase" name="purchaseDate" type="date" />
               </div>
               <Button type="submit" size="sm">Add building</Button>
             </form>
@@ -174,6 +232,24 @@ export default async function PropertyDetail({
               <div className="space-y-2">
                 <Label htmlFor="defaultRent">Default rent (e.g. 1200.00)</Label>
                 <Input id="defaultRent" name="defaultRent" inputMode="decimal" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="newUnitInternet"
+                  name="internetEnabled"
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                />
+                <Label htmlFor="newUnitInternet">Internet service</Label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="internetFee">Monthly internet fee</Label>
+                <Input
+                  id="internetFee"
+                  name="internetFee"
+                  inputMode="decimal"
+                  defaultValue="25.00"
+                />
               </div>
               <Button type="submit" size="sm">Add unit</Button>
             </form>
