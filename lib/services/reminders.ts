@@ -44,29 +44,30 @@ async function renderDefaultBody(
   lease: LeaseWithProperty,
   periodKey: string | null,
   now: Date,
+  dueDate?: Date | null,
 ): Promise<string> {
   const property = lease.unit.property;
   const tz = property.timezone;
   const currency = property.currency;
   const snapshot = await leaseSnapshot(lease, lease.unit, now, tz);
 
-  // Prefer the explicit period's due date (it identifies the charge being
-  // reminded about); fall back to the snapshot's current period.
-  const dueDt = periodKey
-    ? DateTime.fromFormat(periodKey, "yyyy-MM-dd", { zone: tz })
-    : snapshot.currentPeriodDueDate
-      ? DateTime.fromJSDate(snapshot.currentPeriodDueDate, { zone: tz })
-      : null;
+  // Prefer the charge's REAL due date (a prorated move-in charge is keyed to
+  // an anchor period that predates the start date, so the periodKey parse
+  // would mislead); then the periodKey; then the snapshot's current period.
+  const dueDt = dueDate
+    ? DateTime.fromJSDate(dueDate, { zone: tz })
+    : periodKey
+      ? DateTime.fromFormat(periodKey, "yyyy-MM-dd", { zone: tz })
+      : snapshot.currentPeriodDueDate
+        ? DateTime.fromJSDate(snapshot.currentPeriodDueDate, { zone: tz })
+        : null;
   const dueDateFormatted =
     dueDt && dueDt.isValid ? dueDt.toFormat("MMMM d, yyyy") : "";
 
   const amountDueCents =
     snapshot.currentPeriodOutstandingCents > 0n
       ? snapshot.currentPeriodOutstandingCents
-      : expectedMonthlyChargeCents({
-          rentAmountCents: lease.rentAmountCents,
-          ...lease.unit,
-        });
+      : expectedMonthlyChargeCents(lease);
 
   const { templates } = await getAppSettings();
   return renderTemplate(
@@ -90,6 +91,8 @@ export interface SendReminderInput {
   /** Provided for manual sends; scheduled types render DEFAULT_TEMPLATES. */
   messageBody?: string | null;
   periodKey?: string | null;
+  /** The charge's real due date (overrides deriving it from periodKey). */
+  dueDate?: Date | null;
   actor: AuditContext;
   now?: Date;
 }
@@ -150,6 +153,7 @@ export async function sendReminder(
       lease,
       i.periodKey ?? null,
       now,
+      i.dueDate,
     );
   }
 
@@ -355,6 +359,7 @@ export async function sendBulkOverdueReminders(
           leaseId: lease.id,
           reminderType: "rent_overdue",
           periodKey: periodKeyById.get(oldestOverdue.entryId) ?? null,
+          dueDate: oldestOverdue.dueDate,
           actor,
           now,
         });
@@ -455,12 +460,7 @@ export async function runScheduledReminders(
             (sum, e) => sum + e.amountCents,
             0n,
           );
-          shouldSend =
-            netBalanceCents >
-            -expectedMonthlyChargeCents({
-              rentAmountCents: lease.rentAmountCents,
-              ...lease.unit,
-            });
+          shouldSend = netBalanceCents > -expectedMonthlyChargeCents(lease);
         }
         if (shouldSend) {
           for (const tenantId of recipientIds) {
@@ -503,6 +503,7 @@ export async function runScheduledReminders(
             leaseId: lease.id,
             reminderType: "rent_overdue",
             periodKey,
+            dueDate: c.dueDate,
             actor,
             now,
           });

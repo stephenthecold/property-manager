@@ -58,6 +58,7 @@ enum LateFeeType {
   none
   fixed
   percentage
+  daily // lateFeeAmountCents per day past grace, optional lateFeeMaxCents cap
 }
 
 enum PaymentMethod {
@@ -244,6 +245,7 @@ model AppSettings {
   defaultLateFeeType        LateFeeType?
   defaultLateFeeAmountCents BigInt?
   defaultLateFeeBps         Int?
+  defaultLateFeeMaxCents    BigInt?
   defaultInternetFeeCents   BigInt?
 
   updatedBy String?
@@ -336,8 +338,8 @@ model Unit {
   squareFeet             Int?
   defaultRentAmountCents BigInt          @default(0)
   occupancyStatus        OccupancyStatus @default(vacant)
-  // Internet add-on: when enabled, internetFeeCents is added to every generated
-  // monthly rent charge for the unit's active lease (default $25.00).
+  // Internet add-on DEFAULT for new leases on this unit (billing is
+  // controlled by the lease's own internet fields).
   internetEnabled        Boolean         @default(false)
   internetFeeCents       BigInt          @default(2500)
   notes                  String?
@@ -391,9 +393,22 @@ model Lease {
   dueDay               Int         @default(1) // 1..31, clamped to last day of short months
   gracePeriodDays      Int         @default(0)
   lateFeeType          LateFeeType @default(none)
-  lateFeeAmountCents   BigInt? // for fixed
+  lateFeeAmountCents   BigInt? // for fixed; daily rate for daily
   lateFeeBps           Int? // basis points for percentage (e.g. 500 = 5%)
+  lateFeeMaxCents      BigInt? // optional total cap per period (daily type)
   securityDepositCents BigInt      @default(0)
+  // Internet add-on billed with this lease's rent (unit fields are only the
+  // default for new leases). Back-filled from the unit by migration.
+  internetEnabled      Boolean     @default(false)
+  internetFeeCents     BigInt      @default(2500)
+  // Utilities the landlord pays for this lease (informational), e.g.
+  // ["water","trash"]; free-text details in utilitiesNotes.
+  utilitiesPaid        Json        @default("[]")
+  utilitiesNotes       String?
+  // Prorate the move-in month (start date through the day before the first
+  // full period) as a partial rent_charge. Opt-in at creation so existing
+  // leases are never billed retroactively.
+  prorateFirstPeriod   Boolean     @default(false)
   // Scheduled rent increase: charges for periods due on/after the effective date
   // use the new amount; once the date passes, the worker rolls rentAmountCents
   // forward and clears these two fields (audited as lease.rent_increase_applied).

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { createBuilding, createUnit } from "../actions";
+import { createBuilding, createUnit, updateProperty } from "../actions";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,6 +150,82 @@ export default async function PropertyDetail({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardContent className="py-4">
+          <details>
+            <summary className="cursor-pointer text-base font-semibold">
+              Edit property
+            </summary>
+            <form action={updateProperty} className="mt-4 space-y-3">
+              <input type="hidden" name="propertyId" value={property.id} />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="pname">Name</Label>
+                  <Input id="pname" name="name" defaultValue={property.name} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="paddr1">Address line 1</Label>
+                  <Input
+                    id="paddr1"
+                    name="addressLine1"
+                    defaultValue={property.addressLine1 ?? ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="paddr2">Address line 2</Label>
+                  <Input
+                    id="paddr2"
+                    name="addressLine2"
+                    defaultValue={property.addressLine2 ?? ""}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pcity">City</Label>
+                  <Input id="pcity" name="city" defaultValue={property.city ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pstate">State</Label>
+                  <Input id="pstate" name="state" defaultValue={property.state ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pzip">ZIP</Label>
+                  <Input id="pzip" name="zip" defaultValue={property.zip ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ptz">Timezone (IANA)</Label>
+                  <Input id="ptz" name="timezone" defaultValue={property.timezone} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pcurrency">Currency</Label>
+                  <Input id="pcurrency" name="currency" defaultValue={property.currency} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pnotes">Notes</Label>
+                <Textarea id="pnotes" name="notes" defaultValue={property.notes ?? ""} />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="pactive"
+                  name="isActive"
+                  type="checkbox"
+                  defaultChecked={property.isActive}
+                  className="size-4 accent-primary"
+                />
+                <Label htmlFor="pactive">Active property</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Changing the timezone affects how future due dates and periods are
+                computed; already-billed periods are unchanged.
+              </p>
+              <Button type="submit" size="sm">
+                Save property
+              </Button>
+            </form>
+          </details>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

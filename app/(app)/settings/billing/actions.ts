@@ -28,11 +28,27 @@ export async function saveBillingDefaultsAction(fd: FormData): Promise<void> {
   const lateFeeType = (str(fd, "lateFeeType") || "none") as LateFeeType;
   let lateFeeAmountCents: bigint | null = null;
   let lateFeeBps: number | null = null;
-  if (lateFeeType === "fixed") {
+  let lateFeeMaxCents: bigint | null = null;
+  if (lateFeeType === "fixed" || lateFeeType === "daily") {
     const raw = str(fd, "lateFeeAmount");
-    if (!raw) throw new Error("Enter the fixed late-fee amount.");
+    if (!raw) {
+      throw new Error(
+        lateFeeType === "daily"
+          ? "Enter the daily late-fee rate."
+          : "Enter the fixed late-fee amount.",
+      );
+    }
     lateFeeAmountCents = toCents(raw);
     if (lateFeeAmountCents < 0n) throw new Error("Late fee cannot be negative.");
+    if (lateFeeType === "daily") {
+      const capRaw = str(fd, "lateFeeMax");
+      if (capRaw) {
+        lateFeeMaxCents = toCents(capRaw);
+        if (lateFeeMaxCents < lateFeeAmountCents) {
+          throw new Error("The cap must be at least one day's rate.");
+        }
+      }
+    }
   } else if (lateFeeType === "percentage") {
     const bps = Number(str(fd, "lateFeeBps") || "0");
     if (!Number.isInteger(bps) || bps <= 0 || bps > 10000) {
@@ -47,7 +63,15 @@ export async function saveBillingDefaultsAction(fd: FormData): Promise<void> {
   if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
 
   await saveBillingDefaults(
-    { dueDay, graceDays, lateFeeType, lateFeeAmountCents, lateFeeBps, internetFeeCents },
+    {
+      dueDay,
+      graceDays,
+      lateFeeType,
+      lateFeeAmountCents,
+      lateFeeBps,
+      lateFeeMaxCents,
+      internetFeeCents,
+    },
     actor,
   );
   revalidatePath("/settings/billing");
@@ -74,7 +98,8 @@ export async function applyChargeTermsToActiveLeases(): Promise<void> {
       lease.gracePeriodDays === billing.graceDays &&
       lease.lateFeeType === billing.lateFeeType &&
       lease.lateFeeAmountCents === billing.lateFeeAmountCents &&
-      lease.lateFeeBps === billing.lateFeeBps;
+      lease.lateFeeBps === billing.lateFeeBps &&
+      lease.lateFeeMaxCents === billing.lateFeeMaxCents;
     if (same) continue;
 
     await prisma.$transaction(async (tx) => {
@@ -85,6 +110,7 @@ export async function applyChargeTermsToActiveLeases(): Promise<void> {
           lateFeeType: billing.lateFeeType,
           lateFeeAmountCents: billing.lateFeeAmountCents,
           lateFeeBps: billing.lateFeeBps,
+          lateFeeMaxCents: billing.lateFeeMaxCents,
         },
       });
       await writeAudit(tx, {
@@ -97,12 +123,14 @@ export async function applyChargeTermsToActiveLeases(): Promise<void> {
           lateFeeType: lease.lateFeeType,
           lateFeeAmountCents: lease.lateFeeAmountCents,
           lateFeeBps: lease.lateFeeBps,
+          lateFeeMaxCents: lease.lateFeeMaxCents,
         },
         after: {
           gracePeriodDays: billing.graceDays,
           lateFeeType: billing.lateFeeType,
           lateFeeAmountCents: billing.lateFeeAmountCents,
           lateFeeBps: billing.lateFeeBps,
+          lateFeeMaxCents: billing.lateFeeMaxCents,
         },
       });
     });

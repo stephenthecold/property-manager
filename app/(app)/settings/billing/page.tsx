@@ -54,7 +54,7 @@ export default async function BillingSettingsPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="lateFeeType">Late fee type</Label>
                 <select
@@ -64,17 +64,18 @@ export default async function BillingSettingsPage() {
                   className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
                 >
                   <option value="none">None</option>
-                  <option value="fixed">Fixed</option>
-                  <option value="percentage">Percentage</option>
+                  <option value="fixed">Fixed (one-time)</option>
+                  <option value="percentage">Percentage (one-time)</option>
+                  <option value="daily">Per day past grace</option>
                 </select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lateFeeAmount">Fixed amount</Label>
+                <Label htmlFor="lateFeeAmount">Amount ($ fixed / $ per day)</Label>
                 <Input
                   id="lateFeeAmount"
                   name="lateFeeAmount"
                   inputMode="decimal"
-                  placeholder="50.00"
+                  placeholder="10.00"
                   defaultValue={
                     billing.lateFeeAmountCents != null
                       ? fromCents(billing.lateFeeAmountCents)
@@ -94,6 +95,20 @@ export default async function BillingSettingsPage() {
                   defaultValue={billing.lateFeeBps ?? ""}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="lateFeeMax">Daily cap per period</Label>
+                <Input
+                  id="lateFeeMax"
+                  name="lateFeeMax"
+                  inputMode="decimal"
+                  placeholder="optional"
+                  defaultValue={
+                    billing.lateFeeMaxCents != null
+                      ? fromCents(billing.lateFeeMaxCents)
+                      : ""
+                  }
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="internetFee">Default internet fee (new units)</Label>
@@ -107,7 +122,10 @@ export default async function BillingSettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               For a percentage late fee, the base is the full monthly charge
-              (rent plus internet add-on). 500 bps = 5%.
+              (rent plus internet add-on); 500 bps = 5%. &ldquo;Per day past
+              grace&rdquo; accrues the amount daily once the grace period ends
+              (e.g. $10/day after the first 5 days), until paid or the optional
+              cap is reached.
             </p>
             <Button type="submit" size="sm">
               Save defaults

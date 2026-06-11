@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   expectedMonthlyChargeCents,
+  prorationForStart,
   rentForPeriod,
   shouldApplyScheduledRent,
 } from "@/lib/accounting/rent";
@@ -118,6 +119,85 @@ describe("rentForPeriod / scheduled increase", () => {
       TZ,
     );
     expect(r.totalCents).toBe(132500n);
+  });
+});
+
+describe("prorationForStart (mid-month move-in, billed on the 1st)", () => {
+  it("prorates the move-in month by days occupied", () => {
+    // June 15 start, rent $1,200, 30-day June: 16/30 days = $640.00,
+    // keyed to the otherwise-never-billed June period.
+    const p = prorationForStart({
+      startDate: parseDateOnlyInZone("2026-06-15", TZ)!,
+      dueDay: 1,
+      tz: TZ,
+      terms: { rentAmountCents: 120000n },
+    });
+    expect(p).toEqual({
+      periodKey: "2026-06-01",
+      amountCents: 64000n,
+      daysCharged: 16,
+      daysInMonth: 30,
+    });
+  });
+
+  it("returns null when the lease starts exactly on a due date", () => {
+    expect(
+      prorationForStart({
+        startDate: parseDateOnlyInZone("2026-06-01", TZ)!,
+        dueDay: 1,
+        tz: TZ,
+        terms: { rentAmountCents: 120000n },
+      }),
+    ).toBeNull();
+  });
+
+  it("prorates the full monthly charge including the internet add-on", () => {
+    const p = prorationForStart({
+      startDate: parseDateOnlyInZone("2026-06-15", TZ)!,
+      dueDay: 1,
+      tz: TZ,
+      terms: { rentAmountCents: 120000n, internetEnabled: true, internetFeeCents: 2500n },
+    });
+    // 122500 * 16/30 = 65333.33 -> half-up 65333
+    expect(p?.amountCents).toBe(65333n);
+  });
+
+  it("rounds half-up on a single day in a 31-day month", () => {
+    const p = prorationForStart({
+      startDate: parseDateOnlyInZone("2026-07-31", TZ)!,
+      dueDay: 1,
+      tz: TZ,
+      terms: { rentAmountCents: 100000n },
+    });
+    // 100000/31 = 3225.8 -> 3226
+    expect(p?.daysCharged).toBe(1);
+    expect(p?.amountCents).toBe(3226n);
+  });
+
+  it("clamps the span to a lease that ends before its first full period", () => {
+    // Feb 10 -> Feb 20 lease, dueDay 1: bills exactly the 11 occupied days.
+    const p = prorationForStart({
+      startDate: parseDateOnlyInZone("2026-02-10", TZ)!,
+      endDate: parseDateOnlyInZone("2026-02-20", TZ)!,
+      dueDay: 1,
+      tz: TZ,
+      terms: { rentAmountCents: 120000n },
+    });
+    expect(p?.daysCharged).toBe(11);
+    expect(p?.amountCents).toBe(47143n); // 120000 * 11/28 half-up
+  });
+
+  it("handles non-1 due days (span anchored to the prior period)", () => {
+    const p = prorationForStart({
+      startDate: parseDateOnlyInZone("2026-06-10", TZ)!,
+      dueDay: 15,
+      tz: TZ,
+      terms: { rentAmountCents: 120000n },
+    });
+    // June 10-14 = 5 days before the first full period (due June 15).
+    expect(p?.periodKey).toBe("2026-05-15");
+    expect(p?.daysCharged).toBe(5);
+    expect(p?.amountCents).toBe(20000n); // 120000 * 5/30
   });
 });
 

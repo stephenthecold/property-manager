@@ -51,29 +51,45 @@ only loads rows and persists results — it never re-implements money logic.
 
 ## Late fees
 
-- Config per lease: `late_fee_type` ∈ {none, fixed, percentage}, with `late_fee_amount_cents`
-  or `late_fee_bps`, plus `grace_period_days`.
-- Assessed once per period (idempotent via the partial index) when a period's `rent_charge`
-  is still net-unpaid past `due_date + grace`. The **percentage base is the immutable
-  `rent_charge` amount** for that period — deterministic regardless of prior partials/credits.
-  v1 is one fee per period (no compounding).
+- Config per lease: `late_fee_type` ∈ {none, fixed, percentage, daily}, with
+  `late_fee_amount_cents` (fixed amount, or per-day rate for daily) or `late_fee_bps`,
+  plus `grace_period_days` and an optional `late_fee_max_cents` cap (daily only).
+- Fixed/percentage fees are assessed once per period (idempotent via the partial index)
+  when a period's `rent_charge` is still net-unpaid past `due_date + grace`. The
+  **percentage base is the immutable `rent_charge` amount** for that period —
+  deterministic regardless of prior partials/credits. Switching a lease between one-shot
+  and daily types never stacks both shapes on one period (each branch skips periods the
+  other already assessed).
 - Since the unit **internet add-on is folded into the `rent_charge`** amount
   (`rentForPeriod` in [`lib/accounting/rent.ts`](../lib/accounting/rent.ts)), a percentage
   late fee is computed on the full charge **including the internet fee**. This is a
   deliberate v1 decision (pinned by a unit test); the rent/internet split is recorded in
   the charge's description string.
 
+- **Daily late fees** (`late_fee_type = daily`): `late_fee_amount_cents` accrues per whole
+  day past `due_date + grace` (property tz), one ledger row per day with periodKey
+  `"<period>+dN"` — idempotent per day under the same partial unique. Accrual stops when
+  the charge is paid (no row is ever removed) or the optional `late_fee_max_cents` cap is
+  reached (the capping day may be a partial amount). E.g. "$10/day after the first 5 days"
+  = grace 5, daily rate $10.
+
 ## Monthly charge composition (internet add-on, scheduled increases)
 
-- Each generated `rent_charge` = base rent + the unit's internet fee (if enabled), priced
-  per period by the pure `rentForPeriod`. A **scheduled rent increase** applies to periods
+- Each generated `rent_charge` = base rent + the **lease's** internet fee (if enabled),
+  priced per period by the pure `rentForPeriod`. The unit's internet fields are only the
+  default for new leases. A **scheduled rent increase** applies to periods
   whose due date falls on/after the effective date (property tz, no proration); once due,
   the worker rolls `rentAmountCents` forward and clears the schedule (audited, CAS-guarded).
 - Already-charged periods are never repriced (append-only ledger + idempotency index), so
   scheduling an increase into an already-charged period is rejected at the action layer.
 - **Simplification:** internet add-on changes are *not* effective-dated. A back-filled
-  period (worker downtime) prices at the unit's *current* internet config, unlike base rent
-  which back-fills historically via the schedule fields.
+  period (worker downtime) prices at the lease's *current* internet config, unlike base
+  rent which back-fills historically via the schedule fields.
+- **First-month proration** (opt-in per lease at creation): a mid-period start posts one
+  partial `rent_charge` for `startDate` through the day before the first full due date, at
+  `monthly total × days / daysInMonth(start month)` (half-up). It is keyed to the
+  otherwise-never-billed move-in period, so the standard idempotency index applies.
+  Skipped for next-due-date imports (the opening balance carries partial-month rent).
 
 ## Status derivation
 

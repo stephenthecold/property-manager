@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import type { Cents } from "@/lib/money";
+import { computeDueDate, periodKeyFor } from "@/lib/accounting/periods";
 
 /**
  * Per-period rent amount: base rent (current or scheduled-increase), plus the
@@ -82,6 +83,68 @@ export function expectedMonthlyChargeCents(
     terms.rentAmountCents +
     (terms.internetEnabled ? (terms.internetFeeCents ?? 0n) : 0n)
   );
+}
+
+export interface ProratedFirstCharge {
+  /** Period key of the (otherwise never-billed) partial move-in period. */
+  periodKey: string;
+  amountCents: Cents;
+  daysCharged: number;
+  daysInMonth: number;
+}
+
+/**
+ * Prorated move-in charge for a lease starting mid-period: covers startDate
+ * through the day before the first fully-billed due date, at
+ * (monthly total) x daysCharged / daysInMonth(start month), rounded half-up.
+ * Returns null when the start date IS a due date (no partial period).
+ *
+ * The charge is keyed to the period that would have covered the span (the due
+ * date one month before the first billed one) — that slot is otherwise never
+ * billed, so the standard rent_charge idempotency index applies unchanged.
+ */
+export function prorationForStart(opts: {
+  startDate: Date;
+  dueDay: number;
+  tz: string;
+  terms: RentTerms;
+  /** Lease end date — a lease ending before the first full period only bills through it. */
+  endDate?: Date | null;
+}): ProratedFirstCharge | null {
+  const { startDate, dueDay, tz, terms, endDate } = opts;
+  const start = DateTime.fromJSDate(startDate, { zone: tz }).startOf("day");
+
+  // First due date on/after the start (the first fully billed period).
+  let firstBilled = computeDueDate(start.year, start.month, dueDay, tz);
+  if (firstBilled < start) {
+    const next = start.plus({ months: 1 });
+    firstBilled = computeDueDate(next.year, next.month, dueDay, tz);
+  }
+  // Span end: the first full due date, clamped to the day AFTER the lease end
+  // (the end date itself is occupied).
+  let spanEnd = firstBilled;
+  if (endDate) {
+    const endExclusive = DateTime.fromJSDate(endDate, { zone: tz })
+      .startOf("day")
+      .plus({ days: 1 });
+    if (endExclusive < spanEnd) spanEnd = endExclusive;
+  }
+  const daysCharged = Math.round(spanEnd.diff(start, "days").days);
+  if (daysCharged <= 0) return null; // started exactly on a due date (or ended before start)
+
+  // Anchor the partial span to the period that covered it (one month earlier).
+  const prev = firstBilled.minus({ months: 1 });
+  const anchor = computeDueDate(prev.year, prev.month, dueDay, tz);
+  const periodKey = periodKeyFor(anchor);
+
+  const monthly = rentForPeriod(terms, periodKey, tz).totalCents;
+  const daysInMonth = start.daysInMonth ?? 30;
+  const d = BigInt(daysCharged);
+  const dim = BigInt(daysInMonth);
+  // half-up: floor((monthly*d*2 + dim) / (2*dim))
+  const amountCents = (monthly * d * 2n + dim) / (2n * dim);
+
+  return { periodKey, amountCents, daysCharged, daysInMonth };
 }
 
 /**

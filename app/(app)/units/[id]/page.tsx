@@ -55,7 +55,7 @@ export default async function UnitDetail({
           {unit.unitType} · {unit.occupancyStatus} ·{" "}
           {formatCurrency(unit.defaultRentAmountCents, currency)} default rent
           {unit.internetEnabled
-            ? ` · internet +${formatCurrency(unit.internetFeeCents, currency)}/mo`
+            ? ` · internet default +${formatCurrency(unit.internetFeeCents, currency)}/mo`
             : ""}
         </p>
       </div>
@@ -208,7 +208,7 @@ export default async function UnitDetail({
                   className="size-4 accent-primary"
                 />
                 <Label htmlFor="internetEnabled">
-                  Internet service — add the monthly fee to this unit&apos;s rent charge
+                  Internet service — default for new leases on this unit
                 </Label>
               </div>
               <div className="space-y-2">
@@ -222,8 +222,8 @@ export default async function UnitDetail({
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Applies to charges generated from now on (including any not yet billed);
-                  already-billed periods are unchanged.
+                  Billing is controlled per lease (Edit lease on the tenant page);
+                  this only prefills new leases for this unit.
                 </p>
               </div>
             </div>
