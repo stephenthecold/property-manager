@@ -4,17 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const LINKS = [
-  { href: "/settings/organization", label: "Organization" },
-  { href: "/settings/messaging", label: "Messaging" },
-  { href: "/settings/auth", label: "Authentication" },
-];
+export interface SettingsNavLink {
+  href: string;
+  label: string;
+}
 
-export function SettingsNav() {
+export function SettingsNav({ links }: { links: SettingsNavLink[] }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-wrap gap-1">
-      {LINKS.map((l) => {
+      {links.map((l) => {
         const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
         return (
           <Link

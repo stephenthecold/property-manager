@@ -149,7 +149,9 @@ export async function createUnit(fd: FormData): Promise<void> {
   }
   const rent = str(fd, "defaultRent");
   const internetFeeRaw = str(fd, "internetFee");
-  const internetFeeCents = internetFeeRaw ? toCents(internetFeeRaw) : 2500n;
+  const internetFeeCents = internetFeeRaw
+    ? toCents(internetFeeRaw)
+    : (await getAppSettings()).billing.internetFeeCents;
   if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
   const unit = await prisma.unit.create({
     data: {

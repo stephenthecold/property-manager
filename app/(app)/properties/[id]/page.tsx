@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { formatCurrency } from "@/lib/money";
+import { formatCurrency, fromCents } from "@/lib/money";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { createBuilding, createUnit } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ export default async function PropertyDetail({
     },
   });
   if (!property) notFound();
+  const { billing } = await getAppSettings();
 
   return (
     <div className="space-y-6">
@@ -248,7 +250,7 @@ export default async function PropertyDetail({
                   id="internetFee"
                   name="internetFee"
                   inputMode="decimal"
-                  defaultValue="25.00"
+                  defaultValue={fromCents(billing.internetFeeCents)}
                 />
               </div>
               <Button type="submit" size="sm">Add unit</Button>

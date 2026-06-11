@@ -33,6 +33,7 @@ export async function generateChargesForLease(
     dueDay: lease.dueDay,
     tz,
     now,
+    billingStart: lease.billingStartDate,
   });
   let created = 0;
   for (const p of periods) {

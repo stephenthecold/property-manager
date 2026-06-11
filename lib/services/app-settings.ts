@@ -7,7 +7,7 @@ import { StubSmsProvider } from "@/lib/providers/sms/stub";
 import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
 import type { SmsProvider } from "@/lib/providers/sms/types";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
-import type { ReminderType } from "@/lib/generated/prisma/enums";
+import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
 
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
 export const SMS_TOKEN_AAD = "appsettings:smsAuthToken:singleton";
@@ -35,6 +35,15 @@ export interface ResolvedAppSettings {
   overdueRemindersEnabled: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
+  /** Org-wide charge defaults ("rates") — prefill new leases/units. */
+  billing: {
+    dueDay: number;
+    graceDays: number;
+    lateFeeType: LateFeeType;
+    lateFeeAmountCents: bigint | null;
+    lateFeeBps: number | null;
+    internetFeeCents: bigint;
+  };
 }
 
 let cache: { value: ResolvedAppSettings; at: number } | null = null;
@@ -86,6 +95,14 @@ async function resolve(): Promise<ResolvedAppSettings> {
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
     templates,
+    billing: {
+      dueDay: row?.defaultDueDay ?? 1,
+      graceDays: row?.defaultGraceDays ?? 5,
+      lateFeeType: row?.defaultLateFeeType ?? "none",
+      lateFeeAmountCents: row?.defaultLateFeeAmountCents ?? null,
+      lateFeeBps: row?.defaultLateFeeBps ?? null,
+      internetFeeCents: row?.defaultInternetFeeCents ?? 2500n,
+    },
   };
 }
 
@@ -121,6 +138,56 @@ export async function resolveSmsProvider(): Promise<SmsProvider> {
   }
 
   return getSmsProvider();
+}
+
+export interface BillingDefaultsInput {
+  dueDay: number;
+  graceDays: number;
+  lateFeeType: LateFeeType;
+  lateFeeAmountCents: bigint | null;
+  lateFeeBps: number | null;
+  internetFeeCents: bigint;
+}
+
+export async function saveBillingDefaults(
+  input: BillingDefaultsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    defaultDueDay: input.dueDay,
+    defaultGraceDays: input.graceDays,
+    defaultLateFeeType: input.lateFeeType,
+    defaultLateFeeAmountCents: input.lateFeeAmountCents,
+    defaultLateFeeBps: input.lateFeeBps,
+    defaultInternetFeeCents: input.internetFeeCents,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.billing.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? {
+            defaultDueDay: before.defaultDueDay,
+            defaultGraceDays: before.defaultGraceDays,
+            defaultLateFeeType: before.defaultLateFeeType,
+            defaultLateFeeAmountCents: before.defaultLateFeeAmountCents,
+            defaultLateFeeBps: before.defaultLateFeeBps,
+            defaultInternetFeeCents: before.defaultInternetFeeCents,
+          }
+        : undefined,
+      after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
 }
 
 export interface OrganizationSettingsInput {

@@ -7,7 +7,7 @@ import { OrganizationForm } from "./organization-form";
 export const runtime = "nodejs";
 
 export default async function OrganizationSettingsPage() {
-  await requireRole("owner");
+  await requireRole("admin");
   const env = getEnv();
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
 

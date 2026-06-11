@@ -1,0 +1,139 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
+import { requireRole, auditActor } from "@/lib/auth/session";
+import { withAudit, writeAudit } from "@/lib/audit/audit";
+import { isRole, roleAtLeast } from "@/lib/auth/rbac";
+import { VIEW_AS_COOKIE } from "@/lib/auth/view-as";
+import type { Role } from "@/lib/generated/prisma/enums";
+
+function str(fd: FormData, key: string): string {
+  return String(fd.get(key) ?? "").trim();
+}
+
+/**
+ * Change a user's role. Bumps securityStamp so their outstanding JWT is
+ * invalidated and the new role takes effect on next request. Guards:
+ * admins cannot change their own role, cannot touch owners, and cannot
+ * grant a role above their own.
+ */
+export async function setUserRole(fd: FormData): Promise<void> {
+  const { dbUser: actor } = await requireRole("admin");
+  const userId = str(fd, "userId");
+  const roleRaw = str(fd, "role");
+  if (!userId || !isRole(roleRaw)) throw new Error("Invalid user or role.");
+  const newRole = roleRaw as Role;
+
+  if (userId === actor.id) {
+    throw new Error("You cannot change your own role.");
+  }
+  if (!roleAtLeast(actor.role as Role, newRole)) {
+    throw new Error("You cannot grant a role above your own.");
+  }
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) throw new Error("User not found.");
+  if (target.role === "owner" && actor.role !== "owner") {
+    throw new Error("Only the owner can change the owner's role.");
+  }
+  if (target.role === newRole) return;
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "user.role_changed",
+      entityType: "User",
+      entityId: target.id,
+      before: { role: target.role, email: target.email },
+    },
+    async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: target.id },
+        data: { role: newRole, securityStamp: crypto.randomUUID() },
+      });
+      return { result: updated, after: { role: newRole, email: target.email } };
+    },
+  );
+
+  revalidatePath("/settings/users");
+}
+
+/** Activate/deactivate a user (deactivation also invalidates their JWT). */
+export async function setUserActive(fd: FormData): Promise<void> {
+  const { dbUser: actor } = await requireRole("admin");
+  const userId = str(fd, "userId");
+  const isActive = str(fd, "isActive") === "true";
+  if (!userId) throw new Error("Missing user id.");
+  if (userId === actor.id) {
+    throw new Error("You cannot deactivate your own account.");
+  }
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) throw new Error("User not found.");
+  if (target.role === "owner" && actor.role !== "owner") {
+    throw new Error("Only the owner can deactivate the owner.");
+  }
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: isActive ? "user.activated" : "user.deactivated",
+      entityType: "User",
+      entityId: target.id,
+      before: { isActive: target.isActive, email: target.email },
+    },
+    async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: target.id },
+        data: { isActive, securityStamp: crypto.randomUUID() },
+      });
+      return { result: updated, after: { isActive, email: target.email } };
+    },
+  );
+
+  revalidatePath("/settings/users");
+}
+
+/**
+ * "View as role": admin+ can act as a lower role to verify what it sees and
+ * can do. Enforcement is in effectiveRole() — the cookie can only lower
+ * privileges, so it is safe to store client-side.
+ */
+export async function startViewAs(fd: FormData): Promise<void> {
+  const { dbUser } = await requireRole("admin");
+  const roleRaw = str(fd, "role");
+  if (!isRole(roleRaw)) throw new Error("Invalid role.");
+  await writeAudit(prisma, {
+    ...(await auditActor()),
+    action: "user.view_as_started",
+    entityType: "User",
+    entityId: dbUser.id,
+    after: { viewAsRole: roleRaw },
+  });
+  const store = await cookies();
+  store.set(VIEW_AS_COOKIE, roleRaw, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  redirect("/dashboard");
+}
+
+export async function exitViewAs(): Promise<void> {
+  // No role gate: anyone holding the cookie may always drop back to themselves.
+  const store = await cookies();
+  const hadRole = store.get(VIEW_AS_COOKIE)?.value ?? null;
+  store.delete(VIEW_AS_COOKIE);
+  if (hadRole) {
+    const actor = await auditActor();
+    await writeAudit(prisma, {
+      ...actor,
+      action: "user.view_as_ended",
+      entityType: "User",
+      entityId: actor.actorId,
+      before: { viewAsRole: hadRole },
+    });
+  }
+  revalidatePath("/", "layout");
+}

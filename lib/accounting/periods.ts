@@ -39,6 +39,11 @@ export function periodKeyFor(due: DateTime): string {
  * All monthly rent periods whose due date has arrived (<= now), from the first
  * due date on/after the lease start through the lease end (or now). Used by the
  * billing worker to back-fill any missed charges idempotently.
+ *
+ * `billingStart` (backdated-lease import) additionally suppresses periods due
+ * before it: the first billed period is the first due date on/after
+ * max(startDate, billingStart). Pre-existing debt is represented by an
+ * opening-balance adjustment instead of back-filled charges.
  */
 export function listExpectedPeriods(opts: {
   startDate: Date;
@@ -46,8 +51,11 @@ export function listExpectedPeriods(opts: {
   dueDay: number;
   tz: string;
   now: Date;
+  billingStart?: Date | null;
 }): PeriodDue[] {
-  const { startDate, endDate, dueDay, tz, now } = opts;
+  const { endDate, dueDay, tz, now, billingStart } = opts;
+  const startDate =
+    billingStart && billingStart > opts.startDate ? billingStart : opts.startDate;
   const start = DateTime.fromJSDate(startDate, { zone: tz }).startOf("day");
   const end = endDate
     ? DateTime.fromJSDate(endDate, { zone: tz }).endOf("day")

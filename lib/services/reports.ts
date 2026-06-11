@@ -23,7 +23,11 @@ export interface RentRollRow {
 export async function getRentRoll(now: Date): Promise<RentRollRow[]> {
   const leases = await prisma.lease.findMany({
     where: { status: { in: ["active", "month_to_month"] } },
-    include: { tenant: true, unit: { include: { property: true } } },
+    include: {
+      tenant: true,
+      unit: { include: { property: true } },
+      _count: { select: { coTenants: true } },
+    },
     orderBy: [{ unit: { property: { name: "asc" } } }, { unit: { unitNumber: "asc" } }],
   });
   const rows: RentRollRow[] = [];
@@ -34,7 +38,9 @@ export async function getRentRoll(now: Date): Promise<RentRollRow[]> {
     rows.push({
       property: l.unit.property.name,
       unit: l.unit.unitNumber,
-      tenant: `${l.tenant.firstName} ${l.tenant.lastName}`,
+      tenant:
+        `${l.tenant.firstName} ${l.tenant.lastName}` +
+        (l._count.coTenants > 0 ? ` +${l._count.coTenants}` : ""),
       status: s.status,
       rent: fromCents(
         expectedMonthlyChargeCents({ rentAmountCents: l.rentAmountCents, ...l.unit }),
@@ -109,7 +115,13 @@ export async function getTenantLedger(
   tenantId: string,
 ): Promise<LedgerReportRow[]> {
   const entries = await prisma.ledgerEntry.findMany({
-    where: { lease: { tenantId } },
+    // Leases where the tenant is primary OR a co-tenant (the on-screen ledger
+    // shows co-tenant leases too; the CSV must match).
+    where: {
+      lease: {
+        OR: [{ tenantId }, { coTenants: { some: { tenantId } } }],
+      },
+    },
     orderBy: [{ effectiveDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     include: { lease: { include: { unit: { include: { property: true } } } } },
   });

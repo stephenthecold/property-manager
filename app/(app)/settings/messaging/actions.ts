@@ -31,7 +31,7 @@ export async function saveMessagingAction(
   _prev: MessagingState,
   fd: FormData,
 ): Promise<MessagingState> {
-  await requireRole("owner");
+  await requireRole("admin");
 
   const providerRaw = String(fd.get("smsProvider") ?? "");
   const smsProvider =
@@ -96,7 +96,7 @@ export async function sendTestSmsAction(
   _prev: MessagingState,
   fd: FormData,
 ): Promise<MessagingState> {
-  await requireRole("owner");
+  await requireRole("admin");
   const to = String(fd.get("testPhone") ?? "").trim();
   if (!to) return { error: "Enter a phone number for the test message." };
 

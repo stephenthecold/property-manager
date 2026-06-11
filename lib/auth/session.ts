@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import type { Session } from "next-auth";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { roleAtLeast } from "@/lib/auth/rbac";
+import { effectiveRole, roleAtLeast } from "@/lib/auth/rbac";
+import { getViewAsRole } from "@/lib/auth/view-as";
 import type { Role } from "@/lib/generated/prisma/enums";
 
 export type SessionUser = Session["user"];
@@ -28,6 +29,10 @@ export async function requireUser(): Promise<SessionUser> {
  * Authoritative role check for sensitive/destructive actions: re-reads the user
  * from the DB, verifies isActive + securityStamp (revocation), and enforces the
  * minimum role. The JWT role is only a hint; this is the real gate.
+ *
+ * Honors "view as role": an admin+ user impersonating a lower role is checked
+ * at the LOWER role, so they experience exactly what that role can do.
+ * `effectiveRole` guarantees the cookie can only ever lower privileges.
  */
 export async function requireRole(min: Role): Promise<{
   user: SessionUser;
@@ -40,10 +45,26 @@ export async function requireRole(min: Role): Promise<{
   if (u.securityStamp && dbUser.securityStamp !== u.securityStamp) {
     redirect("/login");
   }
-  if (!roleAtLeast(dbUser.role as Role, min)) {
+  const acting = effectiveRole(dbUser.role as Role, await getViewAsRole());
+  if (!roleAtLeast(acting, min)) {
     throw new Error("Forbidden: insufficient role");
   }
   return { user: u, dbUser };
+}
+
+/**
+ * The role the current user is ACTING as (JWT hint + view-as cookie). For
+ * nav/UI gating only — actions must still go through requireRole.
+ */
+export async function getDisplayRole(): Promise<{
+  user: SessionUser;
+  actingRole: Role;
+  viewAs: Role | null;
+}> {
+  const u = await requireUser();
+  const viewAs = await getViewAsRole();
+  const acting = effectiveRole(u.role as Role, viewAs);
+  return { user: u, actingRole: acting, viewAs: acting !== u.role ? viewAs : null };
 }
 
 /** Audit context (actor) derived from the current session. */

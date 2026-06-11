@@ -21,7 +21,7 @@ import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
  * SMS reminder sending. Consent is absolute: no Reminder row is ever created for
  * a tenant without smsConsent + a phone number. Scheduled sends are idempotent
  * via the raw-SQL partial unique UNIQUE(leaseId, reminderType, periodKey) WHERE
- * periodKey IS NOT NULL — a duplicate insert raises P2002 and is skipped, so
+ * periodKey IS NOT NULL (per tenant) — a duplicate insert raises P2002 and is skipped, so
  * worker re-runs and double clicks converge to one reminder per lease/type/period.
  */
 
@@ -154,7 +154,8 @@ export async function sendReminder(
   }
 
   // Create the row first (status queued): the partial unique on
-  // (leaseId, reminderType, periodKey) makes scheduled sends idempotent.
+  // (leaseId, tenantId, reminderType, periodKey) makes scheduled sends
+  // idempotent per recipient (co-tenants each own their slot).
   let reminderId: string;
   try {
     const reminder = await prisma.reminder.create({
@@ -172,11 +173,13 @@ export async function sendReminder(
     reminderId = reminder.id;
   } catch (e) {
     if (isUniqueViolation(e)) {
-      // The slot exists. A failed (or crash-stranded queued) occupant would
-      // otherwise block this period forever — retry delivery on that row.
+      // This tenant's slot exists. A failed (or crash-stranded queued)
+      // occupant would otherwise block this period forever — retry delivery
+      // on exactly that row (never another co-tenant's).
       if (i.leaseId && i.periodKey) {
         return retryExistingSlot(
           i.leaseId,
+          tenant.id,
           i.reminderType,
           i.periodKey,
           i.actor,
@@ -226,20 +229,21 @@ export async function sendReminder(
 const STUCK_QUEUED_MS = 15 * 60 * 1000;
 
 /**
- * Retry delivery for an existing (leaseId, reminderType, periodKey) slot whose
- * occupant is failed or crash-stranded. Successful/delivered occupants are a
- * normal duplicate-skip. Consent is re-checked — it may have been revoked
- * since the row was created.
+ * Retry delivery for an existing (leaseId, tenantId, reminderType, periodKey)
+ * slot whose occupant is failed or crash-stranded. Successful/delivered
+ * occupants are a normal duplicate-skip. Consent is re-checked — it may have
+ * been revoked since the row was created.
  */
 async function retryExistingSlot(
   leaseId: string,
+  tenantId: string,
   reminderType: ReminderType,
   periodKey: string,
   actor: AuditContext,
   now: Date,
 ): Promise<SendReminderResult> {
   const row = await prisma.reminder.findFirst({
-    where: { leaseId, reminderType, periodKey },
+    where: { leaseId, tenantId, reminderType, periodKey },
   });
   const retryable =
     row &&
@@ -311,7 +315,11 @@ export async function sendBulkOverdueReminders(
 ): Promise<BulkOverdueResult> {
   const leases = await prisma.lease.findMany({
     where: { status: { in: ["active", "month_to_month"] } },
-    include: { unit: { include: { property: true } }, tenant: true },
+    include: {
+      unit: { include: { property: true } },
+      tenant: true,
+      coTenants: { select: { tenantId: true } },
+    },
   });
 
   const result: BulkOverdueResult = {
@@ -336,19 +344,26 @@ export async function sendBulkOverdueReminders(
       );
       if (!oldestOverdue) continue;
 
-      const r = await sendReminder({
-        tenantId: lease.tenantId,
-        leaseId: lease.id,
-        reminderType: "rent_overdue",
-        periodKey: periodKeyById.get(oldestOverdue.entryId) ?? null,
-        actor,
-        now,
-      });
-      if (r.status === "sent") result.sent++;
-      else if (r.status === "failed") result.failed++;
-      else if (r.error === "duplicate") result.skippedDuplicate++;
-      else if (r.error === "no phone number") result.skippedNoPhone++;
-      else result.skippedNoConsent++;
+      // Same recipient set as the scheduled sweep, so manual and scheduled
+      // sends fill the same per-tenant idempotency slots.
+      for (const tenantId of [
+        lease.tenantId,
+        ...lease.coTenants.map((ct) => ct.tenantId),
+      ]) {
+        const r = await sendReminder({
+          tenantId,
+          leaseId: lease.id,
+          reminderType: "rent_overdue",
+          periodKey: periodKeyById.get(oldestOverdue.entryId) ?? null,
+          actor,
+          now,
+        });
+        if (r.status === "sent") result.sent++;
+        else if (r.status === "failed") result.failed++;
+        else if (r.error === "duplicate") result.skippedDuplicate++;
+        else if (r.error === "no phone number") result.skippedNoPhone++;
+        else result.skippedNoConsent++;
+      }
     } catch (e) {
       result.failed++;
       console.error(
@@ -385,7 +400,11 @@ export async function runScheduledReminders(
 
   const leases = await prisma.lease.findMany({
     where: { status: { in: ["active", "month_to_month"] } },
-    include: { unit: { include: { property: true } }, tenant: true },
+    include: {
+      unit: { include: { property: true } },
+      tenant: true,
+      coTenants: { select: { tenantId: true } },
+    },
   });
 
   const result: ScheduledRemindersResult = {
@@ -398,6 +417,13 @@ export async function runScheduledReminders(
   for (const lease of leases) {
     try {
       const tz = lease.unit.property.timezone;
+      // Every tenant on the lease gets scheduled reminders (consent permitting);
+      // idempotency is per (lease, tenant, type, period), so co-tenants each
+      // converge to one row. sendReminder enforces consent/phone per tenant.
+      const recipientIds = [
+        lease.tenantId,
+        ...lease.coTenants.map((ct) => ct.tenantId),
+      ];
       const { entries, charges, allocatedByCharge } = await loadLeaseAccounting(
         lease.id,
       );
@@ -437,17 +463,19 @@ export async function runScheduledReminders(
             });
         }
         if (shouldSend) {
-          const r = await sendReminder({
-            tenantId: lease.tenantId,
-            leaseId: lease.id,
-            reminderType: "rent_due_soon",
-            periodKey: candidate.periodKey,
-            actor,
-            now,
-          });
-          if (r.status === "sent") result.dueSoon++;
-          else if (r.status === "failed") result.failed++;
-          else result.skipped++;
+          for (const tenantId of recipientIds) {
+            const r = await sendReminder({
+              tenantId,
+              leaseId: lease.id,
+              reminderType: "rent_due_soon",
+              periodKey: candidate.periodKey,
+              actor,
+              now,
+            });
+            if (r.status === "sent") result.dueSoon++;
+            else if (r.status === "failed") result.failed++;
+            else result.skipped++;
+          }
         }
       }
 
@@ -469,17 +497,19 @@ export async function runScheduledReminders(
         });
         if (!pastGrace) continue;
 
-        const r = await sendReminder({
-          tenantId: lease.tenantId,
-          leaseId: lease.id,
-          reminderType: "rent_overdue",
-          periodKey,
-          actor,
-          now,
-        });
-        if (r.status === "sent") result.overdue++;
-        else if (r.status === "failed") result.failed++;
-        else result.skipped++;
+        for (const tenantId of recipientIds) {
+          const r = await sendReminder({
+            tenantId,
+            leaseId: lease.id,
+            reminderType: "rent_overdue",
+            periodKey,
+            actor,
+            now,
+          });
+          if (r.status === "sent") result.overdue++;
+          else if (r.status === "failed") result.failed++;
+          else result.skipped++;
+        }
       }
     } catch (e) {
       result.failed++;
