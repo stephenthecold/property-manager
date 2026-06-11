@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
-import { formatCurrency } from "@/lib/money";
+import { formatCurrency, fromCents } from "@/lib/money";
+import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { leaseSnapshot } from "@/lib/services/accounting";
 import { listDocuments } from "@/lib/services/documents";
 import {
@@ -10,6 +12,12 @@ import {
   renderTemplate,
 } from "@/lib/reminders/templates";
 import { voidPaymentAction } from "@/app/(app)/payments/actions";
+import {
+  scheduleRentIncrease,
+  cancelRentIncrease,
+} from "@/app/(app)/leases/actions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -113,7 +121,10 @@ export default async function TenantDetail({
       ? formatCurrency(
           snap && snap.currentPeriodOutstandingCents > 0n
             ? snap.currentPeriodOutstandingCents
-            : templateLease.rentAmountCents,
+            : expectedMonthlyChargeCents({
+                rentAmountCents: templateLease.rentAmountCents,
+                ...templateLease.unit,
+              }),
           templateCurrency,
         )
       : "",
@@ -178,7 +189,12 @@ export default async function TenantDetail({
           {activeLease && (
             <RecordPaymentDialog
               leaseId={activeLease.id}
-              defaultAmount={(Number(activeLease.rentAmountCents) / 100).toFixed(2)}
+              defaultAmount={fromCents(
+                expectedMonthlyChargeCents({
+                  rentAmountCents: activeLease.rentAmountCents,
+                  ...activeLease.unit,
+                }),
+              )}
             />
           )}
         </div>
@@ -198,7 +214,12 @@ export default async function TenantDetail({
             <CardContent>
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 {summary("Current balance", formatCurrency(snap.netBalanceCents, currency))}
-                {summary("Monthly rent", formatCurrency(activeLease.rentAmountCents, currency))}
+                {summary(
+                  "Monthly rent",
+                  activeLease.unit.internetEnabled
+                    ? `${formatCurrency(activeLease.rentAmountCents, currency)} + ${formatCurrency(activeLease.unit.internetFeeCents, currency)} internet`
+                    : formatCurrency(activeLease.rentAmountCents, currency),
+                )}
                 {summary("Total owed", formatCurrency(snap.totalOwedCents, currency))}
                 {summary("Credit", formatCurrency(snap.creditCents, currency))}
                 {summary("Due day", `Day ${activeLease.dueDay}`)}
@@ -210,6 +231,72 @@ export default async function TenantDetail({
                 )}
                 {summary("Past due (1–30)", formatCurrency(snap.aging.d1_30, currency))}
                 {summary("Past due (90+)", formatCurrency(snap.aging.d90plus, currency))}
+              </div>
+
+              <div className="mt-4 border-t pt-4">
+                {activeLease.scheduledRentAmountCents != null &&
+                activeLease.scheduledRentEffectiveDate != null ? (
+                  <form
+                    action={cancelRentIncrease}
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <p className="text-sm">
+                      Rent increases to{" "}
+                      <span className="font-medium">
+                        {formatCurrency(activeLease.scheduledRentAmountCents, currency)}
+                      </span>{" "}
+                      on{" "}
+                      {activeLease.scheduledRentEffectiveDate.toLocaleDateString("en-US", {
+                        timeZone: activeLease.unit.property.timezone,
+                      })}{" "}
+                      <span className="text-muted-foreground">
+                        (applies to rent charges due on/after that date)
+                      </span>
+                    </p>
+                    <Button type="submit" variant="outline" size="sm">
+                      Cancel increase
+                    </Button>
+                  </form>
+                ) : (
+                  <form
+                    action={scheduleRentIncrease}
+                    className="flex flex-wrap items-end gap-3"
+                  >
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <div className="space-y-1">
+                      <Label htmlFor="newRentAmount" className="text-xs">
+                        Schedule rent increase
+                      </Label>
+                      <Input
+                        id="newRentAmount"
+                        name="newRentAmount"
+                        inputMode="decimal"
+                        placeholder="New monthly rent"
+                        className="h-8 w-40"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="effectiveDate" className="text-xs">
+                        Effective date
+                      </Label>
+                      <Input
+                        id="effectiveDate"
+                        name="effectiveDate"
+                        type="date"
+                        min={DateTime.fromJSDate(now, {
+                          zone: activeLease.unit.property.timezone,
+                        }).toFormat("yyyy-MM-dd")}
+                        className="h-8 w-40"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" variant="outline" size="sm">
+                      Schedule
+                    </Button>
+                  </form>
+                )}
               </div>
             </CardContent>
           </Card>

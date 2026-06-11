@@ -131,7 +131,12 @@ async function main() {
 
     if (status !== "active") continue;
 
-    await generateChargesForLease(lease as Lease, "America/Chicago", NOW);
+    await generateChargesForLease(
+      lease as Lease,
+      { internetEnabled: false, internetFeeCents: 2500n },
+      "America/Chicago",
+      NOW,
+    );
     await applyScenario(s.scenario, lease.id, s.key);
     await assessLateFeesForLease(lease as Lease, "America/Chicago", NOW);
   }

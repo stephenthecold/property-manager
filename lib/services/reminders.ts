@@ -12,6 +12,7 @@ import {
 import type { SendSmsResult } from "@/lib/providers/sms/types";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
+import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { leaseSnapshot, loadLeaseAccounting } from "@/lib/services/accounting";
 import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
@@ -62,7 +63,10 @@ async function renderDefaultBody(
   const amountDueCents =
     snapshot.currentPeriodOutstandingCents > 0n
       ? snapshot.currentPeriodOutstandingCents
-      : lease.rentAmountCents;
+      : expectedMonthlyChargeCents({
+          rentAmountCents: lease.rentAmountCents,
+          ...lease.unit,
+        });
 
   const { templates } = await getAppSettings();
   return renderTemplate(
@@ -425,7 +429,12 @@ export async function runScheduledReminders(
             (sum, e) => sum + e.amountCents,
             0n,
           );
-          shouldSend = netBalanceCents > -lease.rentAmountCents;
+          shouldSend =
+            netBalanceCents >
+            -expectedMonthlyChargeCents({
+              rentAmountCents: lease.rentAmountCents,
+              ...lease.unit,
+            });
         }
         if (shouldSend) {
           const r = await sendReminder({

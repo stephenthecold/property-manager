@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { sumCents } from "@/lib/money";
 import { leaseSnapshot, type LeaseSnapshot } from "@/lib/services/accounting";
 import type { AccountStatus } from "@/lib/accounting";
+import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 
 export interface DashboardLeaseRow {
   leaseId: string;
@@ -119,7 +120,11 @@ export async function getDashboard(
 
   const overdueBalanceCents = sumCents(leaseRows.map((r) => r.pastDueCents));
   const overdueTenants = leaseRows.filter((r) => r.status === "overdue").length;
-  const monthExpectedCents = sumCents(leases.map((l) => l.rentAmountCents));
+  const monthExpectedCents = sumCents(
+    leases.map((l) =>
+      expectedMonthlyChargeCents({ rentAmountCents: l.rentAmountCents, ...l.unit }),
+    ),
+  );
 
   return {
     monthExpectedCents,
