@@ -3,17 +3,10 @@ import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { PaymentMethod, PaymentStatus } from "@/lib/generated/prisma/enums";
+import { DataTable } from "@/components/app/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export const runtime = "nodejs";
 
@@ -140,56 +133,72 @@ export default async function PaymentsPage({
         )}
       </form>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Tenant</TableHead>
-            <TableHead>Unit</TableHead>
-            <TableHead>Method</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Receipt</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {payments.map((p) => (
-            <TableRow key={p.id}>
-              <TableCell>{p.paymentDate.toLocaleDateString()}</TableCell>
-              <TableCell>
-                <Link href={`/tenants/${p.lease.tenantId}`} className="font-medium hover:underline">
-                  {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+      <DataTable
+        emptyMessage="No payments yet."
+        columns={[
+          { key: "date", label: "Date" },
+          { key: "tenant", label: "Tenant" },
+          { key: "unit", label: "Unit", className: "hidden md:table-cell" },
+          { key: "method", label: "Method", className: "hidden sm:table-cell" },
+          { key: "status", label: "Status" },
+          { key: "receipt", label: "Receipt", className: "hidden lg:table-cell" },
+          { key: "amount", label: "Amount", align: "right", numeric: true },
+        ]}
+        rows={payments.map((p) => {
+          const receipt =
+            p.status !== "voided" ? receiptByPayment.get(p.id) : undefined;
+          return {
+            key: p.id,
+            sortValues: [
+              p.paymentDate.toISOString(),
+              `${p.lease.tenant.lastName}, ${p.lease.tenant.firstName}`,
+              `${p.lease.unit.property.name} · ${p.lease.unit.unitNumber}`,
+              p.method,
+              p.status,
+              receipt?.receiptNumber ?? null,
+              String(p.amountCents),
+            ],
+            cells: [
+              p.paymentDate.toLocaleDateString(),
+              <Link
+                key="t"
+                href={`/tenants/${p.lease.tenantId}`}
+                className="font-medium hover:underline"
+              >
+                {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+              </Link>,
+              `${p.lease.unit.property.name} · ${p.lease.unit.unitNumber}`,
+              <span key="m" className="capitalize">
+                {p.method.replace("_", " ")}
+              </span>,
+              <span
+                key="s"
+                className={
+                  p.status === "voided"
+                    ? "capitalize text-red-600 dark:text-red-400"
+                    : "capitalize"
+                }
+              >
+                {p.status}
+              </span>,
+              receipt ? (
+                <Link
+                  key="r"
+                  href={`/receipts/${receipt.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {receipt.receiptNumber}
                 </Link>
-              </TableCell>
-              <TableCell>{p.lease.unit.property.name} · {p.lease.unit.unitNumber}</TableCell>
-              <TableCell className="capitalize">{p.method.replace("_", " ")}</TableCell>
-              <TableCell className="capitalize">{p.status}</TableCell>
-              <TableCell>
-                {p.status !== "voided" && receiptByPayment.has(p.id) ? (
-                  <Link
-                    href={`/receipts/${receiptByPayment.get(p.id)!.id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {receiptByPayment.get(p.id)!.receiptNumber}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
+              ) : (
+                "—"
+              ),
+              <span key="a" className="tabular-nums">
                 {formatCurrency(p.amountCents, p.lease.unit.property.currency)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {payments.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
-                No payments yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+              </span>,
+            ],
+          };
+        })}
+      />
     </div>
   );
 }

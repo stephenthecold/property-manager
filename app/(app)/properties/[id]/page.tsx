@@ -9,14 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/app/data-table";
 
 export const runtime = "nodejs";
 
@@ -62,47 +55,63 @@ export default async function PropertyDetail({
           <CardTitle>Units</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Unit</TableHead>
-                <TableHead>Building</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Occupancy</TableHead>
-                <TableHead>Internet</TableHead>
-                <TableHead className="text-right">Default rent</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {property.units.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>
-                    <Link href={`/units/${u.id}`} className="font-medium hover:underline">
-                      {u.unitNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{u.building?.name ?? "—"}</TableCell>
-                  <TableCell className="capitalize">{u.unitType}</TableCell>
-                  <TableCell className="capitalize">{u.occupancyStatus}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {u.internetEnabled
-                      ? `+${formatCurrency(u.internetFeeCents, property.currency)}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(u.defaultRentAmountCents, property.currency)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {property.units.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No units yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No units yet."
+            defaultSort={{ key: "unit", dir: "asc" }}
+            columns={[
+              { key: "unit", label: "Unit" },
+              { key: "building", label: "Building", className: "hidden md:table-cell" },
+              { key: "type", label: "Type", className: "hidden sm:table-cell" },
+              { key: "occupancy", label: "Occupancy" },
+              {
+                key: "internet",
+                label: "Internet",
+                numeric: true,
+                className: "hidden lg:table-cell",
+              },
+              { key: "rent", label: "Default rent", align: "right", numeric: true },
+            ]}
+            rows={property.units.map((u) => ({
+              key: u.id,
+              sortValues: [
+                u.unitNumber,
+                u.building?.name ?? null,
+                u.unitType,
+                u.occupancyStatus,
+                u.internetEnabled ? String(u.internetFeeCents) : null,
+                String(u.defaultRentAmountCents),
+              ],
+              cells: [
+                <Link key="u" href={`/units/${u.id}`} className="font-medium hover:underline">
+                  {u.unitNumber}
+                </Link>,
+                u.building?.name ?? "—",
+                <span key="t" className="capitalize">
+                  {u.unitType}
+                </span>,
+                <span
+                  key="o"
+                  className={
+                    u.occupancyStatus === "occupied"
+                      ? "capitalize text-emerald-700 dark:text-emerald-400"
+                      : u.occupancyStatus === "vacant"
+                        ? "capitalize text-amber-700 dark:text-amber-400"
+                        : "capitalize text-muted-foreground"
+                  }
+                >
+                  {u.occupancyStatus}
+                </span>,
+                <span key="i" className="tabular-nums">
+                  {u.internetEnabled
+                    ? `+${formatCurrency(u.internetFeeCents, property.currency)}`
+                    : "—"}
+                </span>,
+                <span key="r" className="tabular-nums">
+                  {formatCurrency(u.defaultRentAmountCents, property.currency)}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
@@ -112,41 +121,41 @@ export default async function PropertyDetail({
             <CardTitle>Buildings</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Purchased</TableHead>
-                  <TableHead className="text-right">Units</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {property.buildings.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell>
-                      <Link
-                        href={`/buildings/${b.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {b.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{b.description ?? "—"}</TableCell>
-                    <TableCell>
-                      {b.purchaseDate
-                        ? b.purchaseDate.toLocaleDateString("en-US", {
-                            timeZone: property.timezone,
-                          })
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {b._count.units}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={[
+                { key: "name", label: "Name" },
+                { key: "description", label: "Description", className: "hidden sm:table-cell" },
+                { key: "purchased", label: "Purchased" },
+                { key: "units", label: "Units", align: "right", numeric: true },
+              ]}
+              rows={property.buildings.map((b) => ({
+                key: b.id,
+                sortValues: [
+                  b.name,
+                  b.description,
+                  b.purchaseDate?.toISOString() ?? null,
+                  b._count.units,
+                ],
+                cells: [
+                  <Link
+                    key="n"
+                    href={`/buildings/${b.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {b.name}
+                  </Link>,
+                  b.description ?? "—",
+                  b.purchaseDate
+                    ? b.purchaseDate.toLocaleDateString("en-US", {
+                        timeZone: property.timezone,
+                      })
+                    : "—",
+                  <span key="u" className="tabular-nums">
+                    {b._count.units}
+                  </span>,
+                ],
+              }))}
+            />
           </CardContent>
         </Card>
       )}

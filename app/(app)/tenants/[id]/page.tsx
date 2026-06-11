@@ -34,14 +34,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/app/data-table";
+import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -239,7 +233,7 @@ export default async function TenantDetail({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 2xl:grid-cols-8">
                 {summary("Current balance", formatCurrency(snap.netBalanceCents, currency))}
                 {summary(
                   "Monthly rent",
@@ -717,41 +711,50 @@ export default async function TenantDetail({
               <CardTitle>Ledger</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Detail</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ledger.map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell>{e.effectiveDate.toLocaleDateString()}</TableCell>
-                      <TableCell className="capitalize">
-                        {e.entryType.replace("_", " ")}
-                      </TableCell>
-                      <TableCell>{e.periodKey ?? "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {e.reason ?? e.description ?? ""}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(e.amountCents, currency)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {ledger.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        No ledger entries.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <DataTable
+                emptyMessage="No ledger entries."
+                columns={[
+                  { key: "date", label: "Date" },
+                  { key: "type", label: "Type" },
+                  { key: "period", label: "Period", className: "hidden sm:table-cell" },
+                  {
+                    key: "detail",
+                    label: "Detail",
+                    sortable: false,
+                    className: "hidden md:table-cell",
+                  },
+                  { key: "amount", label: "Amount", align: "right", numeric: true },
+                ]}
+                rows={ledger.map((e) => ({
+                  key: e.id,
+                  sortValues: [
+                    e.effectiveDate.toISOString(),
+                    e.entryType,
+                    e.periodKey,
+                    null,
+                    String(e.amountCents),
+                  ],
+                  cells: [
+                    e.effectiveDate.toLocaleDateString(),
+                    <span key="t" className="capitalize">
+                      {e.entryType.replace("_", " ")}
+                    </span>,
+                    e.periodKey ?? "—",
+                    <span key="d" className="text-muted-foreground">
+                      {e.reason ?? e.description ?? ""}
+                    </span>,
+                    <span
+                      key="a"
+                      className={cn(
+                        "tabular-nums",
+                        e.amountCents < 0n && "text-emerald-600 dark:text-emerald-400",
+                      )}
+                    >
+                      {formatCurrency(e.amountCents, currency)}
+                    </span>,
+                  ],
+                }))}
+              />
             </CardContent>
           </Card>
 
@@ -760,56 +763,74 @@ export default async function TenantDetail({
               <CardTitle>Payments</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.paymentDate.toLocaleDateString()}</TableCell>
-                      <TableCell className="capitalize">{p.method.replace("_", " ")}</TableCell>
-                      <TableCell>{p.referenceNumber ?? "—"}</TableCell>
-                      <TableCell className="capitalize">{p.status}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(p.amountCents, currency)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {p.status === "posted" ? (
-                          <form action={voidPaymentAction} className="flex justify-end gap-2">
-                            <input type="hidden" name="paymentId" value={p.id} />
-                            <input
-                              name="reason"
-                              placeholder="Reason"
-                              className="h-8 w-28 rounded border px-2 text-xs"
-                              required
-                            />
-                            <Button type="submit" variant="outline" size="sm">
-                              Void
-                            </Button>
-                          </form>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {payments.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        No payments yet.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+              <DataTable
+                emptyMessage="No payments yet."
+                columns={[
+                  { key: "date", label: "Date" },
+                  { key: "method", label: "Method" },
+                  {
+                    key: "reference",
+                    label: "Reference",
+                    className: "hidden md:table-cell",
+                  },
+                  { key: "status", label: "Status", className: "hidden sm:table-cell" },
+                  { key: "amount", label: "Amount", align: "right", numeric: true },
+                  { key: "action", label: "Action", align: "right", sortable: false },
+                ]}
+                rows={payments.map((p) => ({
+                  key: p.id,
+                  sortValues: [
+                    p.paymentDate.toISOString(),
+                    p.method,
+                    p.referenceNumber,
+                    p.status,
+                    String(p.amountCents),
+                    null,
+                  ],
+                  cells: [
+                    p.paymentDate.toLocaleDateString(),
+                    <span key="m" className="capitalize">
+                      {p.method.replace("_", " ")}
+                    </span>,
+                    p.referenceNumber ?? "—",
+                    <span
+                      key="s"
+                      className={
+                        p.status === "voided"
+                          ? "capitalize text-red-600 dark:text-red-400"
+                          : "capitalize"
+                      }
+                    >
+                      {p.status}
+                    </span>,
+                    <span key="a" className="tabular-nums">
+                      {formatCurrency(p.amountCents, currency)}
+                    </span>,
+                    p.status === "posted" ? (
+                      <form
+                        key="ac"
+                        action={voidPaymentAction}
+                        className="flex justify-end gap-2"
+                      >
+                        <input type="hidden" name="paymentId" value={p.id} />
+                        <input
+                          name="reason"
+                          placeholder="Reason"
+                          className="h-8 w-28 rounded border px-2 text-xs"
+                          required
+                        />
+                        <Button type="submit" variant="outline" size="sm">
+                          Void
+                        </Button>
+                      </form>
+                    ) : (
+                      <span key="ac" className="text-xs text-muted-foreground">
+                        —
+                      </span>
+                    ),
+                  ],
+                }))}
+              />
             </CardContent>
           </Card>
         </>
@@ -830,42 +851,40 @@ export default async function TenantDetail({
           <UploadDocumentDialog tenantId={tenant.id} trigger="Upload" />
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>File</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Size</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documents.map((d) => (
-                <TableRow key={d.id}>
-                  <TableCell>{d.createdAt.toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/documents/${d.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {d.fileName ?? "Untitled file"}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="capitalize">
-                    {d.uploadType.replace(/_/g, " ")}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{formatBytes(d.fileSize)}</TableCell>
-                </TableRow>
-              ))}
-              {documents.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
-                    No documents yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No documents yet."
+            columns={[
+              { key: "date", label: "Date" },
+              { key: "file", label: "File" },
+              { key: "type", label: "Type", className: "hidden sm:table-cell" },
+              { key: "size", label: "Size", numeric: true, className: "hidden md:table-cell" },
+            ]}
+            rows={documents.map((d) => ({
+              key: d.id,
+              sortValues: [
+                d.createdAt.toISOString(),
+                d.fileName ?? "Untitled file",
+                d.uploadType,
+                d.fileSize,
+              ],
+              cells: [
+                d.createdAt.toLocaleDateString(),
+                <Link
+                  key="f"
+                  href={`/documents/${d.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {d.fileName ?? "Untitled file"}
+                </Link>,
+                <span key="t" className="capitalize">
+                  {d.uploadType.replace(/_/g, " ")}
+                </span>,
+                <span key="z" className="tabular-nums">
+                  {formatBytes(d.fileSize)}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
@@ -877,33 +896,27 @@ export default async function TenantDetail({
           </Link>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reminders.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{r.createdAt.toLocaleDateString()}</TableCell>
-                  <TableCell className="capitalize">
-                    {r.reminderType.replace(/_/g, " ")}
-                  </TableCell>
-                  <TableCell className="capitalize">{r.status}</TableCell>
-                </TableRow>
-              ))}
-              {reminders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
-                    No reminders yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            emptyMessage="No reminders yet."
+            columns={[
+              { key: "date", label: "Date" },
+              { key: "type", label: "Type" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={reminders.map((r) => ({
+              key: r.id,
+              sortValues: [r.createdAt.toISOString(), r.reminderType, r.status],
+              cells: [
+                r.createdAt.toLocaleDateString(),
+                <span key="t" className="capitalize">
+                  {r.reminderType.replace(/_/g, " ")}
+                </span>,
+                <span key="s" className="capitalize">
+                  {r.status}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
