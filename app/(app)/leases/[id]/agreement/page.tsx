@@ -1,17 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireCapability } from "@/lib/auth/session";
+import { getDisplayRole, requireCapability } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
 import {
   getDocumentDownloadUrl,
   listDocuments,
 } from "@/lib/services/documents";
+import {
+  getLeaseSigningOverview,
+  signingKindLabel,
+} from "@/lib/services/esign";
 import { renderTemplate } from "@/lib/reminders/templates";
 import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
 import { PrintButton } from "@/components/app/print-button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GenerateDocxForm } from "./generate-docx-form";
+import {
+  cancelEsignRequestAction,
+  resendEsignLinkAction,
+  sendEsignRequestAction,
+} from "./actions";
 
 export const runtime = "nodejs";
 
@@ -54,11 +67,20 @@ function SignatureBlock({ role, name }: { role: string; name: string }) {
 
 export default async function LeaseAgreementPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("leases.manage");
   const { id } = await params;
+  const sp = await searchParams;
+  const first = (k: string) => {
+    const v = sp[k];
+    return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  };
+  const esignError = first("esign_error");
+  const esignMessage = first("esign_message");
 
   const [ctx, templates] = await Promise.all([
     buildAgreementVars(id),
@@ -66,6 +88,39 @@ export default async function LeaseAgreementPage({
   ]);
   if (!ctx) notFound();
   const { vars, lease, app } = ctx;
+
+  // The printable page needs leases.manage; the e-sign panel additionally
+  // needs esign.manage (manager+ by default) — hidden, not blocking.
+  const { actingRole } = await getDisplayRole();
+  const canEsign = hasCapability(actingRole, "esign.manage", app.rolePermissions);
+  const esign = canEsign ? await getLeaseSigningOverview(lease.id) : null;
+  let signedDocUrl: string | null = null;
+  if (esign?.completed?.signedDocumentId) {
+    try {
+      signedDocUrl =
+        (await getDocumentDownloadUrl(esign.completed.signedDocumentId))?.url ??
+        null;
+    } catch {
+      signedDocUrl = null; // storage unavailable — the panel still renders
+    }
+  }
+  const tz = lease.unit.property.timezone;
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: tz,
+    });
+  const fmtDateTime = (d: Date) =>
+    d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: tz,
+    });
 
   let logoUrl: string | null = null;
   if (app.logoDocumentId) {
@@ -97,6 +152,194 @@ export default async function LeaseAgreementPage({
         </Button>
         <GenerateDocxForm leaseId={lease.id} hasTemplate={templates.length > 0} />
       </div>
+
+      {canEsign && esign && (
+        <Card className="print-hidden">
+          <CardContent className="space-y-4 py-5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                E-signature
+              </h2>
+              {esign.completed && <Badge>Signed</Badge>}
+            </div>
+
+            {esignError && (
+              <Alert variant="destructive">
+                <AlertDescription>{esignError}</AlertDescription>
+              </Alert>
+            )}
+            {esignMessage && (
+              <Alert>
+                <AlertDescription>{esignMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            {esign.completed && (
+              <p className="text-sm">
+                {signingKindLabel(esign.completed.kind)
+                  .charAt(0)
+                  .toUpperCase() +
+                  signingKindLabel(esign.completed.kind).slice(1)}{" "}
+                fully signed
+                {esign.completed.completedAt &&
+                  ` on ${fmtDate(esign.completed.completedAt)}`}
+                .{" "}
+                {signedDocUrl ? (
+                  <a
+                    href={signedDocUrl}
+                    className="font-medium underline underline-offset-4"
+                  >
+                    Download the signed document
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">
+                    The signed document is on the Documents page.
+                  </span>
+                )}
+              </p>
+            )}
+
+            {esign.active ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {signingKindLabel(esign.active.kind)
+                    .charAt(0)
+                    .toUpperCase() +
+                    signingKindLabel(esign.active.kind).slice(1)}{" "}
+                  sent {fmtDate(esign.active.sentAt)} · expires{" "}
+                  {fmtDate(esign.active.expiresAt)}.
+                </p>
+                <div className="divide-y rounded-md border">
+                  {esign.active.signers.map((s) => {
+                    const channels = [
+                      s.phone ? "SMS" : null,
+                      s.email ? "email" : null,
+                    ].filter(Boolean);
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                      >
+                        <div>
+                          <div className="font-medium">{s.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {channels.length > 0 ? (
+                              <>
+                                via {channels.join(" + ")}
+                                {s.lastSentAt &&
+                                  ` · last sent ${fmtDateTime(s.lastSentAt)}`}
+                              </>
+                            ) : (
+                              <span className="text-destructive">
+                                no contact method on file
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {s.signedAt ? (
+                            <Badge>Signed {fmtDateTime(s.signedAt)}</Badge>
+                          ) : (
+                            <>
+                              <Badge variant="outline">Pending</Badge>
+                              <form action={resendEsignLinkAction}>
+                                <input
+                                  type="hidden"
+                                  name="leaseId"
+                                  value={lease.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="signerId"
+                                  value={s.id}
+                                />
+                                <Button type="submit" variant="outline" size="xs">
+                                  Resend
+                                </Button>
+                              </form>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <form action={cancelEsignRequestAction}>
+                  <input type="hidden" name="leaseId" value={lease.id} />
+                  <input
+                    type="hidden"
+                    name="requestId"
+                    value={esign.active.id}
+                  />
+                  <ConfirmSubmitButton confirmMessage="Cancel this signing request? Links already sent will stop working.">
+                    Cancel request
+                  </ConfirmSubmitButton>
+                </form>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {esign.expired && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>
+                      The previous request expired{" "}
+                      {fmtDate(esign.expired.expiresAt)} without all
+                      signatures.
+                    </span>
+                    <form action={cancelEsignRequestAction}>
+                      <input type="hidden" name="leaseId" value={lease.id} />
+                      <input
+                        type="hidden"
+                        name="requestId"
+                        value={esign.expired.id}
+                      />
+                      <ConfirmSubmitButton
+                        confirmMessage="Dismiss the expired signing request?"
+                        variant="outline"
+                      >
+                        Dismiss
+                      </ConfirmSubmitButton>
+                    </form>
+                  </div>
+                )}
+                <form
+                  action={sendEsignRequestAction}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <input type="hidden" name="leaseId" value={lease.id} />
+                  <select
+                    name="kind"
+                    defaultValue="lease"
+                    className="h-8 rounded-md border px-2 text-sm"
+                    aria-label="Agreement kind"
+                  >
+                    <option value="lease">Lease</option>
+                    <option value="renewal">Renewal</option>
+                  </select>
+                  <Button type="submit">Send for e-signature</Button>
+                </form>
+                {app.landlordSignatureName ? (
+                  <p className="text-xs text-muted-foreground">
+                    Each tenant gets a private signing link by SMS/email. Your
+                    saved landlord signature ({app.landlordSignatureName}) is
+                    applied automatically.
+                  </p>
+                ) : (
+                  <p className="text-xs text-destructive">
+                    No landlord signature is saved yet — set it up under{" "}
+                    <Link
+                      href="/settings/leases"
+                      className="font-medium underline underline-offset-4"
+                    >
+                      Settings → Leases
+                    </Link>{" "}
+                    before sending.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="space-y-8 py-8">

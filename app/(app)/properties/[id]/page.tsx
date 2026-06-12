@@ -68,6 +68,15 @@ export default async function PropertyDetail({
   if (!property) notFound();
   const { billing } = await getAppSettings();
 
+  // "$2,400.00/yr ($200.00/mo)" — /12n truncates sub-cent remainders (display only).
+  const yearlyWithMonthly = (cents: bigint | null) =>
+    cents != null
+      ? `${formatCurrency(cents, property.currency)}/yr (${formatCurrency(
+          cents / 12n,
+          property.currency,
+        )}/mo)`
+      : "—";
+
   // Tier list: units grouped under their building, natural sort throughout
   // ("Apt 2" before "Apt 10"), unassigned units last.
   const collator = new Intl.Collator(undefined, {
@@ -229,6 +238,34 @@ export default async function PropertyDetail({
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="pinsurance">Yearly insurance</Label>
+                  <Input
+                    id="pinsurance"
+                    name="yearlyInsurance"
+                    inputMode="decimal"
+                    placeholder="2400.00"
+                    defaultValue={
+                      property.yearlyInsuranceCents != null
+                        ? fromCents(property.yearlyInsuranceCents)
+                        : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ptaxes">Yearly property taxes</Label>
+                  <Input
+                    id="ptaxes"
+                    name="yearlyPropertyTax"
+                    inputMode="decimal"
+                    placeholder="3600.00"
+                    defaultValue={
+                      property.yearlyPropertyTaxCents != null
+                        ? fromCents(property.yearlyPropertyTaxCents)
+                        : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="ppurchase">Purchase date</Label>
                   <Input
                     id="ppurchase"
@@ -245,8 +282,9 @@ export default async function PropertyDetail({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Mortgage terms feed the Financials module (net income and payoff
-                projection). Leave blank when paid off / none.
+                Mortgage, insurance, and property-tax figures feed the Financials
+                module (monthly net income and payoff projection). Leave blank when
+                paid off / none.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="pnotes">Notes</Label>
@@ -324,6 +362,14 @@ export default async function PropertyDetail({
                     }`
                   : "None"
               }
+            />
+            <Field
+              label="Insurance"
+              value={yearlyWithMonthly(property.yearlyInsuranceCents)}
+            />
+            <Field
+              label="Property taxes"
+              value={yearlyWithMonthly(property.yearlyPropertyTaxCents)}
             />
             <Field
               label="Purchased"

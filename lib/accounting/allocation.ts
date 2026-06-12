@@ -28,6 +28,41 @@ export interface OpenCharge {
 /** Map of chargeEntryId -> net allocated cents (non-reversed). */
 export type AllocatedByCharge = Record<string, Cents>;
 
+/** A `reversal` ledger row that offsets part (or all) of another entry. */
+export interface ChargeReversalInput {
+  /** Negative amount that offsets the target entry. */
+  amountCents: Cents;
+  /** Ledger entry id the reversal points at (charge waives target a charge). */
+  reversesEntryId: string | null;
+}
+
+/**
+ * Net waiver reversals into the charges they target: a charge's effective
+ * amount = original + sum(reversals pointing at it) (reversal amounts are
+ * negative). Reversals that target anything other than one of `charges`
+ * (e.g. payment-void reversals) are ignored. Feed the result to
+ * {@link computeOpenCharges} so the waived portion stops aging, FIFO payment
+ * allocation, overdue reminders, and late-fee accrual.
+ */
+export function netReversalsIntoCharges(
+  charges: readonly ChargeInput[],
+  reversals: readonly ChargeReversalInput[],
+): ChargeInput[] {
+  if (reversals.length === 0) return [...charges];
+  const reversedByTarget = new Map<string, Cents>();
+  for (const r of reversals) {
+    if (!r.reversesEntryId) continue;
+    reversedByTarget.set(
+      r.reversesEntryId,
+      (reversedByTarget.get(r.reversesEntryId) ?? 0n) + r.amountCents,
+    );
+  }
+  return charges.map((c) => ({
+    ...c,
+    amountCents: c.amountCents + (reversedByTarget.get(c.entryId) ?? 0n),
+  }));
+}
+
 /** Compute outstanding-per-charge and return only open charges, oldest-first. */
 export function computeOpenCharges(
   charges: readonly ChargeInput[],

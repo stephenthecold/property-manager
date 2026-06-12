@@ -2,8 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
-import { saveLeaseAgreementText } from "@/lib/services/app-settings";
+import {
+  saveLandlordSignature,
+  saveLeaseAgreementText,
+} from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
+import { getFileStorage } from "@/lib/providers/storage";
+import { looksLikePng } from "@/lib/esign/artifact";
 import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
 import { DOCX_CONTENT_TYPE } from "@/lib/documents/docx-fill";
 
@@ -98,4 +103,107 @@ export async function uploadLeaseTemplateAction(
     ok: true,
     message: "Template uploaded. New generations will use this file.",
   };
+}
+
+// Landlord signature: a fixed storage key (overwrites are fine — there is only
+// ever one saved signature), referenced from AppSettings. NOT an
+// UploadedDocument: it isn't a lease/tenant record, just org branding-like
+// config consumed by e-sign sends.
+const LANDLORD_SIGNATURE_KEY = "signatures/landlord.png";
+const SIGNATURE_MAX_BYTES = 150 * 1024;
+const SIGNATURE_MAX_DATAURL_LENGTH =
+  Math.ceil((SIGNATURE_MAX_BYTES * 4) / 3) + 64;
+
+/**
+ * Save the landlord signature (typed name + optional drawn PNG from the
+ * signature pad). An empty pad keeps the currently stored image. Managers+
+ * (esign.manage) apply this signature when sending e-sign requests.
+ */
+export async function saveLandlordSignatureAction(
+  _prev: LeaseSettingsState,
+  fd: FormData,
+): Promise<LeaseSettingsState> {
+  await requireCapability("organization.settings");
+  const actor = await auditActor();
+
+  const name = String(fd.get("name") ?? "").trim();
+  if (!name) {
+    return { error: "Enter the landlord signature name (e.g. the legal name)." };
+  }
+  if (name.length > 120) {
+    return { error: "Signature name is too long (max 120 characters)." };
+  }
+
+  // undefined = keep the stored image; a key = replace it.
+  let imageKey: string | undefined;
+  const dataUrl = String(fd.get("signatureImage") ?? "");
+  if (dataUrl !== "") {
+    if (dataUrl.length > SIGNATURE_MAX_DATAURL_LENGTH) {
+      return { error: "Drawn signature is too large (max 150 KB)." };
+    }
+    const match = /^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
+    if (!match) {
+      return { error: "Drawn signature could not be read — please redraw it." };
+    }
+    const body = Buffer.from(match[1], "base64");
+    if (body.byteLength === 0 || body.byteLength > SIGNATURE_MAX_BYTES) {
+      return { error: "Drawn signature is too large (max 150 KB)." };
+    }
+    if (!looksLikePng(body)) {
+      return { error: "Drawn signature could not be read — please redraw it." };
+    }
+    try {
+      await getFileStorage().put({
+        key: LANDLORD_SIGNATURE_KEY,
+        body,
+        contentType: "image/png",
+      });
+      imageKey = LANDLORD_SIGNATURE_KEY;
+    } catch (e) {
+      console.error("[settings/leases] landlord signature upload failed:", e);
+      return {
+        error:
+          e instanceof Error && /storage is not configured/i.test(e.message)
+            ? "File storage is not configured (set STORAGE_PROVIDER=local or s3) — drawn signatures are unavailable. You can still save the typed name."
+            : "Could not store the drawn signature — check the server log.",
+      };
+    }
+  }
+
+  try {
+    await saveLandlordSignature(name, imageKey, actor);
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Failed to save the signature.",
+    };
+  }
+
+  revalidatePath("/settings/leases");
+  return {
+    ok: true,
+    message:
+      imageKey !== undefined
+        ? "Landlord signature saved (name + drawing)."
+        : "Landlord signature saved.",
+  };
+}
+
+/** Clear the saved landlord signature (name + drawn image reference). */
+export async function clearLandlordSignatureAction(
+  _prev: LeaseSettingsState,
+  _fd: FormData,
+): Promise<LeaseSettingsState> {
+  await requireCapability("organization.settings");
+  const actor = await auditActor();
+
+  try {
+    await saveLandlordSignature(null, null, actor);
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Failed to clear the signature.",
+    };
+  }
+
+  revalidatePath("/settings/leases");
+  return { ok: true, message: "Landlord signature cleared." };
 }

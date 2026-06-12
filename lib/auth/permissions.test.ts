@@ -25,6 +25,9 @@ const LEGACY_MIN: Record<Capability, Role> = {
   "financials.view": "finance",
   "financials.manage": "finance",
   "maintenance.manage": "manager",
+  // esign.manage is new (no true legacy gate); manager mirrors leases.manage,
+  // matching the product rule that managers+ sign the landlord side.
+  "esign.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",

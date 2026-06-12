@@ -3,6 +3,7 @@ import {
   agingFromOpenCharges,
   type ChargeInput,
   computeOpenCharges,
+  netReversalsIntoCharges,
   planFifoAllocation,
 } from "@/lib/accounting/allocation";
 
@@ -20,6 +21,67 @@ describe("computeOpenCharges", () => {
     expect(open.map((c) => c.entryId)).toEqual(["feb", "mar"]); // jan fully paid
     expect(open[0].outstandingCents).toBe(70000n);
     expect(open[1].outstandingCents).toBe(120000n);
+  });
+});
+
+describe("netReversalsIntoCharges", () => {
+  it("a full waive zeroes the charge's outstanding", () => {
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -120000n, reversesEntryId: "jan" },
+    ]);
+    const open = computeOpenCharges(netted, {});
+    expect(open.map((c) => c.entryId)).toEqual(["feb", "mar"]); // jan settled
+  });
+
+  it("a partial waive reduces the outstanding", () => {
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -20000n, reversesEntryId: "jan" },
+    ]);
+    const open = computeOpenCharges(netted, {});
+    expect(open[0]).toMatchObject({ entryId: "jan", outstandingCents: 100000n });
+  });
+
+  it("stacks multiple partial waives on the same charge", () => {
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -20000n, reversesEntryId: "jan" },
+      { amountCents: -30000n, reversesEntryId: "jan" },
+    ]);
+    expect(netted.find((c) => c.entryId === "jan")?.amountCents).toBe(70000n);
+  });
+
+  it("interacts with existing allocations; outstanding never goes negative", () => {
+    // jan: 120000 charged, 50000 already paid, 70000 waived => fully settled.
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -70000n, reversesEntryId: "jan" },
+    ]);
+    const open = computeOpenCharges(netted, { jan: 50000n });
+    expect(open.map((c) => c.entryId)).toEqual(["feb", "mar"]);
+    // Even over-reversed charges are simply filtered out (>0n), never negative.
+    const over = computeOpenCharges(
+      netReversalsIntoCharges(charges, [
+        { amountCents: -130000n, reversesEntryId: "jan" },
+      ]),
+      { jan: 50000n },
+    );
+    expect(over.every((c) => c.outstandingCents > 0n)).toBe(true);
+    expect(over.map((c) => c.entryId)).toEqual(["feb", "mar"]);
+  });
+
+  it("leaves charges without reversals unchanged", () => {
+    expect(netReversalsIntoCharges(charges, [])).toEqual(charges);
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -10000n, reversesEntryId: "feb" },
+    ]);
+    expect(netted.find((c) => c.entryId === "jan")?.amountCents).toBe(120000n);
+    expect(netted.find((c) => c.entryId === "mar")?.amountCents).toBe(120000n);
+  });
+
+  it("ignores reversals pointing at a non-charge id (e.g. a voided payment)", () => {
+    const netted = netReversalsIntoCharges(charges, [
+      { amountCents: -120000n, reversesEntryId: "some-payment-entry" },
+      { amountCents: -5000n, reversesEntryId: null },
+    ]);
+    expect(netted).toEqual(charges);
   });
 });
 

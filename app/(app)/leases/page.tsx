@@ -233,9 +233,13 @@ export default async function LeasesPage({
                 ) : l.status === "active" || l.status === "month_to_month" ? (
                   <form action={terminateLease}>
                     <input type="hidden" name="leaseId" value={l.id} />
-                    <Button type="submit" variant="outline" size="sm">
+                    <ConfirmSubmitButton
+                      variant="outline"
+                      size="sm"
+                      confirmMessage="Terminate this lease? The unit becomes vacant and billing stops; this cannot be undone from the UI."
+                    >
                       Terminate
-                    </Button>
+                    </ConfirmSubmitButton>
                   </form>
                 ) : terminated ? (
                   <form action={archiveLeaseAction}>

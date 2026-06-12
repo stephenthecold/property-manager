@@ -30,18 +30,32 @@ async function loadOpenChargesTx(
   tx: Tx,
   leaseId: string,
 ): Promise<OpenCharge[]> {
-  const charges = await tx.ledgerEntry.findMany({
-    where: {
-      leaseId,
-      // Positive adjustments (e.g. opening balance on a backdated lease) are
-      // charge-like and must receive FIFO allocations, matching the snapshot
-      // logic in lib/services/accounting.ts.
-      OR: [
-        { entryType: { in: ["rent_charge", "late_fee"] } },
-        { entryType: "adjustment", amountCents: { gt: 0 } },
-      ],
-    },
-  });
+  const [charges, reversals] = await Promise.all([
+    tx.ledgerEntry.findMany({
+      where: {
+        leaseId,
+        // Positive adjustments (e.g. opening balance on a backdated lease) are
+        // charge-like and must receive FIFO allocations, matching the snapshot
+        // logic in lib/services/accounting.ts.
+        OR: [
+          { entryType: { in: ["rent_charge", "late_fee"] } },
+          { entryType: "adjustment", amountCents: { gt: 0 } },
+        ],
+      },
+    }),
+    // Waived portions (reversal entries targeting a charge) must not receive
+    // FIFO allocations — same netting the snapshot/late-fee paths apply.
+    tx.ledgerEntry.findMany({
+      where: { leaseId, entryType: "reversal", reversesEntryId: { not: null } },
+      select: { amountCents: true, reversesEntryId: true },
+    }),
+  ]);
+  const reversedByCharge: Record<string, bigint> = {};
+  for (const r of reversals) {
+    if (!r.reversesEntryId) continue;
+    reversedByCharge[r.reversesEntryId] =
+      (reversedByCharge[r.reversesEntryId] ?? 0n) + r.amountCents;
+  }
   const allocations = await tx.chargeAllocation.findMany({
     where: { chargeEntry: { leaseId } },
   });
@@ -59,7 +73,11 @@ async function loadOpenChargesTx(
     .map((c) => ({
       entryId: c.id,
       dueDate: c.effectiveDate,
-      outstandingCents: c.amountCents - (allocatedByCharge[c.id] ?? 0n),
+      // Reversal amounts are negative, so adding them shrinks the charge.
+      outstandingCents:
+        c.amountCents +
+        (reversedByCharge[c.id] ?? 0n) -
+        (allocatedByCharge[c.id] ?? 0n),
     }))
     .filter((c) => c.outstandingCents > 0n)
     .sort((a, b) => {

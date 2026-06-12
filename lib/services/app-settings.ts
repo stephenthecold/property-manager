@@ -87,6 +87,10 @@ export interface ResolvedAppSettings {
   /** Custom lease-agreement clause text; null = the shipped default
    *  (DEFAULT_LEASE_AGREEMENT_TEXT in lib/config/lease-agreement.ts). */
   leaseAgreementText: string | null;
+  /** Saved landlord signature, auto-applied to outgoing e-sign requests. */
+  landlordSignatureName: string | null;
+  /** Storage key of the drawn landlord signature PNG (optional). */
+  landlordSignatureImageKey: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -176,6 +180,8 @@ async function resolve(): Promise<ResolvedAppSettings> {
     emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
     templates,
     leaseAgreementText: row?.leaseAgreementText ?? null,
+    landlordSignatureName: row?.landlordSignatureName ?? null,
+    landlordSignatureImageKey: row?.landlordSignatureImageKey ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     billing: {
@@ -461,6 +467,52 @@ export async function saveLeaseAgreementText(
         ? { leaseAgreementText: before.leaseAgreementText }
         : undefined,
       after: { leaseAgreementText: text },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/**
+ * Persist the saved landlord signature (typed name + optional drawn-PNG
+ * storage key). `imageKey === undefined` keeps the stored image; `null`
+ * clears it. Passing `name: null` clears the signature entirely. Managers+
+ * (esign.manage) apply this signature when sending e-sign requests.
+ */
+export async function saveLandlordSignature(
+  name: string | null,
+  imageKey: string | null | undefined,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    landlordSignatureName: name,
+    ...(imageKey !== undefined ? { landlordSignatureImageKey: imageKey } : {}),
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.landlord_signature.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? {
+            landlordSignatureName: before.landlordSignatureName,
+            landlordSignatureImageKey: before.landlordSignatureImageKey,
+          }
+        : undefined,
+      after: {
+        landlordSignatureName: name,
+        landlordSignatureImageKey:
+          imageKey !== undefined
+            ? imageKey
+            : (before?.landlordSignatureImageKey ?? null),
+      },
     });
   });
   invalidateAppSettingsCache();

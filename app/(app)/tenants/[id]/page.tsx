@@ -4,7 +4,11 @@ import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
-import { leaseSnapshot } from "@/lib/services/accounting";
+import { computeOpenCharges } from "@/lib/accounting/allocation";
+import {
+  loadLeaseAccounting,
+  snapshotFromAccounting,
+} from "@/lib/services/accounting";
 import { listDocuments } from "@/lib/services/documents";
 import {
   buildReminderVars,
@@ -28,6 +32,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
+import { WaiveChargeDialog } from "@/components/app/waive-charge-dialog";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -128,14 +134,28 @@ export default async function TenantDetail({
       })
     : [];
 
-  const snap = activeLease
-    ? await leaseSnapshot(
-        activeLease,
-        activeLease.unit,
-        now,
-        activeLease.unit.property.timezone,
-      )
+  // One accounting load powers both the snapshot and the per-charge
+  // outstanding map for the ledger's Waive controls (no per-row queries).
+  const accounting = activeLease
+    ? await loadLeaseAccounting(activeLease.id)
     : null;
+  const snap =
+    activeLease && accounting
+      ? snapshotFromAccounting(
+          activeLease,
+          activeLease.unit,
+          now,
+          activeLease.unit.property.timezone,
+          accounting,
+        )
+      : null;
+  const outstandingByEntry = new Map<string, bigint>(
+    accounting
+      ? computeOpenCharges(accounting.charges, accounting.allocatedByCharge).map(
+          (c) => [c.entryId, c.outstandingCents] as const,
+        )
+      : [],
+  );
 
   // Independent reads for this tenant — run them together instead of serially.
   const [ledger, payments, documents, reminders] = await Promise.all([
@@ -444,12 +464,13 @@ export default async function TenantDetail({
                       </Link>
                       <form action={removeCoTenant}>
                         <input type="hidden" name="leaseTenantId" value={ct.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                        <ConfirmSubmitButton
+                          variant="ghost"
+                          size="xs"
+                          confirmMessage={`Remove co-tenant ${ct.tenant.firstName} ${ct.tenant.lastName} from this lease?`}
                         >
                           remove
-                        </button>
+                        </ConfirmSubmitButton>
                       </form>
                     </li>
                   ))}
@@ -697,9 +718,13 @@ export default async function TenantDetail({
                           </span>
                           <form action={removeLeaseDeposit}>
                             <input type="hidden" name="depositId" value={d.id} />
-                            <Button type="submit" variant="outline" size="xs">
+                            <ConfirmSubmitButton
+                              variant="outline"
+                              size="xs"
+                              confirmMessage={`Remove the ${d.label} deposit (${formatCurrency(d.amountCents, currency)}) from this lease?`}
+                            >
                               Remove
-                            </Button>
+                            </ConfirmSubmitButton>
                           </form>
                         </li>
                       ))}
@@ -780,36 +805,63 @@ export default async function TenantDetail({
                     className: "hidden md:table-cell",
                   },
                   { key: "amount", label: "Amount", align: "right", numeric: true },
+                  { key: "action", label: "", align: "right", sortable: false },
                 ]}
-                rows={ledger.map((e) => ({
-                  key: e.id,
-                  sortValues: [
-                    e.effectiveDate.toISOString(),
-                    e.entryType,
-                    e.periodKey,
-                    null,
-                    String(e.amountCents),
-                  ],
-                  cells: [
-                    e.effectiveDate.toLocaleDateString(),
-                    <span key="t" className="capitalize">
-                      {e.entryType.replace("_", " ")}
-                    </span>,
-                    e.periodKey ?? "—",
-                    <span key="d" className="text-muted-foreground">
-                      {e.reason ?? e.description ?? ""}
-                    </span>,
-                    <span
-                      key="a"
-                      className={cn(
-                        "tabular-nums",
-                        e.amountCents < 0n && "text-emerald-600 dark:text-emerald-400",
-                      )}
-                    >
-                      {formatCurrency(e.amountCents, currency)}
-                    </span>,
-                  ],
-                }))}
+                rows={ledger.map((e) => {
+                  // Open charges (waiver-netted, allocation-netted) get a
+                  // Waive control; everything else gets an empty cell.
+                  const outstandingCents = outstandingByEntry.get(e.id) ?? 0n;
+                  const waivable =
+                    (e.entryType === "rent_charge" || e.entryType === "late_fee") &&
+                    outstandingCents > 0n;
+                  return {
+                    key: e.id,
+                    sortValues: [
+                      e.effectiveDate.toISOString(),
+                      e.entryType,
+                      e.periodKey,
+                      null,
+                      String(e.amountCents),
+                      null,
+                    ],
+                    cells: [
+                      e.effectiveDate.toLocaleDateString(),
+                      <span key="t" className="capitalize">
+                        {e.entryType.replace("_", " ")}
+                      </span>,
+                      e.periodKey ?? "—",
+                      <span key="d" className="text-muted-foreground">
+                        {e.reason ?? e.description ?? ""}
+                      </span>,
+                      <span
+                        key="a"
+                        className={cn(
+                          "tabular-nums",
+                          e.amountCents < 0n && "text-emerald-600 dark:text-emerald-400",
+                        )}
+                      >
+                        {formatCurrency(e.amountCents, currency)}
+                      </span>,
+                      waivable ? (
+                        <WaiveChargeDialog
+                          key="w"
+                          entryId={e.id}
+                          chargeLabel={
+                            e.entryType === "late_fee" ? "Late fee" : "Rent charge"
+                          }
+                          periodLabel={e.periodKey ?? "—"}
+                          outstanding={fromCents(outstandingCents)}
+                          outstandingFormatted={formatCurrency(
+                            outstandingCents,
+                            currency,
+                          )}
+                        />
+                      ) : (
+                        <span key="w" />
+                      ),
+                    ],
+                  };
+                })}
               />
             </CardContent>
           </Card>
@@ -875,9 +927,13 @@ export default async function TenantDetail({
                           className="h-8 w-28 rounded border bg-card px-2 text-xs dark:bg-input/30"
                           required
                         />
-                        <Button type="submit" variant="outline" size="sm">
+                        <ConfirmSubmitButton
+                          variant="outline"
+                          size="sm"
+                          confirmMessage={`Void this ${formatCurrency(p.amountCents, currency)} payment? An offsetting reversal is added; the original is kept.`}
+                        >
                           Void
-                        </Button>
+                        </ConfirmSubmitButton>
                       </form>
                     ) : (
                       <span key="ac" className="text-xs text-muted-foreground">

@@ -91,8 +91,14 @@ export default async function DashboardPage() {
     getDashboard(now),
     showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
   ]);
+  // Fixed monthly costs = mortgage + insurance + taxes (yearly figures /12).
+  const fixedCostsMonthlyCents = profit
+    ? profit.mortgageMonthlyCents +
+      profit.insuranceMonthlyCents +
+      profit.taxesMonthlyCents
+    : 0n;
   const netMonthCents = profit
-    ? d.monthCollectedCents - profit.mortgageMonthlyCents - profit.expensesMonthCents
+    ? d.monthCollectedCents - fixedCostsMonthlyCents - profit.expensesMonthCents
     : 0n;
 
   return (
@@ -144,14 +150,15 @@ export default async function DashboardPage() {
               tone="amber"
             />
             <Stat
-              label="Mortgage / month"
-              value={formatCurrency(profit.mortgageMonthlyCents)}
+              label="Fixed costs / month"
+              value={formatCurrency(fixedCostsMonthlyCents)}
+              hint={`mortgage ${formatCurrency(profit.mortgageMonthlyCents)} · insurance ${formatCurrency(profit.insuranceMonthlyCents)} · taxes ${formatCurrency(profit.taxesMonthlyCents)}`}
               tone="indigo"
             />
             <Stat
               label="Net this month"
               value={formatCurrency(netMonthCents)}
-              hint="collected − mortgage − expenses"
+              hint="collected − fixed costs − expenses"
               tone="emerald"
               valueClassName={
                 netMonthCents < 0n

@@ -25,8 +25,12 @@ export interface PropertyFinancialRow {
   expectedMonthlyCents: bigint;
   collectedMonthCents: bigint;
   mortgageMonthlyCents: bigint;
+  /** yearlyInsuranceCents / 12 (bigint division truncates — pennies/yr, acceptable). */
+  insuranceMonthlyCents: bigint;
+  /** yearlyPropertyTaxCents / 12 (bigint division truncates — pennies/yr, acceptable). */
+  taxesMonthlyCents: bigint;
   expensesMonthCents: bigint;
-  /** collected − mortgage − expenses (this month, cash basis). */
+  /** collected − mortgage − insurance − taxes − expenses (this month, cash basis). */
   netMonthCents: bigint;
 }
 
@@ -44,6 +48,8 @@ export interface FinancialSummary {
     expectedMonthlyCents: bigint;
     collectedMonthCents: bigint;
     mortgageMonthlyCents: bigint;
+    insuranceMonthlyCents: bigint;
+    taxesMonthlyCents: bigint;
     expensesMonthCents: bigint;
     netMonthCents: bigint;
   };
@@ -98,6 +104,10 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
         : 0n;
     const collected = paymentsMap.get(p.id) ?? 0n;
     const expenses = expensesMap.get(p.id) ?? 0n;
+    // Yearly figures spread evenly across months; bigint division truncates
+    // (up to 11¢/yr understated) — acceptable for a planning view.
+    const insurance = (p.yearlyInsuranceCents ?? 0n) / 12n;
+    const taxes = (p.yearlyPropertyTaxCents ?? 0n) / 12n;
     return {
       propertyId: p.id,
       propertyName: p.name,
@@ -106,8 +116,10 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
       expectedMonthlyCents: expected,
       collectedMonthCents: collected,
       mortgageMonthlyCents: mortgage,
+      insuranceMonthlyCents: insurance,
+      taxesMonthlyCents: taxes,
       expensesMonthCents: expenses,
-      netMonthCents: collected - mortgage - expenses,
+      netMonthCents: collected - mortgage - insurance - taxes - expenses,
     };
   });
 
@@ -115,11 +127,17 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
     expectedMonthlyCents: sumCents(rows.map((r) => r.expectedMonthlyCents)),
     collectedMonthCents: sumCents(rows.map((r) => r.collectedMonthCents)),
     mortgageMonthlyCents: sumCents(rows.map((r) => r.mortgageMonthlyCents)),
+    insuranceMonthlyCents: sumCents(rows.map((r) => r.insuranceMonthlyCents)),
+    taxesMonthlyCents: sumCents(rows.map((r) => r.taxesMonthlyCents)),
     expensesMonthCents: sumCents(rows.map((r) => r.expensesMonthCents)),
     netMonthCents: 0n,
   };
   totals.netMonthCents =
-    totals.collectedMonthCents - totals.mortgageMonthlyCents - totals.expensesMonthCents;
+    totals.collectedMonthCents -
+    totals.mortgageMonthlyCents -
+    totals.insuranceMonthlyCents -
+    totals.taxesMonthlyCents -
+    totals.expensesMonthCents;
 
   return { rows, totals, mortgages };
 }
@@ -128,6 +146,10 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
 export interface ProfitSnapshot {
   expensesMonthCents: bigint;
   mortgageMonthlyCents: bigint;
+  /** Sum over all properties of yearlyInsuranceCents / 12 (truncating bigint division). */
+  insuranceMonthlyCents: bigint;
+  /** Sum over all properties of yearlyPropertyTaxCents / 12 (truncating bigint division). */
+  taxesMonthlyCents: bigint;
 }
 
 export async function getProfitSnapshot(now: Date): Promise<ProfitSnapshot> {
@@ -137,16 +159,30 @@ export async function getProfitSnapshot(now: Date): Promise<ProfitSnapshot> {
       where: { incurredOn: { gte: monthStart(now) } },
     }),
     prisma.property.findMany({
-      where: { monthlyMortgageCents: { gt: 0n } },
-      select: { monthlyMortgageCents: true, mortgageMaturityDate: true },
+      select: {
+        monthlyMortgageCents: true,
+        mortgageMaturityDate: true,
+        yearlyInsuranceCents: true,
+        yearlyPropertyTaxCents: true,
+      },
     }),
   ]);
   return {
     expensesMonthCents: expenseAgg._sum.amountCents ?? 0n,
     mortgageMonthlyCents: sumCents(
       properties
-        .filter((p) => mortgageActive(p.mortgageMaturityDate, now))
+        .filter(
+          (p) =>
+            (p.monthlyMortgageCents ?? 0n) > 0n &&
+            mortgageActive(p.mortgageMaturityDate, now),
+        )
         .map((p) => p.monthlyMortgageCents ?? 0n),
+    ),
+    insuranceMonthlyCents: sumCents(
+      properties.map((p) => (p.yearlyInsuranceCents ?? 0n) / 12n),
+    ),
+    taxesMonthlyCents: sumCents(
+      properties.map((p) => (p.yearlyPropertyTaxCents ?? 0n) / 12n),
     ),
   };
 }

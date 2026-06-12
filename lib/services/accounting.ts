@@ -3,6 +3,7 @@ import {
   agingFromOpenCharges,
   type AgingBuckets,
   type ChargeInput,
+  type ChargeReversalInput,
   computeOpenCharges,
   type AllocatedByCharge,
   daysSinceLastPayment,
@@ -10,6 +11,7 @@ import {
   type AccountStatus,
   type LedgerEntryInput,
   netBalanceCents,
+  netReversalsIntoCharges,
   tenantCreditCents,
   totalOwedCents,
 } from "@/lib/accounting";
@@ -40,6 +42,7 @@ export async function loadLeaseAccounting(
         amountCents: true,
         effectiveDate: true,
         periodKey: true,
+        reversesEntryId: true,
       },
     }),
     // Active (non-reversed, non-reversing) allocations summed per charge.
@@ -57,7 +60,13 @@ export async function loadLeaseAccounting(
     periodKey: r.periodKey,
   }));
 
-  const charges = chargesFromEntries(rows);
+  // Waiver reversals net into their target charges, so every consumer of the
+  // open-charge math (aging, snapshots, reminders, late fees) sees the waived
+  // portion as settled.
+  const charges = netReversalsIntoCharges(
+    chargesFromEntries(rows),
+    chargeReversalsFromEntries(rows),
+  );
   const allocatedByCharge = allocatedByChargeFrom(allAllocations);
 
   return { entries, charges, allocatedByCharge };
@@ -84,6 +93,22 @@ function chargesFromEntries(
       amountCents: r.amountCents,
       dueDate: r.effectiveDate,
     }));
+}
+
+/**
+ * Reversal rows that point at another entry (charge waives, payment voids).
+ * `netReversalsIntoCharges` ignores ones whose target isn't a charge.
+ */
+function chargeReversalsFromEntries(
+  rows: {
+    entryType: string;
+    amountCents: bigint;
+    reversesEntryId: string | null;
+  }[],
+): ChargeReversalInput[] {
+  return rows.filter(
+    (r) => r.entryType === "reversal" && r.reversesEntryId != null,
+  );
 }
 
 /** Sum active (non-reversed, non-reversing) allocations per charge entry. */
@@ -154,6 +179,7 @@ export async function batchLeaseSnapshots<
         amountCents: true,
         effectiveDate: true,
         periodKey: true,
+        reversesEntryId: true,
       },
     }),
     prisma.chargeAllocation.findMany({
@@ -188,7 +214,10 @@ export async function batchLeaseSnapshots<
         effectiveDate: r.effectiveDate,
         periodKey: r.periodKey,
       })),
-      charges: chargesFromEntries(leaseRows),
+      charges: netReversalsIntoCharges(
+        chargesFromEntries(leaseRows),
+        chargeReversalsFromEntries(leaseRows),
+      ),
       allocatedByCharge: allocatedByChargeFrom(allocsByLease.get(lease.id) ?? []),
     };
     result.set(
@@ -199,8 +228,12 @@ export async function batchLeaseSnapshots<
   return result;
 }
 
-/** Pure snapshot computation from already-loaded accounting data. */
-function snapshotFromAccounting(
+/**
+ * Pure snapshot computation from already-loaded accounting data. Exported so
+ * pages that need the per-charge open amounts too (e.g. the tenant ledger's
+ * Waive controls) can share one `loadLeaseAccounting` call.
+ */
+export function snapshotFromAccounting(
   lease: SnapshotLease,
   unit: Pick<Unit, "occupancyStatus">,
   now: Date,
@@ -209,13 +242,17 @@ function snapshotFromAccounting(
 ): LeaseSnapshot {
   const open = computeOpenCharges(charges, allocatedByCharge);
 
-  // Current period = most recent rent_charge.
+  // Current period = most recent rent_charge. Outstanding uses the EFFECTIVE
+  // (waiver-netted) amount from `charges`, not the raw entry amount, so a
+  // waived current charge reads as settled (status, reminders, dashboards).
+  const effectiveAmountById = new Map(charges.map((c) => [c.entryId, c.amountCents]));
   const rentCharges = entries
     .filter((e) => e.entryType === "rent_charge")
     .sort((a, b) => b.effectiveDate.getTime() - a.effectiveDate.getTime());
   const current = rentCharges[0] ?? null;
   const currentOutstanding = current
-    ? (current.amountCents - (allocatedByCharge[current.id] ?? 0n))
+    ? (effectiveAmountById.get(current.id) ?? current.amountCents) -
+      (allocatedByCharge[current.id] ?? 0n)
     : 0n;
   const currentPaid = current ? (allocatedByCharge[current.id] ?? 0n) : 0n;
 

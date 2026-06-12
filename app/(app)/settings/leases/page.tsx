@@ -1,12 +1,14 @@
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listDocuments } from "@/lib/services/documents";
+import { getFileStorage } from "@/lib/providers/storage";
 import {
   DEFAULT_LEASE_AGREEMENT_TEXT,
   LEASE_AGREEMENT_PLACEHOLDERS,
 } from "@/lib/config/lease-agreement";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  LandlordSignatureForm,
   LeaseAgreementTextForm,
   LeaseTemplateUploadForm,
 } from "./lease-settings-forms";
@@ -21,6 +23,17 @@ export default async function LeaseSettingsPage() {
     listDocuments({ uploadType: "lease_template" }),
   ]);
   const currentTemplate = templates[0] ?? null;
+
+  let signatureUrl: string | null = null;
+  if (app.landlordSignatureImageKey) {
+    try {
+      signatureUrl = await getFileStorage().getSignedUrl(
+        app.landlordSignatureImageKey,
+      );
+    } catch {
+      signatureUrl = null; // storage unavailable — the card still renders
+    }
+  }
 
   return (
     <div className="w-full max-w-3xl space-y-4">
@@ -69,6 +82,18 @@ export default async function LeaseSettingsPage() {
             </p>
           )}
           <LeaseTemplateUploadForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Landlord signature</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LandlordSignatureForm
+            currentName={app.landlordSignatureName}
+            signatureUrl={signatureUrl}
+          />
         </CardContent>
       </Card>
     </div>
