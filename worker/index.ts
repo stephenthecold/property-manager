@@ -1,7 +1,9 @@
 import "dotenv/config";
 import cron from "node-cron";
 import { runBilling } from "@/lib/services/billing";
+import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import { runScheduledReminders } from "@/lib/services/reminders";
+import { runWeeklyStaffDigest } from "@/lib/services/staff-digest";
 
 /**
  * Dedicated billing worker: a daily idempotent run that generates due rent
@@ -13,6 +15,7 @@ import { runScheduledReminders } from "@/lib/services/reminders";
 
 const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
 const REMINDER_SCHEDULE = process.env.REMINDER_CRON ?? "0 9 * * *"; // 09:00 daily
+const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
 
 async function runOnce(): Promise<void> {
   try {
@@ -34,11 +37,32 @@ async function runRemindersOnce(): Promise<void> {
   } catch (e) {
     console.error("[worker] reminder run failed:", e);
   }
+  // Maintenance notices share the reminder cadence and idempotency model, so
+  // a failure in one sweep never blocks the other.
+  try {
+    const res = await runMaintenanceReminders(new Date());
+    console.log(
+      `[worker] maintenance reminders: sent=${res.sent} failed=${res.failed} skipped=${res.skipped}`,
+    );
+  } catch (e) {
+    console.error("[worker] maintenance reminder run failed:", e);
+  }
+}
+
+async function runStaffDigestOnce(): Promise<void> {
+  try {
+    const res = await runWeeklyStaffDigest(new Date());
+    console.log(
+      `[worker] staff digest: sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+    );
+  } catch (e) {
+    console.error("[worker] staff digest failed:", e);
+  }
 }
 
 async function main(): Promise<void> {
   console.log(
-    `[worker] starting (billing="${SCHEDULE}", reminders="${REMINDER_SCHEDULE}")`,
+    `[worker] starting (billing="${SCHEDULE}", reminders="${REMINDER_SCHEDULE}", staffDigest="${STAFF_DIGEST_SCHEDULE}")`,
   );
   await runOnce(); // startup back-fill
   await runRemindersOnce(); // startup catch-up (idempotent, duplicates skip)
@@ -47,6 +71,11 @@ async function main(): Promise<void> {
   });
   cron.schedule(REMINDER_SCHEDULE, () => {
     void runRemindersOnce();
+  });
+  // Cron-only (no startup run): the digest has no per-send idempotency row,
+  // so running it at boot would re-email staff on every container restart.
+  cron.schedule(STAFF_DIGEST_SCHEDULE, () => {
+    void runStaffDigestOnce();
   });
 }
 

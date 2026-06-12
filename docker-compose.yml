@@ -97,6 +97,7 @@ services:
       <<: *app-env
       BILLING_CRON: "${BILLING_CRON:-0 1 * * *}"
       REMINDER_CRON: "${REMINDER_CRON:-0 9 * * *}"
+      STAFF_DIGEST_CRON: "${STAFF_DIGEST_CRON:-0 9 * * 1}"
     volumes:
       - uploads:/data/uploads
     command: ["npm", "run", "worker"]

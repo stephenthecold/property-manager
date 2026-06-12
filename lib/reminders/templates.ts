@@ -35,6 +35,25 @@ export function buildReminderVars(i: {
   };
 }
 
+/** Vars for the maintenance template (no money fields — schedule context only). */
+export function buildMaintenanceVars(i: {
+  tenantFirstName: string;
+  tenantLastName: string;
+  propertyName: string;
+  unitLabel: string;
+  maintenanceTitle: string;
+  maintenanceDateFormatted: string;
+}): TemplateVars {
+  return {
+    tenant_name: `${i.tenantFirstName} ${i.tenantLastName}`.trim(),
+    first_name: i.tenantFirstName,
+    property: i.propertyName,
+    unit: i.unitLabel,
+    maintenance_title: i.maintenanceTitle,
+    maintenance_date: i.maintenanceDateFormatted,
+  };
+}
+
 // `manual` is intentionally empty: the UI supplies the body for manual sends.
 export const DEFAULT_TEMPLATES: Record<ReminderType, string> = {
   rent_due_soon:
@@ -46,4 +65,6 @@ export const DEFAULT_TEMPLATES: Record<ReminderType, string> = {
   payment_receipt:
     "Hi {{first_name}}, we received your payment for {{property}} {{unit}}. Remaining balance: {{balance}}. Thank you!",
   manual: "",
+  maintenance:
+    "Hi {{first_name}}, scheduled maintenance at {{property}} {{unit}}: {{maintenance_title}} on {{maintenance_date}}. Please plan for access. Thank you!",
 };
