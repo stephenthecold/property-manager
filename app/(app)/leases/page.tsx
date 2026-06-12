@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { formatCurrency } from "@/lib/money";
+import { formatCurrency, sumCents } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { LeaseStatus } from "@/lib/generated/prisma/enums";
 import { terminateLease } from "./actions";
@@ -42,7 +42,11 @@ export default async function LeasesPage({
   const leases = await prisma.lease.findMany({
     where,
     orderBy: [{ status: "asc" }, { startDate: "desc" }],
-    include: { tenant: true, unit: { include: { property: true } } },
+    include: {
+      tenant: true,
+      unit: { include: { property: true } },
+      deposits: true,
+    },
   });
 
   return (
@@ -102,6 +106,13 @@ export default async function LeasesPage({
           { key: "unit", label: "Unit" },
           { key: "rent", label: "Rent", align: "right", numeric: true },
           {
+            key: "deposits",
+            label: "Deposits",
+            align: "right",
+            numeric: true,
+            className: "hidden md:table-cell",
+          },
+          {
             key: "dueDay",
             label: "Due day",
             numeric: true,
@@ -110,42 +121,65 @@ export default async function LeasesPage({
           { key: "status", label: "Status" },
           { key: "action", label: "Action", align: "right", sortable: false },
         ]}
-        rows={leases.map((l) => ({
-          key: l.id,
-          sortValues: [
-            `${l.tenant.lastName}, ${l.tenant.firstName}`,
-            `${l.unit.property.name} · ${l.unit.unitNumber}`,
-            String(l.rentAmountCents),
-            l.dueDay,
-            l.status,
-            null,
-          ],
-          cells: [
-            <Link
-              key="t"
-              href={`/tenants/${l.tenantId}`}
-              className="font-medium hover:underline"
-            >
-              {l.tenant.firstName} {l.tenant.lastName}
-            </Link>,
-            `${l.unit.property.name} · ${l.unit.unitNumber}`,
-            <span key="r" className="tabular-nums">
-              {formatCurrency(l.rentAmountCents, l.unit.property.currency)}
-            </span>,
-            l.dueDay,
-            <span key="s" className="capitalize">
-              {l.status.replace("_", " ")}
-            </span>,
-            (l.status === "active" || l.status === "month_to_month") && (
-              <form key="a" action={terminateLease}>
-                <input type="hidden" name="leaseId" value={l.id} />
-                <Button type="submit" variant="outline" size="sm">
-                  Terminate
-                </Button>
-              </form>
-            ),
-          ],
-        }))}
+        rows={leases.map((l) => {
+          const depositsHeldCents = sumCents([
+            l.securityDepositCents,
+            ...l.deposits.map((d) => d.amountCents),
+          ]);
+          return {
+            key: l.id,
+            sortValues: [
+              `${l.tenant.lastName}, ${l.tenant.firstName}`,
+              `${l.unit.property.name} · ${l.unit.unitNumber}`,
+              String(l.rentAmountCents),
+              String(depositsHeldCents),
+              l.dueDay,
+              l.status,
+              null,
+            ],
+            cells: [
+              <Link
+                key="t"
+                href={`/tenants/${l.tenantId}`}
+                className="font-medium hover:underline"
+              >
+                {l.tenant.firstName} {l.tenant.lastName}
+              </Link>,
+              `${l.unit.property.name} · ${l.unit.unitNumber}`,
+              <span key="r" className="tabular-nums">
+                {formatCurrency(l.rentAmountCents, l.unit.property.currency)}
+              </span>,
+              <span
+                key="dep"
+                className="tabular-nums"
+                title={
+                  l.deposits.length > 0
+                    ? `Security ${formatCurrency(l.securityDepositCents, l.unit.property.currency)} + ${l.deposits
+                        .map(
+                          (d) =>
+                            `${d.label} ${formatCurrency(d.amountCents, l.unit.property.currency)}`,
+                        )
+                        .join(" + ")}`
+                    : undefined
+                }
+              >
+                {formatCurrency(depositsHeldCents, l.unit.property.currency)}
+              </span>,
+              l.dueDay,
+              <span key="s" className="capitalize">
+                {l.status.replace("_", " ")}
+              </span>,
+              (l.status === "active" || l.status === "month_to_month") && (
+                <form key="a" action={terminateLease}>
+                  <input type="hidden" name="leaseId" value={l.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    Terminate
+                  </Button>
+                </form>
+              ),
+            ],
+          };
+        })}
       />
     </div>
   );

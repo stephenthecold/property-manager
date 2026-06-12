@@ -488,74 +488,27 @@ export default async function TenantDetail({
                 )}
               </div>
 
-              <div className="mt-4 border-t pt-4 space-y-2">
-                <p className="text-sm font-medium">Deposits</p>
-                <ul className="space-y-1 text-sm">
-                  <li>
-                    Security deposit:{" "}
+              <div className="mt-4 border-t pt-4">
+                <p className="text-sm">
+                  <span className="font-medium">Deposits</span>{" "}
+                  <span className="text-muted-foreground">
+                    — security{" "}
                     <span className="tabular-nums">
                       {formatCurrency(activeLease.securityDepositCents, currency)}
                     </span>
-                  </li>
-                  {activeLease.deposits.map((d) => (
-                    <li key={d.id} className="flex items-center gap-2">
-                      <span>
-                        {d.label}:{" "}
+                    {activeLease.deposits.map((d) => (
+                      <span key={d.id}>
+                        {" · "}
+                        {d.label}{" "}
                         <span className="tabular-nums">
                           {formatCurrency(d.amountCents, currency)}
                         </span>
-                        {d.nonRefundableCents > 0n && (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            ({formatCurrency(d.nonRefundableCents, currency)} non-refundable)
-                          </span>
-                        )}
+                        {d.nonRefundableCents > 0n ? " (non-refundable)" : ""}
                       </span>
-                      <form action={removeLeaseDeposit}>
-                        <input type="hidden" name="depositId" value={d.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                        >
-                          remove
-                        </button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-                <FormDialog trigger="Add deposit" triggerSize="xs" title="Add deposit">
-                  <form action={addLeaseDeposit} className="space-y-3">
-                    <input type="hidden" name="leaseId" value={activeLease.id} />
-                    <div className="space-y-2">
-                      <Label htmlFor="depLabel">Label</Label>
-                      <Input id="depLabel" name="label" placeholder="Pet deposit" required />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="depAmount">Amount</Label>
-                        <Input
-                          id="depAmount"
-                          name="amount"
-                          inputMode="decimal"
-                          placeholder="500.00"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="depNonRef">Non-refundable part</Label>
-                        <Input
-                          id="depNonRef"
-                          name="nonRefundable"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </div>
-                    <Button type="submit" size="sm">
-                      Add deposit
-                    </Button>
-                  </form>
-                </FormDialog>
+                    ))}
+                    {" — manage in Edit lease"}
+                  </span>
+                </p>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
@@ -713,6 +666,89 @@ export default async function TenantDetail({
                       Save lease
                     </Button>
                   </form>
+
+                  <div className="mt-4 space-y-3 border-t pt-4">
+                    <p className="text-sm font-medium">Additional deposits</p>
+                    <ul className="space-y-1.5 text-sm">
+                      {activeLease.deposits.map((d) => (
+                        <li
+                          key={d.id}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span>
+                            {d.label}:{" "}
+                            <span className="tabular-nums">
+                              {formatCurrency(d.amountCents, currency)}
+                            </span>
+                            {d.nonRefundableCents > 0n && (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                (non-refundable)
+                              </span>
+                            )}
+                          </span>
+                          <form action={removeLeaseDeposit}>
+                            <input type="hidden" name="depositId" value={d.id} />
+                            <Button type="submit" variant="outline" size="xs">
+                              Remove
+                            </Button>
+                          </form>
+                        </li>
+                      ))}
+                      {activeLease.deposits.length === 0 && (
+                        <li className="text-muted-foreground">
+                          No additional deposits.
+                        </li>
+                      )}
+                    </ul>
+                    <form
+                      action={addLeaseDeposit}
+                      className="flex flex-wrap items-end gap-2"
+                    >
+                      <input type="hidden" name="leaseId" value={activeLease.id} />
+                      <div className="space-y-1">
+                        <Label htmlFor="depLabel" className="text-xs">
+                          Label
+                        </Label>
+                        <Input
+                          id="depLabel"
+                          name="label"
+                          placeholder="Pet deposit"
+                          className="h-8 w-36"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="depAmount" className="text-xs">
+                          Amount
+                        </Label>
+                        <Input
+                          id="depAmount"
+                          name="amount"
+                          inputMode="decimal"
+                          placeholder="500.00"
+                          className="h-8 w-28"
+                          required
+                        />
+                      </div>
+                      <label className="flex h-8 items-center gap-1.5 text-sm">
+                        <input
+                          type="checkbox"
+                          name="nonRefundable"
+                          className="size-4 accent-primary"
+                        />
+                        Non-refundable
+                      </label>
+                      <Button type="submit" variant="outline" size="sm">
+                        Add deposit
+                      </Button>
+                    </form>
+                    <p className="text-xs text-muted-foreground">
+                      The security deposit is part of the lease terms above; track
+                      extra deposits (pet, key, …) here. Non-refundable marks the
+                      whole deposit as kept.
+                    </p>
+                  </div>
                 </FormDialog>
               </div>
             </CardContent>
