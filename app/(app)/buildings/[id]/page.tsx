@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
-import { fromCents } from "@/lib/money";
 import { updateBuilding } from "../../properties/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,14 +26,9 @@ export default async function BuildingDetail({
   });
   if (!building) notFound();
 
-  // Render the stored instants as date-input values in the property tz.
+  // Render the stored instant as a date-input value in the property tz.
   const purchaseValue = building.purchaseDate
     ? DateTime.fromJSDate(building.purchaseDate, {
-        zone: building.property.timezone,
-      }).toFormat("yyyy-MM-dd")
-    : "";
-  const maturityValue = building.mortgageMaturityDate
-    ? DateTime.fromJSDate(building.mortgageMaturityDate, {
         zone: building.property.timezone,
       }).toFormat("yyyy-MM-dd")
     : "";
@@ -87,34 +81,9 @@ export default async function BuildingDetail({
                 defaultValue={purchaseValue}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="monthlyMortgage">Monthly mortgage</Label>
-                <Input
-                  id="monthlyMortgage"
-                  name="monthlyMortgage"
-                  inputMode="decimal"
-                  placeholder="1850.00"
-                  defaultValue={
-                    building.monthlyMortgageCents != null
-                      ? fromCents(building.monthlyMortgageCents)
-                      : ""
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="mortgageMaturityDate">Mortgage matures</Label>
-                <Input
-                  id="mortgageMaturityDate"
-                  name="mortgageMaturityDate"
-                  type="date"
-                  defaultValue={maturityValue}
-                />
-              </div>
-            </div>
             <p className="text-xs text-muted-foreground">
-              Used by the Financials module to compute net income and project
-              income after payoff. Leave mortgage blank when paid off / none.
+              Mortgage terms live on the property (Edit property on the
+              property&apos;s page) — they cover the whole parcel, not one building.
             </p>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>

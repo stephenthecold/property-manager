@@ -312,6 +312,10 @@ model Property {
   notes        String?
   timezone     String   @default("America/New_York") // IANA tz for due-date / overdue math
   currency     String   @default("USD")
+  // Financing (Financials module): fixed monthly mortgage payment and the date
+  // the loan matures — used to compute net income and project post-payoff income.
+  monthlyMortgageCents BigInt?
+  mortgageMaturityDate DateTime?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -330,10 +334,6 @@ model Building {
   description  String?
   notes        String?
   purchaseDate DateTime? // date the building was purchased (informational)
-  // Financing (Financials module): fixed monthly mortgage payment and the date
-  // the loan matures — used to compute net income and project post-payoff income.
-  monthlyMortgageCents BigInt?
-  mortgageMaturityDate DateTime?
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
