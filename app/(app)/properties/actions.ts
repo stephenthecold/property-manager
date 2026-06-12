@@ -193,6 +193,23 @@ export async function updateProperty(fd: FormData): Promise<void> {
     if (monthlyMortgageCents < 0n) throw new Error("Mortgage cannot be negative.");
     if (monthlyMortgageCents === 0n) monthlyMortgageCents = null;
   }
+  // Yearly fixed costs (Financials module): spread as /12 monthly columns there.
+  const insuranceRaw = str(fd, "yearlyInsurance");
+  let yearlyInsuranceCents: bigint | null = null;
+  if (insuranceRaw) {
+    yearlyInsuranceCents = toCents(insuranceRaw);
+    if (yearlyInsuranceCents < 0n) {
+      throw new Error("Yearly insurance cannot be negative.");
+    }
+  }
+  const propertyTaxRaw = str(fd, "yearlyPropertyTax");
+  let yearlyPropertyTaxCents: bigint | null = null;
+  if (propertyTaxRaw) {
+    yearlyPropertyTaxCents = toCents(propertyTaxRaw);
+    if (yearlyPropertyTaxCents < 0n) {
+      throw new Error("Yearly property taxes cannot be negative.");
+    }
+  }
   const maturityRaw = str(fd, "mortgageMaturityDate");
   const mortgageMaturityDate = maturityRaw
     ? parseDateOnlyInZone(maturityRaw, timezone)
@@ -220,6 +237,8 @@ export async function updateProperty(fd: FormData): Promise<void> {
     currency,
     monthlyMortgageCents,
     mortgageMaturityDate,
+    yearlyInsuranceCents,
+    yearlyPropertyTaxCents,
     purchaseDate,
     isActive: fd.get("isActive") === "on",
   };
@@ -242,6 +261,8 @@ export async function updateProperty(fd: FormData): Promise<void> {
         currency: property.currency,
         monthlyMortgageCents: property.monthlyMortgageCents,
         mortgageMaturityDate: property.mortgageMaturityDate,
+        yearlyInsuranceCents: property.yearlyInsuranceCents,
+        yearlyPropertyTaxCents: property.yearlyPropertyTaxCents,
         purchaseDate: property.purchaseDate,
         isActive: property.isActive,
       },

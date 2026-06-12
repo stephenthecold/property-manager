@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/money";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { createExpenseAction, deleteExpenseAction } from "./actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -93,7 +94,8 @@ export default async function FinancialsPage({
         <div>
           <h1 className="text-2xl font-semibold">Financials</h1>
           <p className="text-sm text-muted-foreground">
-            Cash-basis month-to-date: net = collected − mortgage − expenses. The
+            Cash-basis month-to-date: net = collected − mortgage − insurance −
+            taxes − expenses (yearly insurance/taxes spread as /12 monthly). The
             tenant ledger stays the source of truth for tenant balances.
           </p>
         </div>
@@ -204,6 +206,8 @@ export default async function FinancialsPage({
               { key: "expected", label: "Expected /mo", align: "right", numeric: true, className: "hidden md:table-cell" },
               { key: "collected", label: "Collected", align: "right", numeric: true },
               { key: "mortgage", label: "Mortgage /mo", align: "right", numeric: true },
+              { key: "insurance", label: "Insurance /mo", align: "right", numeric: true, className: "hidden lg:table-cell" },
+              { key: "taxes", label: "Taxes /mo", align: "right", numeric: true, className: "hidden lg:table-cell" },
               { key: "expenses", label: "Expenses", align: "right", numeric: true },
               { key: "net", label: "Net", align: "right", numeric: true },
             ]}
@@ -215,6 +219,8 @@ export default async function FinancialsPage({
                 String(r.expectedMonthlyCents),
                 String(r.collectedMonthCents),
                 String(r.mortgageMonthlyCents),
+                String(r.insuranceMonthlyCents),
+                String(r.taxesMonthlyCents),
                 String(r.expensesMonthCents),
                 String(r.netMonthCents),
               ],
@@ -236,6 +242,12 @@ export default async function FinancialsPage({
                 <span key="m" className="tabular-nums">
                   {formatCurrency(r.mortgageMonthlyCents, r.currency)}
                 </span>,
+                <span key="i" className="tabular-nums">
+                  {formatCurrency(r.insuranceMonthlyCents, r.currency)}
+                </span>,
+                <span key="t" className="tabular-nums">
+                  {formatCurrency(r.taxesMonthlyCents, r.currency)}
+                </span>,
                 <span key="x" className="tabular-nums">
                   {formatCurrency(r.expensesMonthCents, r.currency)}
                 </span>,
@@ -250,6 +262,8 @@ export default async function FinancialsPage({
             <span className="tabular-nums">{formatCurrency(t.expectedMonthlyCents)}</span>/mo ·
             collected <span className="tabular-nums">{formatCurrency(t.collectedMonthCents)}</span> ·
             mortgage <span className="tabular-nums">{formatCurrency(t.mortgageMonthlyCents)}</span>/mo ·
+            insurance <span className="tabular-nums">{formatCurrency(t.insuranceMonthlyCents)}</span>/mo ·
+            taxes <span className="tabular-nums">{formatCurrency(t.taxesMonthlyCents)}</span>/mo ·
             expenses <span className="tabular-nums">{formatCurrency(t.expensesMonthCents)}</span> · net{" "}
             <span className={cn("font-medium tabular-nums", netClass(t.netMonthCents))}>
               {formatCurrency(t.netMonthCents)}
@@ -398,9 +412,13 @@ export default async function FinancialsPage({
                   ? [
                       <form key="x" action={deleteExpenseAction} className="inline">
                         <input type="hidden" name="expenseId" value={e.id} />
-                        <Button type="submit" variant="outline" size="xs">
+                        <ConfirmSubmitButton
+                          confirmMessage="Delete this expense record? This cannot be undone."
+                          variant="outline"
+                          size="xs"
+                        >
                           Delete
-                        </Button>
+                        </ConfirmSubmitButton>
                       </form>,
                     ]
                   : []),
