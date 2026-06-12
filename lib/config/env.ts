@@ -47,6 +47,11 @@ const envSchema = z.object({
   // "local" stores files on the app server's disk (single-node, dev/small installs).
   STORAGE_PROVIDER: z.enum(["stub", "s3", "local"]).default("stub"),
   LOCAL_STORAGE_DIR: z.string().default(".data/uploads"),
+  // Encrypt files at rest (local provider only — e.g. when LOCAL_STORAGE_DIR is
+  // a mounted network share). Key: STORAGE_ENC_KEY (32 bytes, base64/hex) or,
+  // when unset, a subkey derived from SETTINGS_ENC_KEY via HKDF.
+  STORAGE_ENCRYPT: boolish.default(false),
+  STORAGE_ENC_KEY: z.string().min(1).optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().optional(),

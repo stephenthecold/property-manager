@@ -67,6 +67,27 @@ AuthSettings.
 - **Security**: capability-gated report-export API (closed a ledger-enumeration IDOR) and
   document detail; `windowDays` clamp; sanitized webhook logging.
 
+## Phase 4.6 — Modules: Financials & Maintenance ✅ (built)
+
+- **Module system**: optional features toggled at Settings → Modules
+  (`AppSettings.modules`; disabling hides UI, data is always retained). Defaults:
+  Financials on, Maintenance off.
+- **Financials module** (`financials.view`/`financials.manage` capabilities, finance+ by
+  default): `PropertyExpense` log (utilities/insurance/maintenance/taxes/other, attributable
+  to property/building/unit/lease), building mortgage terms (monthly payment + maturity) with
+  payoff projections, per-property net income (`/financials`), and profit cards on the
+  dashboard. Confidential dashboard totals (expected/collected) are now gated by
+  `financials.view`.
+- **Maintenance module** (`maintenance.manage`, manager+ by default): per-unit job tracker
+  (pending/completed; a completion cost auto-logs a maintenance expense via
+  `sourceType="maintenance_job"`), recurring monthly tasks per property (done-this-month in
+  the property tz), open-jobs panel on the unit page.
+- **Quick collect**: per-row Collect button on the dashboard tenant table (prefilled with the
+  outstanding balance, falling back to the monthly charge).
+- **Encrypted file storage**: `STORAGE_ENCRYPT=true` wraps the local provider with AES-256-GCM
+  at rest (network-share friendly; key from `STORAGE_ENC_KEY` or derived from
+  `SETTINGS_ENC_KEY`); plaintext files from before stay readable. See DEPLOYMENT.md.
+
 ## Phase 5 — Next large phase
 
 See [PHASE5_PLAN.md](./PHASE5_PLAN.md) for the actionable plan. Headline workstreams: tenant

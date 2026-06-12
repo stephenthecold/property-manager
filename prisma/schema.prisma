@@ -242,6 +242,11 @@ model AppSettings {
   // Empty object == the built-in defaults (see lib/auth/permissions.ts).
   rolePermissions Json @default("{}")
 
+  // Optional feature modules, e.g. { "financials": true, "maintenance": false }.
+  // Missing keys use the built-in defaults (lib/services/app-settings.ts).
+  // Disabling a module hides its UI but never deletes its data.
+  modules Json @default("{}")
+
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
   // grace/late-fee terms to existing active leases.
@@ -311,8 +316,11 @@ model Property {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  buildings Building[]
-  units     Unit[]
+  buildings       Building[]
+  units           Unit[]
+  expenses        PropertyExpense[]
+  maintenanceJobs MaintenanceJob[]
+  recurringTasks  RecurringTask[]
 }
 
 model Building {
@@ -322,12 +330,17 @@ model Building {
   description  String?
   notes        String?
   purchaseDate DateTime? // date the building was purchased (informational)
+  // Financing (Financials module): fixed monthly mortgage payment and the date
+  // the loan matures — used to compute net income and project post-payoff income.
+  monthlyMortgageCents BigInt?
+  mortgageMaturityDate DateTime?
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   units    Unit[]
+  expenses PropertyExpense[]
 
   @@index([propertyId])
 }
@@ -354,6 +367,8 @@ model Unit {
   property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
   leases   Lease[]
+  expenses        PropertyExpense[]
+  maintenanceJobs MaintenanceJob[]
 
   @@index([propertyId])
   @@index([buildingId])
@@ -430,6 +445,7 @@ model Lease {
   ledgerEntries LedgerEntry[]
   coTenants     LeaseTenant[]
   deposits      LeaseDeposit[]
+  expenses      PropertyExpense[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -626,4 +642,89 @@ model Reminder {
   @@index([tenantId])
   @@index([leaseId])
   @@index([providerMessageId])
+}
+
+// ---------------------------------------------------------------------------
+// Financials module — operating expenses & financing (NOT tenant ledger rows;
+// the tenant ledger stays the sole source of truth for tenant balances)
+// ---------------------------------------------------------------------------
+
+enum ExpenseCategory {
+  utilities
+  insurance
+  maintenance
+  taxes
+  other
+}
+
+model PropertyExpense {
+  id          String          @id @default(cuid())
+  propertyId  String
+  buildingId  String?
+  unitId      String?
+  leaseId     String? // attribute e.g. landlord-paid utilities to a tenant's lease
+  category    ExpenseCategory
+  amountCents BigInt
+  incurredOn  DateTime
+  description String?
+  // Cross-module seam: e.g. sourceType="maintenance_job", sourceId=MaintenanceJob.id
+  sourceType  String?
+  sourceId    String?
+  createdBy   String?
+  createdAt   DateTime        @default(now())
+
+  property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  lease    Lease?    @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, incurredOn])
+  @@index([unitId])
+  @@index([category])
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance module — per-unit job tracker + recurring property tasks
+// ---------------------------------------------------------------------------
+
+enum MaintenanceJobStatus {
+  pending
+  completed
+}
+
+model MaintenanceJob {
+  id          String               @id @default(cuid())
+  propertyId  String
+  unitId      String?
+  title       String
+  details     String?
+  status      MaintenanceJobStatus @default(pending)
+  dueDate     DateTime?
+  completedAt DateTime?
+  costCents   BigInt? // entered on completion; mirrored to PropertyExpense
+  createdBy   String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status])
+  @@index([unitId, status])
+}
+
+/// Recurring monthly upkeep (mowing, spraying, …). "Done this month" derives
+/// from lastDoneOn in the property timezone; completions are audited.
+model RecurringTask {
+  id         String    @id @default(cuid())
+  propertyId String
+  title      String
+  notes      String?
+  active     Boolean   @default(true)
+  lastDoneOn DateTime?
+  createdAt  DateTime  @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, active])
 }

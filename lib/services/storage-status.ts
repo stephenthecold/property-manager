@@ -48,15 +48,34 @@ export async function getStorageStatus(): Promise<StorageStatus> {
     } catch (e) {
       detail = e instanceof Error ? e.message : "directory not writable";
     }
+    const encryptOn = env.STORAGE_ENCRYPT;
+    const keyOk = !!(env.STORAGE_ENC_KEY || env.SETTINGS_ENC_KEY);
     return {
       provider,
-      ready: writable,
-      health: writable
-        ? { level: "ok", message: "Local storage directory is writable." }
-        : { level: "error", message: `Storage directory is not writable: ${detail}` },
+      ready: writable && (!encryptOn || keyOk),
+      health: !writable
+        ? { level: "error", message: `Storage directory is not writable: ${detail}` }
+        : encryptOn && !keyOk
+          ? {
+              level: "error",
+              message:
+                "Encryption is on but no key is available — set STORAGE_ENC_KEY or SETTINGS_ENC_KEY.",
+            }
+          : {
+              level: "ok",
+              message: encryptOn
+                ? "Local/share storage is writable; new files are encrypted at rest (AES-256-GCM)."
+                : "Local storage directory is writable. Files are stored unencrypted — set STORAGE_ENCRYPT=true to encrypt at rest (recommended for network shares).",
+            },
       fields: [
-        { label: "Provider", value: "Local disk" },
+        { label: "Provider", value: "Local disk / mounted share" },
         { label: "Directory", value: dir },
+        {
+          label: "Encryption at rest",
+          value: encryptOn
+            ? `On — AES-256-GCM (${env.STORAGE_ENC_KEY ? "STORAGE_ENC_KEY" : "key derived from SETTINGS_ENC_KEY"})`
+            : "Off",
+        },
       ],
       secrets: [],
     };

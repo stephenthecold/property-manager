@@ -25,9 +25,14 @@ const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "other
 export function RecordPaymentDialog({
   leaseId,
   defaultAmount,
+  trigger = "Record payment",
+  compact = false,
 }: {
   leaseId: string;
   defaultAmount?: string;
+  trigger?: string;
+  /** Small outline trigger for table rows (e.g. the dashboard Collect button). */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -64,7 +69,16 @@ export function RecordPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button>Record payment</Button>} />
+      <DialogTrigger
+        render={
+          <Button
+            variant={compact ? "outline" : "default"}
+            size={compact ? "sm" : "default"}
+          >
+            {trigger}
+          </Button>
+        }
+      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Record payment</DialogTitle>

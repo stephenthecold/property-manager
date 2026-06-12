@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { getDashboard } from "@/lib/services/dashboard";
-import { formatCurrency } from "@/lib/money";
+import { getProfitSnapshot } from "@/lib/services/financials";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { getDisplayRole } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
+import { formatCurrency, fromCents } from "@/lib/money";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/app/data-table";
+import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -71,23 +76,44 @@ function balanceClass(cents: bigint): string {
 }
 
 export default async function DashboardPage() {
-  const d = await getDashboard(new Date());
+  const now = new Date();
+  const [{ actingRole }, settings] = await Promise.all([
+    getDisplayRole(),
+    getAppSettings(),
+  ]);
+  // Financial totals are confidential (finance+ by default; adjustable in
+  // Settings → Permissions). Overdue + occupancy stay operational.
+  const canFinance = hasCapability(actingRole, "financials.view", settings.rolePermissions);
+  const canCollect = hasCapability(actingRole, "payments.manage", settings.rolePermissions);
+  const showProfit = canFinance && settings.modules.financials;
+
+  const [d, profit] = await Promise.all([
+    getDashboard(now),
+    showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
+  ]);
+  const netMonthCents = profit
+    ? d.monthCollectedCents - profit.mortgageMonthlyCents - profit.expensesMonthCents
+    : 0n;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        <Stat
-          label="Expected this month"
-          value={formatCurrency(d.monthExpectedCents)}
-          tone="sky"
-        />
-        <Stat
-          label="Collected this month"
-          value={formatCurrency(d.monthCollectedCents)}
-          tone="emerald"
-        />
+        {canFinance && (
+          <>
+            <Stat
+              label="Expected this month"
+              value={formatCurrency(d.monthExpectedCents)}
+              tone="sky"
+            />
+            <Stat
+              label="Collected this month"
+              value={formatCurrency(d.monthCollectedCents)}
+              tone="emerald"
+            />
+          </>
+        )}
         <Stat
           label="Overdue balance"
           value={formatCurrency(d.overdueBalanceCents)}
@@ -97,17 +123,44 @@ export default async function DashboardPage() {
             d.overdueBalanceCents > 0n ? "text-red-600 dark:text-red-400" : undefined
           }
         />
-        <Stat
-          label="Collected today"
-          value={formatCurrency(d.todayCollectedCents)}
-          tone="violet"
-        />
+        {canFinance && (
+          <Stat
+            label="Collected today"
+            value={formatCurrency(d.todayCollectedCents)}
+            tone="violet"
+          />
+        )}
         <Stat label="Occupied units" value={String(d.occupiedUnits)} tone="indigo" />
         <Stat
           label="Vacant / other units"
           value={String(d.vacantUnits)}
           tone="amber"
         />
+        {profit && (
+          <>
+            <Stat
+              label="Expenses this month"
+              value={formatCurrency(profit.expensesMonthCents)}
+              tone="amber"
+            />
+            <Stat
+              label="Mortgage / month"
+              value={formatCurrency(profit.mortgageMonthlyCents)}
+              tone="indigo"
+            />
+            <Stat
+              label="Net this month"
+              value={formatCurrency(netMonthCents)}
+              hint="collected − mortgage − expenses"
+              tone="emerald"
+              valueClassName={
+                netMonthCents < 0n
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-emerald-700 dark:text-emerald-400"
+              }
+            />
+          </>
+        )}
       </div>
 
       <Card>
@@ -131,6 +184,9 @@ export default async function DashboardPage() {
                 numeric: true,
                 className: "hidden sm:table-cell",
               },
+              ...(canCollect
+                ? [{ key: "collect", label: "", align: "right" as const, sortable: false }]
+                : []),
             ]}
             rows={d.leaseRows.map((r) => ({
               key: r.leaseId,
@@ -142,6 +198,7 @@ export default async function DashboardPage() {
                 String(r.netBalanceCents),
                 String(r.pastDueCents),
                 r.lastPaymentDays,
+                ...(canCollect ? [null] : []),
               ],
               cells: [
                 <Link
@@ -165,6 +222,19 @@ export default async function DashboardPage() {
                 <span key="d" className="tabular-nums">
                   {r.lastPaymentDays ?? "—"}
                 </span>,
+                ...(canCollect
+                  ? [
+                      <RecordPaymentDialog
+                        key="collect"
+                        leaseId={r.leaseId}
+                        defaultAmount={fromCents(
+                          r.netBalanceCents > 0n ? r.netBalanceCents : r.monthlyChargeCents,
+                        )}
+                        trigger="Collect"
+                        compact
+                      />,
+                    ]
+                  : []),
               ],
             }))}
           />

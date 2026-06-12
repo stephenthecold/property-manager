@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import {
+  isEncryptedFileBuffer,
+  maybeDecryptFileBuffer,
+  storageEncryptionKey,
+} from "@/lib/providers/storage/encrypted";
+import {
   localFilePath,
   verifyLocalFileSignature,
 } from "@/lib/providers/storage/local";
@@ -51,6 +56,19 @@ export async function GET(req: Request) {
       return new NextResponse("Not found", { status: 404 });
     }
     throw e;
+  }
+
+  // At-rest encryption: objects with our header are decrypted before serving
+  // (even if STORAGE_ENCRYPT was later turned off — the key derives the same
+  // way); plaintext objects from before encryption pass through unchanged.
+  if (isEncryptedFileBuffer(body)) {
+    try {
+      body = maybeDecryptFileBuffer(body, storageEncryptionKey());
+    } catch {
+      return new NextResponse("Stored file cannot be decrypted (key changed?)", {
+        status: 500,
+      });
+    }
   }
 
   const fileName = key.split("/").pop() || "file";

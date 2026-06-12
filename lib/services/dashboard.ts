@@ -14,6 +14,8 @@ export interface DashboardLeaseRow {
   netBalanceCents: bigint;
   pastDueCents: bigint;
   lastPaymentDays: number | null;
+  /** Expected monthly charge — prefills the quick "Collect" dialog. */
+  monthlyChargeCents: bigint;
 }
 
 export interface DashboardData {
@@ -109,6 +111,7 @@ export async function getDashboard(
         snap.aging.d61_90 +
         snap.aging.d90plus,
       lastPaymentDays: snap.daysSinceLastPayment,
+      monthlyChargeCents: expectedMonthlyChargeCents(lease),
     };
   });
 
