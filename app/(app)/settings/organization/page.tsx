@@ -2,14 +2,26 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { getStorageStatus } from "@/lib/services/storage-status";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { OrganizationForm } from "./organization-form";
 
 export const runtime = "nodejs";
 
+const HEALTH_BADGE = {
+  ok: "border-emerald-200 bg-emerald-100 text-emerald-800",
+  warn: "border-amber-200 bg-amber-100 text-amber-800",
+  error: "border-red-200 bg-red-100 text-red-800",
+} as const;
+
 export default async function OrganizationSettingsPage() {
   await requireCapability("organization.settings");
   const env = getEnv();
-  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  const [row, storage] = await Promise.all([
+    prisma.appSettings.findUnique({ where: { id: "singleton" } }),
+    getStorageStatus(),
+  ]);
 
   let logoUrl: string | null = null;
   if (row?.logoDocumentId) {
@@ -41,6 +53,50 @@ export default async function OrganizationSettingsPage() {
           logoUrl,
         }}
       />
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">File storage</CardTitle>
+          <Badge variant="outline" className={`font-medium ${HEALTH_BADGE[storage.health.level]}`}>
+            {storage.ready ? "Ready" : storage.provider === "stub" ? "Disabled" : "Needs attention"}
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{storage.health.message}</p>
+
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+            {storage.fields.map((f) => (
+              <div key={f.label} className="flex justify-between gap-4 border-b py-1.5 text-sm">
+                <dt className="text-muted-foreground">{f.label}</dt>
+                <dd className="text-right font-medium break-all">{f.value}</dd>
+              </div>
+            ))}
+            {storage.secrets.map((s) => (
+              <div key={s.label} className="flex justify-between gap-4 border-b py-1.5 text-sm">
+                <dt className="text-muted-foreground">{s.label}</dt>
+                <dd>
+                  {s.set ? (
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800">
+                      Set
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-red-200 bg-red-100 font-medium text-red-800">
+                      Not set
+                    </Badge>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <p className="text-xs text-muted-foreground">
+            Storage is configured with environment variables (<code>STORAGE_PROVIDER</code> and the{" "}
+            <code>S3_*</code> / <code>LOCAL_STORAGE_DIR</code> settings — see{" "}
+            <code>.env.example</code>). Secret keys are read from the environment and never shown or
+            stored here. Change them on the host and restart the app to apply.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
