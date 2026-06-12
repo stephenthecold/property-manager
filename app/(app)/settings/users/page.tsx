@@ -3,6 +3,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { roleRank } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/generated/prisma/enums";
 import { setUserRole, setUserActive, startViewAs } from "./actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +15,13 @@ export const runtime = "nodejs";
 const ASSIGNABLE_ROLES = ["viewer", "manager", "finance", "admin"] as const;
 const VIEW_AS_ROLES = ["viewer", "manager", "finance"] as const;
 
-export default async function UsersSettingsPage() {
+export default async function UsersSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { dbUser: me } = await requireCapability("users.manage");
+  const { error } = await searchParams;
   // Sort by hierarchy (highest first) in JS: the Postgres enum order doesn't
   // match ROLE_ORDER ('finance' was appended by ALTER TYPE ADD VALUE).
   const users = (
@@ -28,6 +34,11 @@ export default async function UsersSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Users &amp; roles</CardTitle>

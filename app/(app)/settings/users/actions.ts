@@ -15,6 +15,16 @@ function str(fd: FormData, key: string): string {
 }
 
 /**
+ * Guard failures land back on the users page as a banner instead of being
+ * thrown — a thrown server-action error renders as the opaque production
+ * digest page. (These remain reachable via stale pages, e.g. acting on a
+ * user whose role changed after this page loaded.)
+ */
+function fail(message: string): never {
+  redirect(`/settings/users?error=${encodeURIComponent(message)}`);
+}
+
+/**
  * Change a user's role. Bumps securityStamp so their outstanding JWT is
  * invalidated and the new role takes effect on next request. Guards:
  * admins cannot change their own role, cannot touch owners, and cannot
@@ -24,19 +34,19 @@ export async function setUserRole(fd: FormData): Promise<void> {
   const { dbUser: actor } = await requireCapability("users.manage");
   const userId = str(fd, "userId");
   const roleRaw = str(fd, "role");
-  if (!userId || !isRole(roleRaw)) throw new Error("Invalid user or role.");
+  if (!userId || !isRole(roleRaw)) fail("Invalid user or role.");
   const newRole = roleRaw as Role;
 
   if (userId === actor.id) {
-    throw new Error("You cannot change your own role.");
+    fail("You cannot change your own role.");
   }
   if (!roleAtLeast(actor.role as Role, newRole)) {
-    throw new Error("You cannot grant a role above your own.");
+    fail("You cannot grant a role above your own.");
   }
   const target = await prisma.user.findUnique({ where: { id: userId } });
-  if (!target) throw new Error("User not found.");
+  if (!target) fail("User not found.");
   if (target.role === "owner" && actor.role !== "owner") {
-    throw new Error("Only the owner can change the owner's role.");
+    fail("Only the owner can change the owner's role.");
   }
   if (target.role === newRole) return;
 
@@ -65,14 +75,14 @@ export async function setUserActive(fd: FormData): Promise<void> {
   const { dbUser: actor } = await requireCapability("users.manage");
   const userId = str(fd, "userId");
   const isActive = str(fd, "isActive") === "true";
-  if (!userId) throw new Error("Missing user id.");
+  if (!userId) fail("Missing user id.");
   if (userId === actor.id) {
-    throw new Error("You cannot deactivate your own account.");
+    fail("You cannot deactivate your own account.");
   }
   const target = await prisma.user.findUnique({ where: { id: userId } });
-  if (!target) throw new Error("User not found.");
+  if (!target) fail("User not found.");
   if (target.role === "owner" && actor.role !== "owner") {
-    throw new Error("Only the owner can deactivate the owner.");
+    fail("Only the owner can deactivate the owner.");
   }
 
   await withAudit(
@@ -103,7 +113,7 @@ export async function setUserActive(fd: FormData): Promise<void> {
 export async function startViewAs(fd: FormData): Promise<void> {
   const { dbUser } = await requireCapability("users.manage");
   const roleRaw = str(fd, "role");
-  if (!isRole(roleRaw)) throw new Error("Invalid role.");
+  if (!isRole(roleRaw)) fail("Invalid role.");
   await writeAudit(prisma, {
     ...(await auditActor()),
     action: "user.view_as_started",

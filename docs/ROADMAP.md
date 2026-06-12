@@ -104,6 +104,21 @@ AuthSettings.
 - **Branding**: the uploaded business logo shows in the app banner and as a dynamic favicon
   (`app/icon.tsx`, logo or letter-tile fallback; `favicon.ico` legacy fallback).
 
+## Phase 4.75 — Settings hardening & outbound email ✅ (built)
+
+- **Durable local uploads**: compose mounts an `uploads` named volume at `/data/uploads` on
+  app + worker and defaults `STORAGE_PROVIDER=local`; the storage status panel warns when the
+  directory sits on the container's writable layer (lost on rebuild).
+- **Inline settings errors**: billing defaults moved to `useActionState` returned-state (no
+  more production digest page on validation); users-page guards redirect back with a banner.
+- **Telnyx SMS provider** (env or DB config; API key in the encrypted token fields) joins
+  stub/Twilio.
+- **Outbound email**: SMTP provider with password or OAuth2/XOAUTH2 auth (Gmail default token
+  endpoint, Microsoft 365 via custom token URL), DB-only config with AES-GCM-encrypted
+  secrets, stub provider, test send, and one-click "email receipt to tenant" (marks
+  sent-via-email, audited). The email *reminder* channel (consent model + per-channel
+  idempotency slots) stays in Phase 5.
+
 ## Phase 5 — Next large phase
 
 See [PHASE5_PLAN.md](./PHASE5_PLAN.md) for the actionable plan. Headline workstreams: tenant

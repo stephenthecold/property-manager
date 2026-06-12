@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type {
@@ -14,6 +15,11 @@ import {
   nextSequenceFromNumbers,
   receiptDateKey,
 } from "@/lib/accounting/receipts";
+import { formatCurrency } from "@/lib/money";
+import {
+  getAppSettings,
+  resolveEmailProvider,
+} from "@/lib/services/app-settings";
 
 /**
  * Digital receipts. One per payment, enforced by the raw-SQL partial unique
@@ -190,6 +196,78 @@ export async function getReceiptWithContext(
   ]);
 
   return { receipt, payment, tenant, unit, property, lease };
+}
+
+/** Plain-text email body mirroring the printable receipt's content. */
+export function renderReceiptText(
+  ctx: ReceiptContext,
+  app: {
+    businessName: string;
+    businessLegalName: string | null;
+    receiptFooter: string | null;
+  },
+): string {
+  const { receipt, payment, tenant, unit, property } = ctx;
+  const currency = property?.currency ?? "USD";
+  const tz = property?.timezone ?? "UTC";
+  const paidDate = receipt.paymentDate ?? payment?.paymentDate ?? null;
+  const method = receipt.paymentMethod ?? payment?.method ?? null;
+
+  const lines = [
+    app.businessName,
+    `RENT RECEIPT ${receipt.receiptNumber}`,
+    "",
+    `Amount received: ${formatCurrency(receipt.amountCents, currency)}`,
+    paidDate
+      ? `Date paid: ${DateTime.fromJSDate(paidDate, { zone: tz }).toFormat("MMMM d, yyyy")}`
+      : null,
+    tenant ? `Tenant: ${tenant.firstName} ${tenant.lastName}` : null,
+    property ? `Property: ${property.name}` : null,
+    unit ? `Unit: ${unit.unitNumber}` : null,
+    method ? `Payment method: ${method.replace(/_/g, " ")}` : null,
+    payment?.referenceNumber ? `Reference: ${payment.referenceNumber}` : null,
+    receipt.balanceAfterCents != null
+      ? `Balance after payment: ${formatCurrency(receipt.balanceAfterCents, currency)}`
+      : null,
+    "",
+    app.receiptFooter,
+    `Receipt ${receipt.receiptNumber} — ${app.businessName}${
+      app.businessLegalName ? ` (${app.businessLegalName})` : ""
+    }`,
+  ];
+  // null entries are omitted; "" entries are intentional blank lines.
+  return lines.filter((l): l is string => l !== null).join("\n");
+}
+
+/**
+ * Email the receipt to the tenant on file and mark it sent. Throws with an
+ * operator-actionable message (no email configured, tenant has no address,
+ * SMTP failure) — the caller returns it as inline form state.
+ */
+export async function emailReceiptToTenant(
+  receiptId: string,
+  actor: AuditContext,
+): Promise<{ to: string }> {
+  const app = await getAppSettings();
+  if (!app.emailEnabled) {
+    throw new Error("Email sending is disabled (Settings → Messaging).");
+  }
+  const ctx = await getReceiptWithContext(receiptId);
+  if (!ctx) throw new Error(`Receipt not found: ${receiptId}`);
+  const to = ctx.tenant?.email?.trim();
+  if (!to) throw new Error("The tenant has no email address on file.");
+
+  const provider = await resolveEmailProvider();
+  const result = await provider.send({
+    to,
+    subject: `${app.businessName} — rent receipt ${ctx.receipt.receiptNumber}`,
+    text: renderReceiptText(ctx, app),
+  });
+  if (result.status === "failed") {
+    throw new Error(result.error ?? "Email send failed.");
+  }
+  await markReceiptSent(receiptId, "email", actor);
+  return { to };
 }
 
 export async function markReceiptSent(

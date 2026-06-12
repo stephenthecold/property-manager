@@ -4,7 +4,8 @@ import { getEnv } from "@/lib/config/env";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 import { MessagingForm } from "./messaging-form";
-import { Card, CardContent } from "@/components/ui/card";
+import { EmailForm } from "./email-form";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
@@ -27,12 +28,15 @@ export default async function MessagingSettingsPage() {
       <div>
         <h2 className="text-lg font-semibold">Messaging</h2>
         <p className="text-sm text-muted-foreground">
-          SMS provider, scheduled-reminder behavior, and message templates.
-          Tenants without SMS consent are never messaged, regardless of these
-          settings.
+          SMS and email providers, scheduled-reminder behavior, and message
+          templates. Tenants without SMS consent are never texted, regardless
+          of these settings.
         </p>
       </div>
       <Card>
+        <CardHeader>
+          <CardTitle className="text-base">SMS</CardTitle>
+        </CardHeader>
         <CardContent>
           <MessagingForm
             initial={{
@@ -53,6 +57,33 @@ export default async function MessagingSettingsPage() {
                 value: overrides[type] ?? "",
                 defaultBody: DEFAULT_TEMPLATES[type],
               })),
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Email</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <EmailForm
+            initial={{
+              emailEnabled: row?.emailEnabled ?? false,
+              emailProvider: row?.emailProvider ?? "",
+              emailFromAddress: row?.emailFromAddress ?? "",
+              emailFromName: row?.emailFromName ?? "",
+              emailSmtpHost: row?.emailSmtpHost ?? "",
+              emailSmtpPort:
+                row?.emailSmtpPort != null ? String(row.emailSmtpPort) : "",
+              emailSmtpSecure: row?.emailSmtpSecure ?? true,
+              emailSmtpUser: row?.emailSmtpUser ?? "",
+              emailAuthMethod: row?.emailAuthMethod ?? "password",
+              emailOauthClientId: row?.emailOauthClientId ?? "",
+              emailOauthTokenUrl: row?.emailOauthTokenUrl ?? "",
+              hasPassword: !!row?.emailPasswordCiphertext,
+              hasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
+              hasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
             }}
           />
         </CardContent>

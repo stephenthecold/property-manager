@@ -5,6 +5,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { formatCurrency } from "@/lib/money";
 import { markSentAction } from "@/app/(app)/receipts/actions";
+import { EmailReceiptButton } from "./email-receipt-button";
 import { PrintButton } from "@/components/app/print-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,6 +63,10 @@ export default async function ReceiptPage({
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="print-hidden flex flex-wrap items-center gap-2">
         <PrintButton />
+        <EmailReceiptButton
+          receiptId={receipt.id}
+          tenantEmail={tenant?.email?.trim() || null}
+        />
         <form action={markSentAction} className="flex items-center gap-2">
           <input type="hidden" name="receiptId" value={receipt.id} />
           <select

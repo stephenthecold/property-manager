@@ -13,21 +13,28 @@ const boolish = z
   .union([z.boolean(), z.string()])
   .transform((v) => v === true || v === "true" || v === "1" || v === "yes");
 
+// Compose passes unset vars as "" (`${VAR:-}`); treat that as absent so
+// min(1).optional() secrets don't fail validation on an empty string.
+const optionalSecret = z.preprocess(
+  (v) => (v === "" ? undefined : v),
+  z.string().min(1).optional(),
+);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
   // Core
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   APP_URL: z.string().min(1).default("http://localhost:3000"),
-  AUTH_SECRET: z.string().min(1).optional(),
+  AUTH_SECRET: optionalSecret,
   AUTH_TRUST_HOST: boolish.default(false),
 
   // AES-256-GCM key-encryption-key for OIDC client secret at rest.
   // Expected: 32 bytes encoded as base64 or hex. Optional until OIDC is configured via DB.
-  SETTINGS_ENC_KEY: z.string().min(1).optional(),
+  SETTINGS_ENC_KEY: optionalSecret,
 
   // Installer / first-run setup
-  SETUP_BOOTSTRAP_TOKEN: z.string().min(1).optional(),
+  SETUP_BOOTSTRAP_TOKEN: optionalSecret,
   SEED_ON_START: boolish.default(false),
 
   // OIDC (Authentik) env fallback — DB AuthSettings takes precedence when enabled.
@@ -51,7 +58,7 @@ const envSchema = z.object({
   // a mounted network share). Key: STORAGE_ENC_KEY (32 bytes, base64/hex) or,
   // when unset, a subkey derived from SETTINGS_ENC_KEY via HKDF.
   STORAGE_ENCRYPT: boolish.default(false),
-  STORAGE_ENC_KEY: z.string().min(1).optional(),
+  STORAGE_ENC_KEY: optionalSecret,
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().optional(),

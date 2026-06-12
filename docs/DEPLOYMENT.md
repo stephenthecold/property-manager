@@ -105,9 +105,22 @@ exists yet) it may perform the initial OIDC configuration, which is the only way
 SSO on a fresh instance. The `BREAK_GLASS=on` env override forces it on and bypasses
 auto-expiry — use only during active recovery.
 
+## File storage
+
+The compose stack defaults to `STORAGE_PROVIDER=local` with uploads in the
+`uploads` **named volume**, mounted at `/data/uploads` in both the app and
+worker containers — files survive image rebuilds and `docker compose up`
+re-creates. Two things will silently break persistence: changing
+`LOCAL_STORAGE_DIR` without moving the volume mount to match, or removing the
+volume mount entirely (uploads then land in the container's writable layer and
+vanish on the next rebuild — Settings → Organization shows a storage health
+warning when this is detected). `docker compose down -v` deletes named volumes,
+uploads included; back up the `uploads` volume alongside `db-data`.
+
 ## File storage on a network share (encrypted)
 
-Uploads can live on a network share while staying encrypted at rest:
+Uploads can live on a network share while staying encrypted at rest (the bind
+mount below **replaces** the default `uploads` named volume):
 
 1. Mount the share on the Docker host (NFS or SMB/CIFS), e.g.
    `mount -t cifs //nas/property-files /mnt/property-files -o credentials=...`
@@ -136,8 +149,9 @@ gets a chance to decrypt them.
 
 ## Backups & migrations
 
-- Back up the **app** Postgres volume (`db-data`) and, separately, the Authentik volume if
-  bundled (`authentik-db`) — keep them decoupled.
+- Back up the **app** Postgres volume (`db-data`), the **uploads** volume
+  (`uploads` — leases, receipts, the logo), and, separately, the Authentik
+  volume if bundled (`authentik-db`) — keep them decoupled.
 - Migrations apply automatically on app start (`RUN_MIGRATIONS=1`, single replica). For
   scale-out, move migration to a one-shot job/release step.
 - The `AuditLog` table is append-only at the DB level (a trigger blocks UPDATE/DELETE).

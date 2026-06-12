@@ -1,6 +1,30 @@
-import { access, constants, mkdir } from "node:fs/promises";
+import { access, constants, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { getEnv } from "@/lib/config/env";
+
+/**
+ * Best-effort persistence probe for containerized installs: true when `dir`
+ * sits on a dedicated mount (volume / bind / network share), false when it is
+ * on the container's root filesystem — i.e. the writable overlay layer that is
+ * DESTROYED on rebuild — and null outside containers or when undeterminable.
+ */
+async function isOnDedicatedMount(dir: string): Promise<boolean | null> {
+  try {
+    await access("/.dockerenv");
+  } catch {
+    return null; // not in a Docker container (e.g. bare-metal dev) — no signal
+  }
+  try {
+    const mounts = await readFile("/proc/self/mounts", "utf8");
+    const points = mounts
+      .split("\n")
+      .map((line) => line.split(" ")[1])
+      .filter((p): p is string => !!p && p !== "/");
+    return points.some((p) => dir === p || dir.startsWith(`${p}/`));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Read-only view of the effective file-storage configuration for the Settings
@@ -50,6 +74,7 @@ export async function getStorageStatus(): Promise<StorageStatus> {
     }
     const encryptOn = env.STORAGE_ENCRYPT;
     const keyOk = !!(env.STORAGE_ENC_KEY || env.SETTINGS_ENC_KEY);
+    const onMount = await isOnDedicatedMount(dir);
     return {
       provider,
       ready: writable && (!encryptOn || keyOk),
@@ -61,15 +86,30 @@ export async function getStorageStatus(): Promise<StorageStatus> {
               message:
                 "Encryption is on but no key is available — set STORAGE_ENC_KEY or SETTINGS_ENC_KEY.",
             }
-          : {
-              level: "ok",
-              message: encryptOn
-                ? "Local/share storage is writable; new files are encrypted at rest (AES-256-GCM)."
-                : "Local storage directory is writable. Files are stored unencrypted — set STORAGE_ENCRYPT=true to encrypt at rest (recommended for network shares).",
-            },
+          : onMount === false
+            ? {
+                level: "warn",
+                message:
+                  "Uploads work, but the storage directory is inside the container's writable layer — files will be LOST when the container is rebuilt. Mount a volume at this path (compose mounts uploads:/data/uploads) or point LOCAL_STORAGE_DIR at a mounted share.",
+              }
+            : {
+                level: "ok",
+                message: encryptOn
+                  ? "Local/share storage is writable; new files are encrypted at rest (AES-256-GCM)."
+                  : "Local storage directory is writable. Files are stored unencrypted — set STORAGE_ENCRYPT=true to encrypt at rest (recommended for network shares).",
+              },
       fields: [
         { label: "Provider", value: "Local disk / mounted share" },
         { label: "Directory", value: dir },
+        {
+          label: "Persistence",
+          value:
+            onMount === true
+              ? "Volume / mounted share"
+              : onMount === false
+                ? "Container layer — NOT persistent"
+                : "Host disk",
+        },
         {
           label: "Encryption at rest",
           value: encryptOn
