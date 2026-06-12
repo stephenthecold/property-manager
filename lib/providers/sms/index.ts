@@ -1,6 +1,7 @@
 import { getEnv } from "@/lib/config/env";
 import type { SmsProvider } from "@/lib/providers/sms/types";
 import { StubSmsProvider } from "@/lib/providers/sms/stub";
+import { TelnyxSmsProvider } from "@/lib/providers/sms/telnyx";
 import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
 
 export type { SmsProvider } from "@/lib/providers/sms/types";
@@ -16,8 +17,8 @@ export function getSmsProvider(): SmsProvider {
       cached = new TwilioSmsProvider();
       break;
     case "telnyx":
-      // Telnyx shares the Phase-3 skeleton path; reuse Twilio's shape until implemented.
-      throw new Error("Telnyx SMS provider is implemented in Phase 3.");
+      cached = new TelnyxSmsProvider();
+      break;
     default:
       cached = new StubSmsProvider();
   }

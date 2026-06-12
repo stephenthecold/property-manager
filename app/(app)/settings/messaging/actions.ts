@@ -35,7 +35,9 @@ export async function saveMessagingAction(
 
   const providerRaw = String(fd.get("smsProvider") ?? "");
   const smsProvider =
-    providerRaw === "stub" || providerRaw === "twilio" ? providerRaw : null;
+    providerRaw === "stub" || providerRaw === "twilio" || providerRaw === "telnyx"
+      ? providerRaw
+      : null;
 
   const tokenRaw = String(fd.get("smsAuthToken") ?? "");
   const accountSid = str(fd, "smsAccountSid");
@@ -48,6 +50,15 @@ export async function saveMessagingAction(
     const hasStored = (await getAppSettings()).smsHasAuthToken;
     if (!tokenRaw && !hasStored) {
       return { error: "Twilio requires an auth token." };
+    }
+  }
+  if (smsProvider === "telnyx") {
+    if (!fromNumber) {
+      return { error: "Telnyx requires a From number." };
+    }
+    const hasStored = (await getAppSettings()).smsHasAuthToken;
+    if (!tokenRaw && !hasStored) {
+      return { error: "Telnyx requires an API key." };
     }
   }
 

@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "@/lib/auth/crypto";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import { getSmsProvider } from "@/lib/providers/sms";
 import { StubSmsProvider } from "@/lib/providers/sms/stub";
+import { TelnyxSmsProvider } from "@/lib/providers/sms/telnyx";
 import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
 import type { SmsProvider } from "@/lib/providers/sms/types";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
@@ -98,7 +99,10 @@ async function resolve(): Promise<ResolvedAppSettings> {
     }
   }
 
-  const dbSms = row?.smsProvider === "twilio" || row?.smsProvider === "stub";
+  const dbSms =
+    row?.smsProvider === "twilio" ||
+    row?.smsProvider === "telnyx" ||
+    row?.smsProvider === "stub";
 
   return {
     businessName: row?.businessName?.trim() || "Property Manager",
@@ -112,7 +116,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     defaultCurrency: row?.defaultCurrency || env.DEFAULT_CURRENCY,
     smsEnabled: row?.smsEnabled ?? true,
     smsProvider: dbSms
-      ? (row!.smsProvider as "stub" | "twilio")
+      ? (row!.smsProvider as "stub" | "twilio" | "telnyx")
       : env.SMS_PROVIDER,
     smsConfigSource: dbSms ? "db" : "env",
     smsFromNumber: row?.smsFromNumber ?? env.SMS_FROM_NUMBER ?? null,
@@ -143,25 +147,36 @@ export async function resolveSmsProvider(): Promise<SmsProvider> {
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
 
   if (row?.smsProvider === "stub") return new StubSmsProvider();
+  const hasToken =
+    !!row?.smsAuthTokenCiphertext &&
+    !!row?.smsAuthTokenNonce &&
+    !!row?.smsAuthTokenTag;
+  const dbToken = () =>
+    decryptSecret(
+      {
+        ciphertext: row!.smsAuthTokenCiphertext!,
+        nonce: row!.smsAuthTokenNonce!,
+        tag: row!.smsAuthTokenTag!,
+      },
+      SMS_TOKEN_AAD,
+    );
   if (
     row?.smsProvider === "twilio" &&
     row.smsAccountSid &&
     row.smsFromNumber &&
-    row.smsAuthTokenCiphertext &&
-    row.smsAuthTokenNonce &&
-    row.smsAuthTokenTag
+    hasToken
   ) {
-    const authToken = decryptSecret(
-      {
-        ciphertext: row.smsAuthTokenCiphertext,
-        nonce: row.smsAuthTokenNonce,
-        tag: row.smsAuthTokenTag,
-      },
-      SMS_TOKEN_AAD,
-    );
     return new TwilioSmsProvider({
       accountSid: row.smsAccountSid,
-      authToken,
+      authToken: dbToken(),
+      fromNumber: row.smsFromNumber,
+    });
+  }
+  // Telnyx authenticates with the API key alone (stored in the same encrypted
+  // token fields); no account SID.
+  if (row?.smsProvider === "telnyx" && row.smsFromNumber && hasToken) {
+    return new TelnyxSmsProvider({
+      apiKey: dbToken(),
       fromNumber: row.smsFromNumber,
     });
   }
@@ -332,10 +347,10 @@ export async function saveOrganizationSettings(
 
 export interface MessagingSettingsInput {
   smsEnabled: boolean;
-  /** null = use env config; "stub" | "twilio" = DB config. */
-  smsProvider: "stub" | "twilio" | null;
+  /** null = use env config; "stub" | "twilio" | "telnyx" = DB config. */
+  smsProvider: "stub" | "twilio" | "telnyx" | null;
   smsAccountSid: string | null;
-  /** undefined = keep the stored token; a string replaces it. */
+  /** undefined = keep the stored token; a string replaces it (Twilio auth token / Telnyx API key). */
   smsAuthToken?: string;
   smsFromNumber: string | null;
   reminderDueSoonDays: number | null;

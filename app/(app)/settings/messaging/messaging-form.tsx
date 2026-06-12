@@ -13,7 +13,7 @@ import {
 
 export interface MessagingInitial {
   smsEnabled: boolean;
-  /** "" = use env config, otherwise "stub" | "twilio". */
+  /** "" = use env config, otherwise "stub" | "twilio" | "telnyx". */
   smsProvider: string;
   smsAccountSid: string;
   hasAuthToken: boolean;
@@ -83,6 +83,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
               </option>
               <option value="stub">Stub (log only, no real SMS)</option>
               <option value="twilio">Twilio</option>
+              <option value="telnyx">Telnyx</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -92,7 +93,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
               name="smsFromNumber"
               defaultValue={initial.smsFromNumber}
               placeholder="+15551234567"
-              disabled={provider !== "twilio"}
+              disabled={provider !== "twilio" && provider !== "telnyx"}
             />
           </div>
         </div>
@@ -125,6 +126,28 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
                 Stored encrypted (AES-256-GCM) and never shown again.
               </p>
             </div>
+          </div>
+        )}
+
+        {provider === "telnyx" && (
+          <div className="space-y-2">
+            <Label htmlFor="smsAuthToken">Telnyx API key</Label>
+            <Input
+              id="smsAuthToken"
+              name="smsAuthToken"
+              type="password"
+              placeholder={
+                initial.hasAuthToken
+                  ? "Configured — leave blank to keep"
+                  : "Required (KEY…)"
+              }
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              Stored encrypted (AES-256-GCM) and never shown again. Delivery
+              receipts are not tracked for Telnyx — sends are confirmed, but
+              statuses stay at &ldquo;sent&rdquo;.
+            </p>
           </div>
         )}
 
