@@ -228,6 +228,21 @@ export default async function PropertyDetail({
                     }
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ppurchase">Purchase date</Label>
+                  <Input
+                    id="ppurchase"
+                    name="purchaseDate"
+                    type="date"
+                    defaultValue={
+                      property.purchaseDate
+                        ? DateTime.fromJSDate(property.purchaseDate, {
+                            zone: property.timezone,
+                          }).toFormat("yyyy-MM-dd")
+                        : ""
+                    }
+                  />
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 Mortgage terms feed the Financials module (net income and payoff
@@ -310,6 +325,16 @@ export default async function PropertyDetail({
                   : "None"
               }
             />
+            <Field
+              label="Purchased"
+              value={
+                property.purchaseDate
+                  ? DateTime.fromJSDate(property.purchaseDate, {
+                      zone: property.timezone,
+                    }).toFormat("MMM d, yyyy")
+                  : "—"
+              }
+            />
           </div>
           {property.notes && (
             <p className="mt-3 text-sm text-muted-foreground">{property.notes}</p>
@@ -331,10 +356,6 @@ export default async function PropertyDetail({
                 <div className="space-y-2">
                   <Label htmlFor="bdesc">Description</Label>
                   <Input id="bdesc" name="description" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bpurchase">Purchase date</Label>
-                  <Input id="bpurchase" name="purchaseDate" type="date" />
                 </div>
                 <Button type="submit" size="sm">Add building</Button>
               </form>
@@ -440,13 +461,7 @@ export default async function PropertyDetail({
                         {b.name}
                       </Link>,
                       b.description,
-                      `${units.length} unit${units.length === 1 ? "" : "s"}${
-                        b.purchaseDate
-                          ? ` · purchased ${b.purchaseDate.toLocaleDateString("en-US", {
-                              timeZone: property.timezone,
-                            })}`
-                          : ""
-                      }`,
+                      `${units.length} unit${units.length === 1 ? "" : "s"}`,
                     )}
                     {units.map(unitRow)}
                     {units.length === 0 && (
