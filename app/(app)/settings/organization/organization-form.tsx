@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -23,8 +23,11 @@ export interface OrganizationInitial {
   logoUrl: string | null;
 }
 
+const LOGO_MAX_BYTES = 2 * 1024 * 1024; // keep in sync with actions.ts
+
 export function OrganizationForm({ initial }: { initial: OrganizationInitial }) {
   const router = useRouter();
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [state, formAction, pending] = useActionState<OrganizationState, FormData>(
     async (prev, fd) => {
       const next = await saveOrganizationAction(prev, fd);
@@ -35,7 +38,16 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form
+      action={formAction}
+      // Block oversized logos client-side: past the server-action body cap
+      // the framework rejects the POST with a bare 413 before our validation
+      // can answer with a friendly message.
+      onSubmit={(e) => {
+        if (logoError) e.preventDefault();
+      }}
+      className="space-y-4"
+    >
       {state.error && (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>
@@ -108,7 +120,21 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
             </label>
           </div>
         )}
-        <Input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" />
+        <Input
+          id="logo"
+          name="logo"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            setLogoError(
+              f && f.size > LOGO_MAX_BYTES
+                ? `Logo is ${(f.size / 1024 / 1024).toFixed(1)} MB — the limit is 2 MB. Please resize or compress it.`
+                : null,
+            );
+          }}
+        />
+        {logoError && <p className="text-sm text-destructive">{logoError}</p>}
         <p className="text-xs text-muted-foreground">
           PNG, JPEG, or WebP, max 2 MB. Appears on printable receipts.
         </p>
