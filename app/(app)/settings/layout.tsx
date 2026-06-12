@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 const SETTINGS_LINKS: { href: string; label: string; cap: Capability }[] = [
   { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
   { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
+  { href: "/settings/leases", label: "Leases", cap: "organization.settings" },
   { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
   { href: "/settings/auth", label: "Authentication", cap: "auth.settings" },
   { href: "/settings/users", label: "Users", cap: "users.manage" },

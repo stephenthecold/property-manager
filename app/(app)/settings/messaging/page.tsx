@@ -14,6 +14,7 @@ const TEMPLATE_LABELS: Array<{ type: ReminderType; label: string }> = [
   { type: "rent_overdue", label: "Rent overdue" },
   { type: "partial_balance", label: "Partial balance" },
   { type: "payment_receipt", label: "Payment receipt" },
+  { type: "maintenance", label: "Maintenance notice" },
 ];
 
 export default async function MessagingSettingsPage() {

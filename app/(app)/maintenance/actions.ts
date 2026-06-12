@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
@@ -10,6 +11,47 @@ import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
+}
+
+/**
+ * Validation failures land back on the maintenance page as a banner instead
+ * of being thrown — a thrown server-action error renders as the opaque
+ * production digest page.
+ */
+function fail(message: string): never {
+  redirect(`/maintenance?error=${encodeURIComponent(message)}`);
+}
+
+/**
+ * Shared tenant-notification fields on jobs and recurring tasks:
+ * an optional schedule day, the SMS opt-in, and the lead time (0-14 days).
+ */
+function parseNotifyFields(fd: FormData): {
+  notifyTenants: boolean;
+  notifyDaysBefore: number;
+} {
+  const notifyTenants = fd.get("notifyTenants") != null;
+  const daysRaw = str(fd, "notifyDaysBefore");
+  let notifyDaysBefore = 2;
+  if (daysRaw !== "") {
+    const n = Number(daysRaw);
+    if (!Number.isInteger(n) || n < 0 || n > 14) {
+      fail("Days before must be a whole number from 0 to 14.");
+    }
+    notifyDaysBefore = n;
+  }
+  return { notifyTenants, notifyDaysBefore };
+}
+
+/** Optional day-of-month (1-31; clamped to short months downstream). */
+function parseDueDay(fd: FormData): number | null {
+  const raw = str(fd, "dueDay");
+  if (raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 31) {
+    fail("Day of month must be a whole number from 1 to 31.");
+  }
+  return n;
 }
 
 function revalidate(unitId?: string | null): void {
@@ -22,7 +64,7 @@ export async function createJobAction(fd: FormData): Promise<void> {
   await assertModuleEnabled("maintenance");
 
   const title = str(fd, "title");
-  if (!title) throw new Error("Job title is required.");
+  if (!title) fail("Job title is required.");
 
   // Unit (if given) determines the property; otherwise a property is required.
   const unitId = str(fd, "unitId") || null;
@@ -33,20 +75,25 @@ export async function createJobAction(fd: FormData): Promise<void> {
       where: { id: unitId },
       include: { property: { select: { id: true, timezone: true } } },
     });
-    if (!unit) throw new Error("Unit not found.");
+    if (!unit) fail("Unit not found.");
     propertyId = unit.property.id;
     tz = unit.property.timezone;
   } else if (propertyId) {
     const property = await prisma.property.findUnique({ where: { id: propertyId } });
-    if (!property) throw new Error("Property not found.");
+    if (!property) fail("Property not found.");
     tz = property.timezone;
   } else {
-    throw new Error("Pick a unit or a property for the job.");
+    fail("Pick a unit or a property for the job.");
   }
 
   const dueRaw = str(fd, "dueDate");
   const dueDate = dueRaw ? parseDateOnlyInZone(dueRaw, tz) : null;
-  if (dueRaw && !dueDate) throw new Error("Due date must be a valid date (YYYY-MM-DD).");
+  if (dueRaw && !dueDate) fail("Due date must be a valid date (YYYY-MM-DD).");
+
+  const { notifyTenants, notifyDaysBefore } = parseNotifyFields(fd);
+  if (notifyTenants && !dueDate) {
+    fail("Tenant SMS notifications need a due date.");
+  }
 
   await withAudit(
     {
@@ -62,10 +109,16 @@ export async function createJobAction(fd: FormData): Promise<void> {
           title,
           details: str(fd, "details") || null,
           dueDate,
+          notifyTenants,
+          notifyDaysBefore,
           createdBy: dbUser.id,
         },
       });
-      return { result: created, entityId: created.id, after: { title, unitId, dueDate } };
+      return {
+        result: created,
+        entityId: created.id,
+        after: { title, unitId, dueDate, notifyTenants, notifyDaysBefore },
+      };
     },
   );
   revalidate(unitId);
@@ -179,9 +232,15 @@ export async function createTaskAction(fd: FormData): Promise<void> {
   await assertModuleEnabled("maintenance");
   const propertyId = str(fd, "propertyId");
   const title = str(fd, "title");
-  if (!propertyId || !title) throw new Error("Property and task title are required.");
+  if (!propertyId || !title) fail("Property and task title are required.");
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) fail("Property not found.");
+
+  const dueDay = parseDueDay(fd);
+  const { notifyTenants, notifyDaysBefore } = parseNotifyFields(fd);
+  if (notifyTenants && dueDay == null) {
+    fail("Tenant SMS notifications need a day of month.");
+  }
 
   await withAudit(
     {
@@ -191,9 +250,67 @@ export async function createTaskAction(fd: FormData): Promise<void> {
     },
     async (tx) => {
       const created = await tx.recurringTask.create({
-        data: { propertyId, title, notes: str(fd, "notes") || null },
+        data: {
+          propertyId,
+          title,
+          notes: str(fd, "notes") || null,
+          dueDay,
+          notifyTenants,
+          notifyDaysBefore,
+        },
       });
-      return { result: created, entityId: created.id, after: { propertyId, title } };
+      return {
+        result: created,
+        entityId: created.id,
+        after: { propertyId, title, dueDay, notifyTenants, notifyDaysBefore },
+      };
+    },
+  );
+  revalidate();
+}
+
+/** Change an existing task's monthly schedule / tenant-notification settings. */
+export async function editTaskScheduleAction(fd: FormData): Promise<void> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const id = str(fd, "taskId");
+  const task = await prisma.recurringTask.findUnique({ where: { id } });
+  if (!task) fail("Task not found.");
+
+  const dueDay = parseDueDay(fd);
+  const { notifyTenants, notifyDaysBefore } = parseNotifyFields(fd);
+  if (notifyTenants && dueDay == null) {
+    fail("Tenant SMS notifications need a day of month.");
+  }
+  if (
+    task.dueDay === dueDay &&
+    task.notifyTenants === notifyTenants &&
+    task.notifyDaysBefore === notifyDaysBefore
+  ) {
+    return; // no-op resubmit
+  }
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.task_schedule_updated",
+      entityType: "RecurringTask",
+      entityId: task.id,
+      before: {
+        dueDay: task.dueDay,
+        notifyTenants: task.notifyTenants,
+        notifyDaysBefore: task.notifyDaysBefore,
+      },
+    },
+    async (tx) => {
+      const updated = await tx.recurringTask.update({
+        where: { id: task.id },
+        data: { dueDay, notifyTenants, notifyDaysBefore },
+      });
+      return {
+        result: updated,
+        after: { dueDay, notifyTenants, notifyDaysBefore },
+      };
     },
   );
   revalidate();

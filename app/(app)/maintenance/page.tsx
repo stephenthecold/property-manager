@@ -11,12 +11,14 @@ import {
   createJobAction,
   createTaskAction,
   deleteJobAction,
+  editTaskScheduleAction,
   markTaskDoneAction,
   removeTaskAction,
   reopenJobAction,
 } from "./actions";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +27,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export const runtime = "nodejs";
+
+/** 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd" … */
+function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
 
 export default async function MaintenancePage({
   searchParams,
@@ -40,6 +50,7 @@ export default async function MaintenancePage({
     const v = sp[k];
     return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
   };
+  const error = first("error") || null;
   const filterPropertyId = first("propertyId") || undefined;
   const filterStatus = first("status") === "completed" ? "completed" : first("status") === "pending" ? "pending" : undefined;
 
@@ -81,6 +92,11 @@ export default async function MaintenancePage({
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Maintenance</h1>
@@ -129,6 +145,28 @@ export default async function MaintenancePage({
               <Label htmlFor="mjDue">Due date (optional)</Label>
               <Input id="mjDue" name="dueDate" type="date" />
             </div>
+            <div className="flex items-end gap-4">
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <input type="checkbox" name="notifyTenants" /> Notify tenants by
+                SMS
+              </label>
+              <div className="space-y-2">
+                <Label htmlFor="mjNotifyDays">Days before</Label>
+                <Input
+                  id="mjNotifyDays"
+                  name="notifyDaysBefore"
+                  type="number"
+                  min={0}
+                  max={14}
+                  defaultValue={2}
+                  className="w-24"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Notifications need a due date; consenting tenants get one text per
+              job starting that many days ahead.
+            </p>
             <div className="space-y-2">
               <Label htmlFor="mjDetails">Details</Label>
               <Textarea id="mjDetails" name="details" />
@@ -326,6 +364,41 @@ export default async function MaintenancePage({
                 <Label htmlFor="rtNotes">Notes</Label>
                 <Input id="rtNotes" name="notes" placeholder="Optional" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="rtDueDay">Day of month (optional)</Label>
+                <Input
+                  id="rtDueDay"
+                  name="dueDay"
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder="e.g. 15"
+                  className="w-24"
+                />
+              </div>
+              <div className="flex items-end gap-4">
+                <label className="flex h-9 items-center gap-2 text-sm">
+                  <input type="checkbox" name="notifyTenants" /> Notify tenants
+                  by SMS
+                </label>
+                <div className="space-y-2">
+                  <Label htmlFor="rtNotifyDays">Days before</Label>
+                  <Input
+                    id="rtNotifyDays"
+                    name="notifyDaysBefore"
+                    type="number"
+                    min={0}
+                    max={14}
+                    defaultValue={2}
+                    className="w-24"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Notifications need a day of month; consenting tenants of the
+                property get one text per occurrence starting that many days
+                ahead.
+              </p>
               <Button type="submit" size="sm">
                 Add task
               </Button>
@@ -338,6 +411,8 @@ export default async function MaintenancePage({
             columns={[
               { key: "property", label: "Property" },
               { key: "task", label: "Task" },
+              { key: "schedule", label: "Schedule", className: "hidden sm:table-cell" },
+              { key: "notify", label: "Notify", className: "hidden md:table-cell" },
               { key: "lastDone", label: "Last done" },
               { key: "month", label: "This month" },
               { key: "actions", label: "", align: "right", sortable: false },
@@ -347,6 +422,8 @@ export default async function MaintenancePage({
               sortValues: [
                 t.property.name,
                 t.title,
+                t.dueDay,
+                t.notifyTenants ? t.notifyDaysBefore : null,
                 t.lastDoneOn?.toISOString() ?? null,
                 doneThisMonth(t) ? "done" : "due",
                 null,
@@ -356,6 +433,14 @@ export default async function MaintenancePage({
                 <span key="t" title={t.notes ?? undefined} className="font-medium">
                   {t.title}
                 </span>,
+                t.dueDay != null ? `${ordinal(t.dueDay)} monthly` : "—",
+                t.notifyTenants ? (
+                  <Badge key="n" variant="outline" className="font-medium">
+                    SMS {t.notifyDaysBefore}d before
+                  </Badge>
+                ) : (
+                  "—"
+                ),
                 t.lastDoneOn ? t.lastDoneOn.toLocaleDateString() : "Never",
                 doneThisMonth(t) ? (
                   <Badge
@@ -383,6 +468,57 @@ export default async function MaintenancePage({
                       </Button>
                     </form>
                   )}
+                  <FormDialog
+                    trigger="Schedule"
+                    triggerSize="xs"
+                    title="Edit schedule"
+                    description={t.title}
+                  >
+                    <form action={editTaskScheduleAction} className="space-y-3">
+                      <input type="hidden" name="taskId" value={t.id} />
+                      <div className="space-y-2">
+                        <Label htmlFor={`dueDay-${t.id}`}>
+                          Day of month (blank = unscheduled)
+                        </Label>
+                        <Input
+                          id={`dueDay-${t.id}`}
+                          name="dueDay"
+                          type="number"
+                          min={1}
+                          max={31}
+                          defaultValue={t.dueDay ?? ""}
+                          className="w-24"
+                        />
+                      </div>
+                      <div className="flex items-end gap-4">
+                        <label className="flex h-9 items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            name="notifyTenants"
+                            defaultChecked={t.notifyTenants}
+                          />{" "}
+                          Notify tenants by SMS
+                        </label>
+                        <div className="space-y-2">
+                          <Label htmlFor={`notifyDays-${t.id}`}>
+                            Days before
+                          </Label>
+                          <Input
+                            id={`notifyDays-${t.id}`}
+                            name="notifyDaysBefore"
+                            type="number"
+                            min={0}
+                            max={14}
+                            defaultValue={t.notifyDaysBefore}
+                            className="w-24"
+                          />
+                        </div>
+                      </div>
+                      <Button type="submit" size="sm">
+                        Save schedule
+                      </Button>
+                    </form>
+                  </FormDialog>
                   <form action={removeTaskAction} className="inline">
                     <input type="hidden" name="taskId" value={t.id} />
                     <Button type="submit" variant="ghost" size="xs">

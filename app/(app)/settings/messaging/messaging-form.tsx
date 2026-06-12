@@ -32,7 +32,7 @@ export interface MessagingInitial {
 }
 
 const VARS_HINT =
-  "Variables: {{tenant_name}} {{first_name}} {{property}} {{unit}} {{amount_due}} {{due_date}} {{balance}}";
+  "Variables: {{tenant_name}} {{first_name}} {{property}} {{unit}} {{amount_due}} {{due_date}} {{balance}} — maintenance notices also get {{maintenance_title}} {{maintenance_date}}";
 
 export function MessagingForm({ initial }: { initial: MessagingInitial }) {
   const [state, formAction, pending] = useActionState<MessagingState, FormData>(

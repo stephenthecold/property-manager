@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { PaymentMethod, PaymentStatus } from "@/lib/generated/prisma/enums";
 import { DataTable } from "@/components/app/data-table";
+import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,27 @@ export default async function PaymentsPage({
     },
   });
 
+  // Active leases for the "Record payment" dialog's lease picker.
+  const activeLeases = await prisma.lease.findMany({
+    where: { status: { in: ["active", "month_to_month"] } },
+    orderBy: [
+      { unit: { property: { name: "asc" } } },
+      { unit: { unitNumber: "asc" } },
+    ],
+    select: {
+      id: true,
+      tenant: { select: { firstName: true, lastName: true } },
+      unit: {
+        select: { unitNumber: true, property: { select: { name: true } } },
+      },
+    },
+  });
+  const leaseOptions = activeLeases.map((l) => ({
+    id: l.id,
+    label: `Unit ${l.unit.unitNumber} — ${l.tenant.lastName}, ${l.tenant.firstName}`,
+    group: l.unit.property.name,
+  }));
+
   // One query for all rows: digital receipt per payment (partial unique index).
   const receipts = await prisma.receipt.findMany({
     where: {
@@ -77,10 +99,15 @@ export default async function PaymentsPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Payments</h1>
-      <p className="text-sm text-muted-foreground">
-        Record payments from a tenant&apos;s page. Showing the 100 most recent.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Payments</h1>
+          <p className="text-sm text-muted-foreground">
+            Showing the 100 most recent.
+          </p>
+        </div>
+        <RecordPaymentDialog leaseOptions={leaseOptions} trigger="Record payment" />
+      </div>
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">

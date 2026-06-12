@@ -109,6 +109,7 @@ enum SentMethod {
 enum UploadType {
   receipt_photo
   lease
+  lease_template // .docx with {{placeholders}}, filled per lease
   tenant_document
   other
 }
@@ -119,6 +120,7 @@ enum ReminderType {
   partial_balance
   payment_receipt
   manual
+  maintenance
 }
 
 enum ReminderStatus {
@@ -273,6 +275,10 @@ model AppSettings {
   // Missing keys use the built-in defaults (lib/services/app-settings.ts).
   // Disabling a module hides its UI but never deletes its data.
   modules Json @default("{}")
+
+  // Built-in lease-agreement clause text ({{placeholder}} template) rendered
+  // on the printable agreement page; null -> the shipped default.
+  leaseAgreementText String?
 
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
@@ -462,6 +468,9 @@ model Lease {
   scheduledRentAmountCents    BigInt?
   scheduledRentEffectiveDate  DateTime?
   status               LeaseStatus @default(draft)
+  // Archived leases (terminated only) are hidden from the default lists; all
+  // aggregates already exclude them via status. Never set on active leases.
+  isArchived           Boolean     @default(false)
   notes                String?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
@@ -628,6 +637,7 @@ model Receipt {
 model UploadedDocument {
   id            String     @id @default(cuid())
   tenantId      String?
+  leaseId       String? // loose ref like tenantId: lease agreements, filled templates
   paymentId     String?
   receiptId     String?
   fileUrl       String
@@ -642,6 +652,7 @@ model UploadedDocument {
   createdAt     DateTime   @default(now())
 
   @@index([tenantId])
+  @@index([leaseId])
   @@index([paymentId])
   @@index([receiptId])
 }
@@ -727,6 +738,10 @@ model MaintenanceJob {
   details     String?
   status      MaintenanceJobStatus @default(pending)
   dueDate     DateTime?
+  // Text consenting tenants (unit's lease, or whole property when unitId is
+  // null) notifyDaysBefore days ahead of dueDate. Requires a dueDate.
+  notifyTenants    Boolean @default(false)
+  notifyDaysBefore Int     @default(2)
   completedAt DateTime?
   costCents   BigInt? // entered on completion; mirrored to PropertyExpense
   createdBy   String?
@@ -749,6 +764,12 @@ model RecurringTask {
   notes      String?
   active     Boolean   @default(true)
   lastDoneOn DateTime?
+  // Monthly schedule (day of month, clamped to short months; null = unscheduled).
+  // When notifyTenants is on, the worker texts consenting tenants of the
+  // property notifyDaysBefore days ahead of each occurrence (idempotent).
+  dueDay           Int?
+  notifyTenants    Boolean @default(false)
+  notifyDaysBefore Int     @default(2)
   createdAt  DateTime  @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)

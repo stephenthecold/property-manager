@@ -67,6 +67,7 @@ describe("buildReminderVars", () => {
 describe("DEFAULT_TEMPLATES", () => {
   it("covers every ReminderType and manual is empty (UI-supplied)", () => {
     expect(Object.keys(DEFAULT_TEMPLATES).sort()).toEqual([
+      "maintenance",
       "manual",
       "partial_balance",
       "payment_receipt",

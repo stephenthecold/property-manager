@@ -19,6 +19,7 @@ export interface CreateDocumentInput {
   contentType?: string | null;
   uploadType: UploadType;
   tenantId?: string | null;
+  leaseId?: string | null;
   paymentId?: string | null;
   receiptId?: string | null;
   notes?: string | null;
@@ -60,6 +61,7 @@ export async function createUploadedDocument(
           fileSize: input.body.length,
           uploadType: input.uploadType,
           tenantId: input.tenantId ?? null,
+          leaseId: input.leaseId ?? null,
           paymentId: input.paymentId ?? null,
           receiptId: input.receiptId ?? null,
           notes: input.notes ?? null,
@@ -78,6 +80,7 @@ export async function createUploadedDocument(
           fileSize: input.body.length,
           uploadType: input.uploadType,
           tenantId: input.tenantId ?? null,
+          leaseId: input.leaseId ?? null,
           paymentId: input.paymentId ?? null,
           receiptId: input.receiptId ?? null,
         },
