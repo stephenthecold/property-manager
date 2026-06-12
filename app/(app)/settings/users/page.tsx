@@ -96,7 +96,7 @@ export default async function UsersSettingsPage() {
                     <Badge
                       key="s"
                       variant="outline"
-                      className="border-emerald-200 bg-emerald-100 text-emerald-800"
+                      className="border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                     >
                       Active
                     </Badge>

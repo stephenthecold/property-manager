@@ -73,7 +73,7 @@ export default async function PropertiesPage() {
                 <Badge
                   key="s"
                   variant="outline"
-                  className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+                  className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                 >
                   Active
                 </Badge>

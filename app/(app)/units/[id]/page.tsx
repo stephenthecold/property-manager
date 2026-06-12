@@ -309,7 +309,7 @@ export default async function UnitDetail({
                   <li key={j.id} className="flex flex-wrap items-center gap-2">
                     <Badge
                       variant="outline"
-                      className="border-amber-200 bg-amber-100 font-medium text-amber-800"
+                      className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                     >
                       Pending
                     </Badge>

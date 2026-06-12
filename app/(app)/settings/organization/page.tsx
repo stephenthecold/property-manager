@@ -10,9 +10,9 @@ import { OrganizationForm } from "./organization-form";
 export const runtime = "nodejs";
 
 const HEALTH_BADGE = {
-  ok: "border-emerald-200 bg-emerald-100 text-emerald-800",
-  warn: "border-amber-200 bg-amber-100 text-amber-800",
-  error: "border-red-200 bg-red-100 text-red-800",
+  ok: "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
+  warn: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  error: "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
 } as const;
 
 export default async function OrganizationSettingsPage() {
@@ -76,11 +76,11 @@ export default async function OrganizationSettingsPage() {
                 <dt className="text-muted-foreground">{s.label}</dt>
                 <dd>
                   {s.set ? (
-                    <Badge variant="outline" className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800">
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                       Set
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="border-red-200 bg-red-100 font-medium text-red-800">
+                    <Badge variant="outline" className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300">
                       Not set
                     </Badge>
                   )}
