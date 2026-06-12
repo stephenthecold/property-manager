@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { sendBulkOverdueRemindersAction } from "@/app/(app)/reminders/actions";
 import {
   getIncomeSummary,
@@ -57,6 +58,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireCapability("reports.view");
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v) ?? "";

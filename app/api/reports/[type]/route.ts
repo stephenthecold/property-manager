@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
-import { authorizeApiRole } from "@/lib/auth/session";
+import { authorizeApiCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { prisma } from "@/lib/db";
 import {
@@ -46,9 +46,9 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ type: string }> },
 ) {
-  // Financial CSV exports (incl. arbitrary tenant/unit ledgers by id) are a
-  // manager+ capability — closes ledger enumeration by a read-only viewer.
-  const auth = await authorizeApiRole("manager");
+  // Financial CSV exports (incl. arbitrary tenant/unit ledgers by id) require
+  // the reports capability — closes ledger enumeration by a read-only viewer.
+  const auth = await authorizeApiCapability("reports.view");
   if (!auth.ok) {
     return new NextResponse(auth.status === 401 ? "Unauthorized" : "Forbidden", {
       status: auth.status,

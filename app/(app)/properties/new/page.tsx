@@ -1,5 +1,5 @@
 import { createProperty } from "../actions";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const runtime = "nodejs";
 
 export default async function NewPropertyPage() {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const env = getEnv();
   return (
     <div className="mx-auto max-w-xl">

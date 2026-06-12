@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit } from "@/lib/audit/audit";
 import { saveBillingDefaults, getAppSettings } from "@/lib/services/app-settings";
 import { toCents } from "@/lib/money";
@@ -13,7 +13,7 @@ function str(fd: FormData, key: string): string {
 }
 
 export async function saveBillingDefaultsAction(fd: FormData): Promise<void> {
-  await requireRole("finance");
+  await requireCapability("billing.settings");
   const actor = await auditActor();
 
   const dueDay = Number(str(fd, "dueDay") || "1");
@@ -84,7 +84,7 @@ export async function saveBillingDefaultsAction(fd: FormData): Promise<void> {
  * mid-lease shifts every future period key and due date.
  */
 export async function applyChargeTermsToActiveLeases(): Promise<void> {
-  await requireRole("finance");
+  await requireCapability("billing.settings");
   const actor = await auditActor();
   const { billing } = await getAppSettings();
 

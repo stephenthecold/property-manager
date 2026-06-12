@@ -1,5 +1,5 @@
 import { createTenant } from "../actions";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const runtime = "nodejs";
 
 export default async function NewTenantPage() {
-  await requireRole("manager");
+  await requireCapability("tenants.manage");
   return (
     <div className="mx-auto max-w-xl">
       <Card>

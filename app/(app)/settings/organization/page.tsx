@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { OrganizationForm } from "./organization-form";
@@ -7,7 +7,7 @@ import { OrganizationForm } from "./organization-form";
 export const runtime = "nodejs";
 
 export default async function OrganizationSettingsPage() {
-  await requireRole("admin");
+  await requireCapability("organization.settings");
   const env = getEnv();
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
 

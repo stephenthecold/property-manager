@@ -5,7 +5,11 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { effectiveRole, roleAtLeast } from "@/lib/auth/rbac";
 import { getViewAsRole } from "@/lib/auth/view-as";
+import { hasCapability, type Capability } from "@/lib/auth/permissions";
+import { getAppSettings } from "@/lib/services/app-settings";
 import type { Role } from "@/lib/generated/prisma/enums";
+
+type DbUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
 
 export type SessionUser = Session["user"];
 
@@ -36,7 +40,58 @@ export async function requireUser(): Promise<SessionUser> {
  */
 export async function requireRole(min: Role): Promise<{
   user: SessionUser;
-  dbUser: NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
+  dbUser: DbUser;
+}> {
+  const { user, dbUser, acting } = await authenticatedUser();
+  if (!roleAtLeast(acting, min)) {
+    throw new Error("Forbidden: insufficient role");
+  }
+  return { user, dbUser };
+}
+
+/**
+ * Authoritative capability check (the matrix layered over roles). Same identity
+ * verification as requireRole, then enforces a specific capability using the
+ * acting role and the saved permission matrix. Use this in mutations/sensitive
+ * pages instead of requireRole so permissions are configurable per role.
+ */
+export async function requireCapability(cap: Capability): Promise<{
+  user: SessionUser;
+  dbUser: DbUser;
+}> {
+  const { user, dbUser, acting } = await authenticatedUser();
+  const { rolePermissions } = await getAppSettings();
+  if (!hasCapability(acting, cap, rolePermissions)) {
+    throw new Error(`Forbidden: missing capability ${cap}`);
+  }
+  return { user, dbUser };
+}
+
+/**
+ * API-route capability check. Never redirects; returns the DB user or an HTTP
+ * status. Uses the true DB role (impersonation is a UI affordance, not an API).
+ */
+export async function authorizeApiCapability(cap: Capability): Promise<
+  | { ok: true; user: SessionUser; dbUser: DbUser }
+  | { ok: false; status: 401 | 403 }
+> {
+  const auth = await authorizeApiRole("viewer");
+  if (!auth.ok) return auth;
+  const { rolePermissions } = await getAppSettings();
+  if (!hasCapability(auth.dbUser.role as Role, cap, rolePermissions)) {
+    return { ok: false, status: 403 };
+  }
+  return auth;
+}
+
+/**
+ * Shared identity verification: re-read the user from the DB, enforce isActive
+ * and securityStamp (revocation), and resolve the acting role (with view-as).
+ */
+async function authenticatedUser(): Promise<{
+  user: SessionUser;
+  dbUser: DbUser;
+  acting: Role;
 }> {
   const u = await requireUser();
   const dbUser = await prisma.user.findUnique({ where: { id: u.id } });
@@ -46,10 +101,7 @@ export async function requireRole(min: Role): Promise<{
     redirect("/login");
   }
   const acting = effectiveRole(dbUser.role as Role, await getViewAsRole());
-  if (!roleAtLeast(acting, min)) {
-    throw new Error("Forbidden: insufficient role");
-  }
-  return { user: u, dbUser };
+  return { user: u, dbUser, acting };
 }
 
 /**

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import { saveOrganizationSettings } from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
 
@@ -21,7 +21,7 @@ export async function saveOrganizationAction(
   _prev: OrganizationState,
   fd: FormData,
 ): Promise<OrganizationState> {
-  await requireRole("admin");
+  await requireCapability("organization.settings");
   const actor = await auditActor();
 
   // Logo: a new file replaces it, the checkbox removes it, otherwise unchanged.

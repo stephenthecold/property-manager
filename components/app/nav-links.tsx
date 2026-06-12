@@ -4,22 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/properties", label: "Properties" },
-  { href: "/tenants", label: "Tenants" },
-  { href: "/leases", label: "Leases" },
-  { href: "/payments", label: "Payments" },
-  { href: "/documents", label: "Documents" },
-  { href: "/reminders", label: "Reminders" },
-  { href: "/reports", label: "Reports" },
-];
+export interface NavItem {
+  href: string;
+  label: string;
+}
 
-export function NavLinks() {
+export function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-wrap gap-1">
-      {LINKS.map((l) => {
+      {items.map((l) => {
         const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
         return (
           <Link

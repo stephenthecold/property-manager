@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorizeApiRole } from "@/lib/auth/session";
+import { authorizeApiCapability } from "@/lib/auth/session";
 import { UploadType } from "@/lib/generated/prisma/enums";
 import { createUploadedDocument } from "@/lib/services/documents";
 
@@ -21,7 +21,7 @@ function formString(form: FormData, name: string): string | null {
 }
 
 export async function POST(req: Request) {
-  const auth = await authorizeApiRole("manager");
+  const auth = await authorizeApiCapability("documents.manage");
   if (!auth.ok) {
     return NextResponse.json(
       { error: auth.status === 401 ? "Unauthorized" : "Forbidden" },

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { fromCents } from "@/lib/money";
 import { saveBillingDefaultsAction, applyChargeTermsToActiveLeases } from "./actions";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const runtime = "nodejs";
 
 export default async function BillingSettingsPage() {
-  await requireRole("finance");
+  await requireCapability("billing.settings");
   const { billing } = await getAppSettings();
   const activeLeases = await prisma.lease.count({
     where: { status: { in: ["active", "month_to_month"] } },

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { listDocuments } from "@/lib/services/documents";
 import type { UploadType } from "@/lib/generated/prisma/enums";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -24,6 +25,7 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireCapability("documents.manage");
   const sp = await searchParams;
   const rawType = typeof sp.uploadType === "string" ? sp.uploadType : "";
   const uploadType = (UPLOAD_TYPES as readonly string[]).includes(rawType)

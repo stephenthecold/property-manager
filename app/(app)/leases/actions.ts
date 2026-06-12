@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { toCents } from "@/lib/money";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 import { generateChargesForLease } from "@/lib/services/billing";
 import { daysBetween, parseDateOnlyInZone } from "@/lib/accounting/periods";
@@ -74,7 +74,7 @@ function parseLateFeeTerms(fd: FormData): {
 }
 
 export async function createLease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const tenantId = str(fd, "tenantId");
   const unitId = str(fd, "unitId");
   const rentRaw = str(fd, "rentAmount");
@@ -234,7 +234,7 @@ export async function createLease(fd: FormData): Promise<void> {
  * changing it would re-key (and re-bill) every elapsed period.
  */
 export async function updateLease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   if (!leaseId) throw new Error("Missing lease id.");
   const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
@@ -332,7 +332,7 @@ export async function updateLease(fd: FormData): Promise<void> {
  * stays historically correct.
  */
 export async function renewLease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   if (!leaseId) throw new Error("Missing lease id.");
   const lease = await prisma.lease.findUnique({
@@ -380,7 +380,7 @@ export async function renewLease(fd: FormData): Promise<void> {
 }
 
 export async function addCoTenant(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const tenantId = str(fd, "tenantId");
   if (!leaseId || !tenantId) throw new Error("Choose a tenant to add.");
@@ -415,7 +415,7 @@ export async function addCoTenant(fd: FormData): Promise<void> {
 }
 
 export async function removeCoTenant(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const id = str(fd, "leaseTenantId");
   if (!id) throw new Error("Missing co-tenant id.");
   const row = await prisma.leaseTenant.findUnique({
@@ -443,7 +443,7 @@ export async function removeCoTenant(fd: FormData): Promise<void> {
 }
 
 export async function addLeaseDeposit(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const label = str(fd, "label");
   const amountRaw = str(fd, "amount");
@@ -490,7 +490,7 @@ export async function addLeaseDeposit(fd: FormData): Promise<void> {
 }
 
 export async function removeLeaseDeposit(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const id = str(fd, "depositId");
   if (!id) throw new Error("Missing deposit id.");
   const dep = await prisma.leaseDeposit.findUnique({
@@ -522,7 +522,7 @@ export async function removeLeaseDeposit(fd: FormData): Promise<void> {
 }
 
 export async function scheduleRentIncrease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const amountRaw = str(fd, "newRentAmount");
   const dateRaw = str(fd, "effectiveDate");
@@ -598,7 +598,7 @@ export async function scheduleRentIncrease(fd: FormData): Promise<void> {
 }
 
 export async function cancelRentIncrease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   if (!leaseId) throw new Error("Missing lease id.");
   const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
@@ -634,7 +634,7 @@ export async function cancelRentIncrease(fd: FormData): Promise<void> {
 }
 
 export async function terminateLease(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const leaseId = String(fd.get("leaseId") ?? "");
   if (!leaseId) throw new Error("Missing lease id.");
   const lease = await prisma.lease.update({

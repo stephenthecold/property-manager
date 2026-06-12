@@ -1,5 +1,5 @@
 import { createLease } from "../actions";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { fromCents } from "@/lib/money";
@@ -17,7 +17,7 @@ export default async function NewLeasePage({
 }: {
   searchParams: Promise<{ tenantId?: string }>;
 }) {
-  await requireRole("manager");
+  await requireCapability("leases.manage");
   const { tenantId } = await searchParams;
 
   const [tenants, units, { billing }] = await Promise.all([
