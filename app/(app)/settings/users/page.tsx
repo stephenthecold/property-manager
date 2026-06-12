@@ -2,12 +2,15 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { roleRank } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/generated/prisma/enums";
-import { setUserRole, setUserActive, startViewAs } from "./actions";
+import { setUserRole, setUserActive, setUserNotifications, startViewAs } from "./actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/app/data-table";
+import { FormDialog } from "@/components/app/form-dialog";
 
 export const runtime = "nodejs";
 
@@ -57,6 +60,7 @@ export default async function UsersSettingsPage({
               { key: "name", label: "Name", className: "hidden sm:table-cell" },
               { key: "role", label: "Role", numeric: true },
               { key: "status", label: "Status" },
+              { key: "alerts", label: "Alerts", className: "hidden lg:table-cell", sortable: false },
               { key: "actions", label: "Actions", align: "right", sortable: false },
             ]}
             rows={users.map((u) => {
@@ -70,6 +74,7 @@ export default async function UsersSettingsPage({
                   u.name,
                   roleRank(u.role as Role),
                   u.isActive ? "Active" : "Disabled",
+                  null,
                   null,
                 ],
                 cells: [
@@ -116,6 +121,46 @@ export default async function UsersSettingsPage({
                       Disabled
                     </Badge>
                   ),
+                  <FormDialog
+                    key="n"
+                    trigger="Notifications"
+                    title={`Notifications — ${u.email}`}
+                    description="Which staff alerts this user receives. Digests and alerts only go to manager and above."
+                  >
+                    <form action={setUserNotifications} className="space-y-3">
+                      <input type="hidden" name="userId" value={u.id} />
+                      {(
+                        [
+                          ["notifyOverdueDigest", "Weekly overdue-rent digest", u.notifyOverdueDigest],
+                          ["notifyMaintenanceDigest", "Weekly maintenance digest", u.notifyMaintenanceDigest],
+                          ["notifyCashPickup", "Cash-pickup alerts (email + text)", u.notifyCashPickup],
+                        ] as const
+                      ).map(([name, label, checked]) => (
+                        <label key={name} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            name={name}
+                            defaultChecked={checked}
+                            className="size-4 accent-primary"
+                          />
+                          {label}
+                        </label>
+                      ))}
+                      <div className="space-y-1">
+                        <Label htmlFor={`phone-${u.id}`}>Mobile for text alerts</Label>
+                        <Input
+                          id={`phone-${u.id}`}
+                          name="phone"
+                          type="tel"
+                          defaultValue={u.phone ?? ""}
+                          placeholder="+1 555 000 1234"
+                        />
+                      </div>
+                      <Button type="submit" size="sm">
+                        Save
+                      </Button>
+                    </form>
+                  </FormDialog>,
                   locked ? (
                     <span key="a" className="text-xs text-muted-foreground">
                       —

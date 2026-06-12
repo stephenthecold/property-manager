@@ -5,9 +5,19 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
+import { PaymentMethod } from "@/lib/generated/prisma/enums";
+import {
+  invitePortalAccount,
+  setPortalAccountActive,
+} from "@/lib/services/portal-auth";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
+}
+
+/** "" → null; anything else must be a PaymentMethod enum value. */
+function parsePreferredMethod(raw: string): PaymentMethod | null {
+  return raw in PaymentMethod ? (raw as PaymentMethod) : null;
 }
 
 export async function createTenant(fd: FormData): Promise<void> {
@@ -59,6 +69,7 @@ export async function updateTenant(fd: FormData): Promise<void> {
     emergencyContactPhone: str(fd, "emergencyContactPhone") || null,
     smsConsent: fd.get("smsConsent") === "on",
     isActive: fd.get("isActive") === "on",
+    preferredPaymentMethod: parsePreferredMethod(str(fd, "preferredPaymentMethod")),
     notes: str(fd, "notes") || null,
   };
 
@@ -78,6 +89,7 @@ export async function updateTenant(fd: FormData): Promise<void> {
         emergencyContactPhone: tenant.emergencyContactPhone,
         smsConsent: tenant.smsConsent,
         isActive: tenant.isActive,
+        preferredPaymentMethod: tenant.preferredPaymentMethod,
         notes: tenant.notes,
       },
     },
@@ -89,4 +101,66 @@ export async function updateTenant(fd: FormData): Promise<void> {
 
   revalidatePath(`/tenants/${tenant.id}`);
   revalidatePath("/tenants");
+}
+
+// ---------------------------------------------------------------------------
+// Tenant portal (module "tenantPortal") — invite + enable/disable, portal.manage
+// ---------------------------------------------------------------------------
+
+export interface PortalInviteState {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  /** Shown to staff when no channel delivered (stub providers / no contact). */
+  link?: string;
+}
+
+export async function invitePortalAccountAction(
+  _prev: PortalInviteState,
+  fd: FormData,
+): Promise<PortalInviteState> {
+  await requireCapability("portal.manage");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) return { error: "Missing tenant." };
+  const result = await invitePortalAccount({
+    tenantId,
+    actor: await auditActor(),
+  });
+  if (!result.ok) return { error: result.error ?? "Invite failed." };
+  revalidatePath(`/tenants/${tenantId}`);
+  const channels = [
+    result.sms === "sent" ? "text" : null,
+    result.email === "sent" ? "email" : null,
+  ].filter(Boolean);
+  return {
+    ok: true,
+    message:
+      channels.length > 0
+        ? `Invite link sent by ${channels.join(" and ")}. It expires in 7 days.`
+        : "Invite created, but no message could be delivered — share the link below directly.",
+    link: result.linkForOperator,
+  };
+}
+
+export async function setPortalAccountActiveAction(
+  _prev: PortalInviteState,
+  fd: FormData,
+): Promise<PortalInviteState> {
+  await requireCapability("portal.manage");
+  const tenantId = str(fd, "tenantId");
+  const isActive = str(fd, "isActive") === "true";
+  if (!tenantId) return { error: "Missing tenant." };
+  const result = await setPortalAccountActive({
+    tenantId,
+    isActive,
+    actor: await auditActor(),
+  });
+  if (!result.ok) return { error: result.error ?? "Update failed." };
+  revalidatePath(`/tenants/${tenantId}`);
+  return {
+    ok: true,
+    message: isActive
+      ? "Portal login enabled."
+      : "Portal login disabled — their sessions were signed out.",
+  };
 }

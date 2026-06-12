@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { getEnv } from "@/lib/config/env";
+import { clientIpFromXff } from "@/lib/http/client-ip";
 import { recordSignature, type SignErrorCode } from "@/lib/services/esign";
 
 /**
@@ -15,23 +15,6 @@ export interface SignActionState {
   error?: string;
 }
 
-/**
- * Real client IP from x-forwarded-for honoring TRUSTED_PROXY_COUNT: each
- * trusted hop appends the peer it received from, so the trustworthy client
- * entry is the Nth from the END (N = trusted proxies, min 1). Earlier entries
- * are caller-supplied and spoofable.
- */
-function clientIpFromXff(xff: string | null): string | null {
-  if (!xff) return null;
-  const hops = xff
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (hops.length === 0) return null;
-  const trusted = Math.min(Math.max(getEnv().TRUSTED_PROXY_COUNT, 1), hops.length);
-  return hops[hops.length - trusted] ?? null;
-}
-
 const ERROR_MESSAGES: Record<SignErrorCode, string> = {
   invalid: "This signing link is invalid or has expired.",
   expired:
@@ -41,7 +24,7 @@ const ERROR_MESSAGES: Record<SignErrorCode, string> = {
   consent_required:
     "Please check the consent box to agree to sign electronically.",
   invalid_signature:
-    "Please add your signature (typed name up to 120 characters, or a drawing) and try again.",
+    "Please add your signature (typed name up to 120 characters, or a drawing) — and your initials where the agreement asks for them — then try again.",
   storage_unavailable:
     "We couldn't save your signature right now — please try again in a few minutes.",
 };
@@ -55,6 +38,13 @@ export async function signAction(
   const consent = fd.get("consent") === "on" || fd.get("consent") === "true";
   const signatureText = String(fd.get("signatureText") ?? "");
   const signatureImagePngDataUrl = String(fd.get("signatureImage") ?? "");
+  // Initials are present only when the document has {{tenant_initials}}
+  // markers; the service re-derives that requirement from the frozen text.
+  const initialsKindRaw = String(fd.get("initialsKind") ?? "");
+  const initialsKind =
+    initialsKindRaw === "drawn" ? "drawn" : initialsKindRaw === "typed" ? "typed" : undefined;
+  const initialsText = String(fd.get("initialsText") ?? "");
+  const initialsImagePngDataUrl = String(fd.get("initialsImage") ?? "");
 
   const h = await headers();
   const ip = clientIpFromXff(h.get("x-forwarded-for"));
@@ -67,6 +57,9 @@ export async function signAction(
       kind,
       signatureText: signatureText || undefined,
       signatureImagePngDataUrl: signatureImagePngDataUrl || undefined,
+      initialsKind,
+      initialsText: initialsText || undefined,
+      initialsImagePngDataUrl: initialsImagePngDataUrl || undefined,
       consent,
       ip,
       userAgent,

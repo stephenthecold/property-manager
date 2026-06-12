@@ -12,6 +12,11 @@ import {
   signingKindLabel,
 } from "@/lib/services/esign";
 import { renderTemplate } from "@/lib/reminders/templates";
+import {
+  documentHasInlineSignatures,
+  markerPassthroughVars,
+} from "@/lib/esign/markers";
+import { AgreementText } from "@/components/app/agreement-text";
 import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
 import { PrintButton } from "@/components/app/print-button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -134,10 +139,13 @@ export default async function LeaseAgreementPage({
     .filter(Boolean)
     .join(" · ");
 
-  const clauseText = renderTemplate(
-    app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT,
-    vars,
-  );
+  // Signature/initial markers survive substitution and render as ruled
+  // wet-signature lines below; the e-sign flow stamps real marks instead.
+  const clauseText = renderTemplate(app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT, {
+    ...markerPassthroughVars(),
+    ...vars,
+  });
+  const inlineSignatures = documentHasInlineSignatures(clauseText);
 
   const coTenantNames = lease.coTenants.map(
     (ct) => `${ct.tenant.firstName} ${ct.tenant.lastName}`.trim(),
@@ -400,7 +408,12 @@ export default async function LeaseAgreementPage({
           </div>
 
           {/* Clause text (settings override or shipped default) */}
-          <div className="whitespace-pre-line text-sm leading-6">{clauseText}</div>
+          <AgreementText
+            text={clauseText}
+            mode="wet"
+            landlordName={vars.business_legal_name}
+            tenantNames={[vars.primary_tenant, ...coTenantNames]}
+          />
 
           {/* Utility responsibilities */}
           <div className="space-y-2">
@@ -418,17 +431,20 @@ export default async function LeaseAgreementPage({
             )}
           </div>
 
-          {/* Signatures */}
-          <div className="space-y-8 border-t pt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Signatures
-            </h2>
-            <SignatureBlock role="Landlord" name={vars.business_legal_name} />
-            <SignatureBlock role="Tenant" name={vars.primary_tenant} />
-            {coTenantNames.map((name) => (
-              <SignatureBlock key={name} role="Co-tenant" name={name} />
-            ))}
-          </div>
+          {/* Signatures — skipped when the clause text places its own
+              {{tenant_signatures}} block inline */}
+          {!inlineSignatures && (
+            <div className="space-y-8 border-t pt-6">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Signatures
+              </h2>
+              <SignatureBlock role="Landlord" name={vars.business_legal_name} />
+              <SignatureBlock role="Tenant" name={vars.primary_tenant} />
+              {coTenantNames.map((name) => (
+                <SignatureBlock key={name} role="Co-tenant" name={name} />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

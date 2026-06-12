@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 
 export const runtime = "nodejs";
 
-const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "other"] as const;
+const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "cash_app", "other"] as const;
 const STATUSES = ["posted", "voided"] as const;
 
 export default async function PaymentsPage({

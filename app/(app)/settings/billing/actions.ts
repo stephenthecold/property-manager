@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit } from "@/lib/audit/audit";
-import { saveBillingDefaults, getAppSettings } from "@/lib/services/app-settings";
+import {
+  saveBillingDefaults,
+  saveCashAppCashtag,
+  getAppSettings,
+} from "@/lib/services/app-settings";
+import { normalizeCashtag } from "@/lib/payments/cash-app";
 import { toCents } from "@/lib/money";
 import type { LateFeeType } from "@/lib/generated/prisma/enums";
 
@@ -200,4 +205,30 @@ export async function applyChargeTermsToActiveLeases(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Bulk apply failed." };
   }
+}
+
+/**
+ * Save the org Cash App cashtag. Empty input clears it; otherwise it is
+ * canonicalized to "$Tag". Surfaced to tenants via the {{cash_app_tag}} /
+ * {{cash_app_link}} template variables and the portal's "how to pay" panel.
+ */
+export async function savePaymentMethodsAction(
+  _prev: BillingState,
+  fd: FormData,
+): Promise<BillingState> {
+  await requireCapability("billing.settings");
+  const raw = str(fd, "cashAppCashtag");
+  const cashtag = normalizeCashtag(raw);
+  if (raw !== "" && cashtag === null) {
+    return {
+      error:
+        "That doesn't look like a cashtag — letters/numbers, starting with a letter, up to 20 characters (the $ is optional).",
+    };
+  }
+  await saveCashAppCashtag(cashtag, await auditActor());
+  revalidatePath("/settings/billing");
+  return {
+    ok: true,
+    message: cashtag ? `Cash App cashtag saved as ${cashtag}.` : "Cash App cashtag cleared.",
+  };
 }

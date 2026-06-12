@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatMaintenanceDigest,
   formatOverdueDigest,
   isoWeekKey,
   type OverdueDigestRow,
@@ -177,5 +178,63 @@ describe("isoWeekKey", () => {
   it("uses the ISO week-numbering year across the January boundary", () => {
     // Fri 2027-01-01 belongs to ISO week 53 of 2026.
     expect(isoWeekKey(new Date("2027-01-01T12:00:00Z"))).toBe("2026-W53");
+  });
+});
+
+describe("formatMaintenanceDigest", () => {
+  const now = new Date("2026-06-12T09:00:00Z");
+
+  it("returns null when nothing is scheduled", () => {
+    expect(
+      formatMaintenanceDigest({ businessName: "Acme", now, jobs: [], tasks: [] }),
+    ).toBeNull();
+  });
+
+  it("renders jobs and tasks in date order with overdue + monthly markers", () => {
+    const digest = formatMaintenanceDigest({
+      businessName: "Acme",
+      now,
+      jobs: [
+        {
+          title: "Fix gutter",
+          propertyName: "Maple St",
+          unitLabel: "2B",
+          dueISO: "2026-06-15",
+          overdue: false,
+        },
+        {
+          title: "Replace filter",
+          propertyName: "Maple St",
+          unitLabel: null,
+          dueISO: "2026-06-10",
+          overdue: true,
+        },
+      ],
+      tasks: [
+        { title: "Spraying", propertyName: "Oak Ave", dueISO: "2026-06-14" },
+      ],
+    });
+    expect(digest).not.toBeNull();
+    expect(digest!.subject).toBe(
+      "Maintenance this week: 3 items (1 overdue) — Acme",
+    );
+    const text = digest!.text;
+    // Jobs sorted by date: the overdue one first, flagged.
+    expect(text.indexOf("2026-06-10 — Replace filter — Maple St (OVERDUE)")).toBeGreaterThan(-1);
+    expect(text.indexOf("2026-06-15 — Fix gutter — Maple St · 2B")).toBeGreaterThan(
+      text.indexOf("Replace filter"),
+    );
+    expect(text).toContain("2026-06-14 — Spraying — Oak Ave (monthly)");
+  });
+
+  it("singularizes one item and omits the overdue suffix when none are", () => {
+    const digest = formatMaintenanceDigest({
+      businessName: "Acme",
+      now,
+      jobs: [],
+      tasks: [{ title: "Mowing", propertyName: "Oak Ave", dueISO: "2026-06-13" }],
+    });
+    expect(digest!.subject).toBe("Maintenance this week: 1 item — Acme");
+    expect(digest!.text).not.toContain("Jobs:");
   });
 });

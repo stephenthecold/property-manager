@@ -1,6 +1,7 @@
 import { getSigningPageData, signingKindLabel } from "@/lib/services/esign";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { AgreementText } from "@/components/app/agreement-text";
 import { SignForm } from "./sign-form";
 
 export const runtime = "nodejs";
@@ -125,9 +126,12 @@ export default async function SignPage({
       {/* The frozen agreement text exactly as it was sent */}
       <Card>
         <CardContent className="py-6">
-          <div className="whitespace-pre-wrap text-sm leading-6">
-            {data.documentText}
-          </div>
+          <AgreementText
+            text={data.documentText}
+            mode="pending"
+            landlordName={data.landlordName ?? "Landlord"}
+            tenantNames={[data.signer.name, ...data.others.map((o) => o.name)]}
+          />
         </CardContent>
       </Card>
 
@@ -137,7 +141,11 @@ export default async function SignPage({
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Your signature
             </h2>
-            <SignForm token={token} signerName={data.signer.name} />
+            <SignForm
+              token={token}
+              signerName={data.signer.name}
+              needsInitials={data.needsInitials}
+            />
           </CardContent>
         </Card>
       )}

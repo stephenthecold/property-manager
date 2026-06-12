@@ -22,7 +22,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 export const runtime = "nodejs";
 
-const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "other"];
+const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "cash_app", "other"];
 
 function formatBytes(bytes: number | null): string {
   if (bytes == null) return "—";

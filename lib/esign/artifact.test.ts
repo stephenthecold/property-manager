@@ -142,3 +142,74 @@ describe("looksLikePng", () => {
     expect(looksLikePng(Buffer.alloc(0))).toBe(false);
   });
 });
+
+describe("inline signature/initial markers", () => {
+  it("stamps marks at every marker and skips the end signatures section", () => {
+    const html = renderSignedArtifactHtml(
+      baseInput({
+        documentText:
+          "Clause 1. {{tenant_initials}} {{landlord_initials}}\n\nLANDLORD:\n{{landlord_signature}}\nTENANTS:\n{{tenant_signatures}}",
+        signers: [
+          {
+            name: "Jane Doe",
+            signedAtISO: "2026-06-12T11:30:00Z",
+            kind: "typed",
+            signatureText: "Jane Doe",
+            initialsKind: "typed",
+            initialsText: "JD",
+            ip: "203.0.113.7",
+          },
+        ],
+      }),
+    );
+    // Inline marks present…
+    expect(html).toContain(`class="ini-typed"`);
+    expect(html).toContain(">JD<");
+    // Landlord typed initials derived from the name (no saved image).
+    expect(html).toContain(">SW<");
+    // …and exactly one set of tenant signature blocks (inline, not appended).
+    expect(html.match(/class="sig-block"/g)).toHaveLength(2); // landlord + 1 tenant
+    expect(html).not.toContain("<h2>Signatures</h2>");
+    // Evidence footer always remains.
+    expect(html).toContain("Signing evidence");
+  });
+
+  it("renders drawn initials as embedded images", () => {
+    const html = renderSignedArtifactHtml(
+      baseInput({
+        documentText: "Initial here: {{tenant_initials}}",
+        signers: [
+          {
+            name: "Jane Doe",
+            signedAtISO: "2026-06-12T11:30:00Z",
+            kind: "typed",
+            signatureText: "Jane Doe",
+            initialsKind: "drawn",
+            initialsImageDataUrl: "data:image/png;base64,QUJD",
+          },
+        ],
+      }),
+    );
+    expect(html).toContain(`class="ini-img"`);
+    expect(html).toContain("data:image/png;base64,QUJD");
+    // No tenant_signatures marker → the appended signatures section stays.
+    expect(html).toContain("<h2>Signatures</h2>");
+  });
+
+  it("keeps marker-free documents byte-identical in the body path", () => {
+    const html = renderSignedArtifactHtml(baseInput());
+    expect(html).toContain(
+      `<section class="doc-text">1. TERM. The tenancy begins on June 1, 2026.</section>`,
+    );
+  });
+
+  it("never lets tenant text smuggle markup through a marker boundary", () => {
+    const html = renderSignedArtifactHtml(
+      baseInput({
+        documentText: `<script>alert(1)</script>{{tenant_initials}}<img src=x>`,
+      }),
+    );
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).not.toContain("<img src=x>");
+  });
+});

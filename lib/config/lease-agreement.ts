@@ -29,7 +29,13 @@ export const DEFAULT_LEASE_AGREEMENT_TEXT = `This Residential Lease Agreement ("
 
 10. ENTIRE AGREEMENT. This Agreement, together with any written addenda, constitutes the entire agreement between the parties and may be amended only in a writing signed by both parties. If any provision is held invalid, the remainder of this Agreement remains in effect.
 
-IN WITNESS WHEREOF, the parties have executed this Agreement as of the date written beside each signature below.`;
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the date written beside each signature below.
+
+LANDLORD:
+{{landlord_signature}}
+
+TENANT(S):
+{{tenant_signatures}}`;
 
 /** Placeholder reference shown under the Settings → Leases editor and used by .docx templates. */
 export const LEASE_AGREEMENT_PLACEHOLDERS: { key: string; description: string }[] = [
@@ -57,4 +63,10 @@ export const LEASE_AGREEMENT_PLACEHOLDERS: { key: string; description: string }[
   { key: "utilities_tenant", description: "Utilities the tenant pays, or “None”" },
   { key: "utilities_notes", description: "Free-text utility notes (empty when none)" },
   { key: "today", description: "Today's date (property timezone)" },
+  // Signature markers (built-in agreement + e-sign only; a .docx template
+  // keeps them as literal text). Place them anywhere — even mid-clause.
+  { key: "tenant_signatures", description: "Signature block for every tenant signer — print: ruled lines; e-sign: the captured signatures" },
+  { key: "tenant_initials", description: "Each tenant's initials inline — print: small ruled boxes; e-sign: captured initials (signers are asked to initial)" },
+  { key: "landlord_signature", description: "Landlord signature block (saved signature on e-sign)" },
+  { key: "landlord_initials", description: "Landlord initials inline (saved initials image, or derived from the signature name)" },
 ];

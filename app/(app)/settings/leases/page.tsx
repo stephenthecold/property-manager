@@ -25,14 +25,22 @@ export default async function LeaseSettingsPage() {
   const currentTemplate = templates[0] ?? null;
 
   let signatureUrl: string | null = null;
-  if (app.landlordSignatureImageKey) {
-    try {
+  let initialsUrl: string | null = null;
+  try {
+    if (app.landlordSignatureImageKey) {
       signatureUrl = await getFileStorage().getSignedUrl(
         app.landlordSignatureImageKey,
       );
-    } catch {
-      signatureUrl = null; // storage unavailable — the card still renders
     }
+    if (app.landlordInitialsImageKey) {
+      initialsUrl = await getFileStorage().getSignedUrl(
+        app.landlordInitialsImageKey,
+      );
+    }
+  } catch {
+    // storage unavailable — the card still renders without previews
+    signatureUrl = null;
+    initialsUrl = null;
   }
 
   return (
@@ -93,6 +101,7 @@ export default async function LeaseSettingsPage() {
           <LandlordSignatureForm
             currentName={app.landlordSignatureName}
             signatureUrl={signatureUrl}
+            initialsUrl={initialsUrl}
           />
         </CardContent>
       </Card>

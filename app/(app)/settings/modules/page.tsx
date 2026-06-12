@@ -19,6 +19,12 @@ const MODULE_INFO = [
     description:
       "Per-unit job tracker (pending/completed, optional cost that flows into Financials) and recurring monthly property tasks like mowing and spraying.",
   },
+  {
+    key: "tenantPortal" as const,
+    label: "Tenant portal",
+    description:
+      "Self-service portal at /portal where invited tenants sign in (email + password or SMS code — local accounts, never your staff SSO) to see their lease, balance, payment history, receipts and documents, submit maintenance requests, and set how they pay. Turning it off blocks tenant logins immediately; accounts and requests are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

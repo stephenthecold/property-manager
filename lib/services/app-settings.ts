@@ -29,10 +29,16 @@ export interface ModuleFlags {
   financials: boolean;
   /** Unit maintenance jobs + recurring monthly tasks (/maintenance). */
   maintenance: boolean;
+  /** Tenant self-service portal (/portal, local tenant logins). */
+  tenantPortal: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
-const MODULE_DEFAULTS: ModuleFlags = { financials: true, maintenance: false };
+const MODULE_DEFAULTS: ModuleFlags = {
+  financials: true,
+  maintenance: false,
+  tenantPortal: false,
+};
 
 function resolveModules(raw: unknown): ModuleFlags {
   const obj = (raw ?? {}) as Partial<Record<keyof ModuleFlags, unknown>>;
@@ -41,6 +47,10 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.financials === "boolean" ? obj.financials : MODULE_DEFAULTS.financials,
     maintenance:
       typeof obj.maintenance === "boolean" ? obj.maintenance : MODULE_DEFAULTS.maintenance,
+    tenantPortal:
+      typeof obj.tenantPortal === "boolean"
+        ? obj.tenantPortal
+        : MODULE_DEFAULTS.tenantPortal,
   };
 }
 
@@ -91,6 +101,11 @@ export interface ResolvedAppSettings {
   landlordSignatureName: string | null;
   /** Storage key of the drawn landlord signature PNG (optional). */
   landlordSignatureImageKey: string | null;
+  /** Storage key of the landlord initials PNG; null → typed initials derived
+   *  from landlordSignatureName at {{landlord_initials}} markers. */
+  landlordInitialsImageKey: string | null;
+  /** Org Cash App cashtag ("$Example") for notices and the tenant portal. */
+  cashAppCashtag: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -182,6 +197,8 @@ async function resolve(): Promise<ResolvedAppSettings> {
     leaseAgreementText: row?.leaseAgreementText ?? null,
     landlordSignatureName: row?.landlordSignatureName ?? null,
     landlordSignatureImageKey: row?.landlordSignatureImageKey ?? null,
+    landlordInitialsImageKey: row?.landlordInitialsImageKey ?? null,
+    cashAppCashtag: row?.cashAppCashtag ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     billing: {
@@ -474,18 +491,23 @@ export async function saveLeaseAgreementText(
 
 /**
  * Persist the saved landlord signature (typed name + optional drawn-PNG
- * storage key). `imageKey === undefined` keeps the stored image; `null`
- * clears it. Passing `name: null` clears the signature entirely. Managers+
- * (esign.manage) apply this signature when sending e-sign requests.
+ * storage key) and optional initials image. For both keys `undefined` keeps
+ * the stored value and `null` clears it. Passing `name: null` clears the
+ * signature entirely. Managers+ (esign.manage) apply these marks when
+ * sending e-sign requests.
  */
 export async function saveLandlordSignature(
   name: string | null,
   imageKey: string | null | undefined,
   actor: AuditContext,
+  initialsImageKey?: string | null,
 ): Promise<void> {
   const data = {
     landlordSignatureName: name,
     ...(imageKey !== undefined ? { landlordSignatureImageKey: imageKey } : {}),
+    ...(initialsImageKey !== undefined
+      ? { landlordInitialsImageKey: initialsImageKey }
+      : {}),
     updatedBy: actor.actorId ?? null,
   };
   await prisma.$transaction(async (tx) => {
@@ -504,6 +526,7 @@ export async function saveLandlordSignature(
         ? {
             landlordSignatureName: before.landlordSignatureName,
             landlordSignatureImageKey: before.landlordSignatureImageKey,
+            landlordInitialsImageKey: before.landlordInitialsImageKey,
           }
         : undefined,
       after: {
@@ -512,6 +535,10 @@ export async function saveLandlordSignature(
           imageKey !== undefined
             ? imageKey
             : (before?.landlordSignatureImageKey ?? null),
+        landlordInitialsImageKey:
+          initialsImageKey !== undefined
+            ? initialsImageKey
+            : (before?.landlordInitialsImageKey ?? null),
       },
     });
   });
@@ -746,6 +773,31 @@ export async function saveEmailSettings(
         oauthClientSecretChanged: input.emailOauthClientSecret !== undefined,
         oauthRefreshTokenChanged: input.emailOauthRefreshToken !== undefined,
       },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/** Persist the org Cash App cashtag (canonical "$Tag" or null to clear). */
+export async function saveCashAppCashtag(
+  cashtag: string | null,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { cashAppCashtag: cashtag, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.payment_methods.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before ? { cashAppCashtag: before.cashAppCashtag } : undefined,
+      after: { cashAppCashtag: cashtag },
     });
   });
   invalidateAppSettingsCache();

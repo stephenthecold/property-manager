@@ -17,6 +17,8 @@ const PUBLIC_PREFIXES = [
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
   "/api/health", // container healthcheck — returns only {ok}, no data
   "/sign", // tenant e-sign pages — gated by a single-use token hash, not a session
+  "/portal", // tenant portal — its own local session (lib/portal/session.ts), never staff auth
+  "/api/portal", // portal-scoped APIs (file downloads) — same portal session check
 ];
 
 function isPublic(pathname: string): boolean {

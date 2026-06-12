@@ -1,3 +1,9 @@
+import {
+  documentHasInlineSignatures,
+  initialsFromName,
+  splitOnMarkers,
+} from "@/lib/esign/markers";
+
 /**
  * Final signed-agreement artifact: a single self-contained HTML file stored as
  * an UploadedDocument when every signer has signed. Pure string rendering —
@@ -5,6 +11,12 @@
  * data URLs). EVERY interpolated value goes through escapeHtml so tenant- or
  * operator-supplied text (including the agreement body) can never inject
  * markup into the evidence document.
+ *
+ * Inline markers ({{tenant_signatures}}, {{tenant_initials}},
+ * {{landlord_signature}}, {{landlord_initials}}) in the frozen agreement text
+ * are stamped with the captured marks at every occurrence. When the document
+ * carries its own {{tenant_signatures}} block, the end-of-document signatures
+ * section is skipped (the evidence table always remains).
  */
 
 export interface ArtifactLandlord {
@@ -12,6 +24,8 @@ export interface ArtifactLandlord {
   signedAtISO: string;
   /** data:image/png;base64,... when a drawn signature image exists. */
   signatureImageDataUrl?: string;
+  /** data:image/png;base64,... saved initials; else typed from the name. */
+  initialsImageDataUrl?: string;
 }
 
 export interface ArtifactSigner {
@@ -20,6 +34,10 @@ export interface ArtifactSigner {
   kind: "typed" | "drawn";
   signatureText?: string;
   signatureImageDataUrl?: string;
+  /** Captured initials; absent when the document has no initials markers. */
+  initialsKind?: "typed" | "drawn";
+  initialsText?: string;
+  initialsImageDataUrl?: string;
   ip?: string;
 }
 
@@ -87,6 +105,79 @@ function signatureBlock(opts: {
 </div>`;
 }
 
+/** Small inline initials: drawn image or bordered typed letters, name on hover. */
+function initialsMark(i: {
+  text?: string;
+  imageDataUrl?: string;
+  ownerName: string;
+}): string {
+  const title = escapeHtml(`${i.ownerName} — initials`);
+  if (i.imageDataUrl) {
+    return `<img class="ini-img" src="${escapeHtml(i.imageDataUrl)}" alt="${title}" title="${title}" />`;
+  }
+  const text = i.text?.trim() || initialsFromName(i.ownerName);
+  return `<span class="ini-typed" title="${title}">${escapeHtml(text)}</span>`;
+}
+
+/**
+ * The agreement body with every inline marker replaced by the corresponding
+ * captured mark; literal text stays escaped + pre-wrap. Exported for tests.
+ */
+export function renderDocumentBodyHtml(input: SignedArtifactInput): string {
+  const landlordSignature = signatureBlock({
+    role: "Landlord",
+    name: input.landlord.name,
+    signedAtISO: input.landlord.signedAtISO,
+    mark: signatureMark({
+      kind: input.landlord.signatureImageDataUrl ? "drawn" : "typed",
+      signatureText: input.landlord.name,
+      signatureImageDataUrl: input.landlord.signatureImageDataUrl,
+      fallbackName: input.landlord.name,
+    }),
+    meta: [],
+  });
+  const tenantSignatures = input.signers
+    .map((s, i) =>
+      signatureBlock({
+        role: i === 0 ? "Tenant" : "Co-tenant",
+        name: s.name,
+        signedAtISO: s.signedAtISO,
+        mark: signatureMark({ ...s, fallbackName: s.name }),
+        meta: [s.ip ? `IP ${s.ip}` : ""],
+      }),
+    )
+    .join("\n");
+  const landlordInitials = initialsMark({
+    imageDataUrl: input.landlord.initialsImageDataUrl,
+    ownerName: input.landlord.name,
+  });
+  const tenantInitials = input.signers
+    .map((s) =>
+      initialsMark({
+        text: s.initialsText,
+        imageDataUrl: s.initialsImageDataUrl,
+        ownerName: s.name,
+      }),
+    )
+    .join(" ");
+
+  return splitOnMarkers(input.documentText)
+    .map((part) => {
+      if (part.type === "text") return escapeHtml(part.value);
+      switch (part.marker) {
+        case "landlord_signature":
+          return landlordSignature;
+        case "tenant_signatures":
+          return tenantSignatures;
+        case "landlord_initials":
+          return landlordInitials;
+        case "tenant_initials":
+          return tenantInitials;
+      }
+    })
+    .join("");
+}
+
 export function renderSignedArtifactHtml(input: SignedArtifactInput): string {
   const landlordBlock = signatureBlock({
     role: "Landlord",
@@ -112,6 +203,16 @@ export function renderSignedArtifactHtml(input: SignedArtifactInput): string {
       }),
     )
     .join("\n");
+
+  // A document with its own inline {{tenant_signatures}} block renders the
+  // marks in place — appending the same blocks again would duplicate them.
+  const endSignaturesSection = documentHasInlineSignatures(input.documentText)
+    ? ""
+    : `<section class="sigs">
+  <h2>Signatures</h2>
+  ${landlordBlock}
+  ${signerBlocks}
+</section>`;
 
   const evidenceRows = [
     ["Document SHA-256", input.documentSha256],
@@ -151,6 +252,10 @@ export function renderSignedArtifactHtml(input: SignedArtifactInput): string {
   .sig-img { display: block; max-height: 80px; max-width: 320px; margin: 0.25rem 0; }
   .sig-name { font-weight: bold; font-size: 0.95rem; }
   .sig-meta { font-size: 0.78rem; color: #4a5568; }
+  .ini-img { display: inline-block; max-height: 36px; max-width: 120px; vertical-align: middle; }
+  .ini-typed { font-family: "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive;
+               font-style: italic; font-size: 1.1rem; padding: 0 0.35rem;
+               border-bottom: 1px solid #1a202c; }
   .evidence { margin-top: 2.5rem; border-top: 2px solid #1a202c; padding-top: 1rem; }
   .evidence table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
   .evidence td { padding: 0.25rem 0.5rem 0.25rem 0; vertical-align: top; border-bottom: 1px solid #e2e8f0; }
@@ -164,12 +269,8 @@ export function renderSignedArtifactHtml(input: SignedArtifactInput): string {
   <h1>Signed lease agreement</h1>
   <div class="lease-label">${escapeHtml(input.leaseLabel)}</div>
 </header>
-<section class="doc-text">${escapeHtml(input.documentText)}</section>
-<section class="sigs">
-  <h2>Signatures</h2>
-  ${landlordBlock}
-  ${signerBlocks}
-</section>
+<section class="doc-text">${renderDocumentBodyHtml(input)}</section>
+${endSignaturesSection}
 <section class="evidence">
   <h2>Signing evidence</h2>
   <table>

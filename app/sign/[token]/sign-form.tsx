@@ -8,24 +8,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignaturePad } from "@/components/app/signature-pad";
+import { initialsFromName } from "@/lib/esign/markers";
 import { signAction, type SignActionState } from "./actions";
 
 /**
  * Tenant signing form: typed-name OR drawn signature, plus the ESIGN-style
- * consent checkbox. Submits to the token-authenticated public action; all
- * errors come back as returned state. On success the form is replaced by a
- * confirmation panel.
+ * consent checkbox. When the agreement has {{tenant_initials}} markers, an
+ * initials section (typed, prefilled from the name, or drawn) is required —
+ * the captured initials are stamped at every marker. Submits to the
+ * token-authenticated public action; all errors come back as returned state.
+ * On success the form is replaced by a confirmation panel.
  */
 export function SignForm({
   token,
   signerName,
+  needsInitials = false,
 }: {
   token: string;
   signerName: string;
+  needsInitials?: boolean;
 }) {
   const [mode, setMode] = React.useState<"typed" | "drawn">("typed");
   const [typedName, setTypedName] = React.useState("");
   const [drawnEmpty, setDrawnEmpty] = React.useState(true);
+  const [initialsMode, setInitialsMode] = React.useState<"typed" | "drawn">("typed");
+  const [typedInitials, setTypedInitials] = React.useState(() =>
+    initialsFromName(signerName),
+  );
+  const [drawnInitialsEmpty, setDrawnInitialsEmpty] = React.useState(true);
   const [consent, setConsent] = React.useState(false);
   const [state, formAction, pending] = useActionState<SignActionState, FormData>(
     signAction,
@@ -48,11 +58,19 @@ export function SignForm({
 
   const signatureMissing =
     mode === "typed" ? typedName.trim().length === 0 : drawnEmpty;
+  const initialsMissing =
+    needsInitials &&
+    (initialsMode === "typed"
+      ? typedInitials.trim().length === 0
+      : drawnInitialsEmpty);
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="kind" value={mode} />
+      {needsInitials && (
+        <input type="hidden" name="initialsKind" value={initialsMode} />
+      )}
 
       {state.error && (
         <Alert variant="destructive">
@@ -100,6 +118,44 @@ export function SignForm({
         </TabsContent>
       </Tabs>
 
+      {needsInitials && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="text-sm font-medium">Your initials</div>
+          <p className="text-xs text-muted-foreground">
+            This agreement marks one or more places for your initials — they are
+            applied at every marked spot.
+          </p>
+          <Tabs
+            value={initialsMode}
+            onValueChange={(v) => setInitialsMode(v === "drawn" ? "drawn" : "typed")}
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="typed">Type initials</TabsTrigger>
+              <TabsTrigger value="drawn">Draw initials</TabsTrigger>
+            </TabsList>
+            <TabsContent value="typed" className="space-y-2 pt-2">
+              <Label htmlFor="initialsText">Initials</Label>
+              <Input
+                id="initialsText"
+                name="initialsText"
+                maxLength={8}
+                value={typedInitials}
+                onChange={(e) => setTypedInitials(e.target.value)}
+                className="w-28 font-serif text-lg italic"
+              />
+            </TabsContent>
+            <TabsContent value="drawn" className="pt-2">
+              <SignaturePad
+                name="initialsImage"
+                width={220}
+                height={110}
+                onEmptyChange={setDrawnInitialsEmpty}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
+
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
@@ -118,7 +174,7 @@ export function SignForm({
       <Button
         type="submit"
         className="w-full"
-        disabled={pending || !consent || signatureMissing}
+        disabled={pending || !consent || signatureMissing || initialsMissing}
       >
         {pending ? "Signing…" : "Sign agreement"}
       </Button>
