@@ -16,6 +16,7 @@ import {
   removeTaskAction,
   reopenJobAction,
 } from "./actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -315,9 +316,13 @@ export default async function MaintenancePage({
                       </FormDialog>
                       <form action={deleteJobAction} className="inline">
                         <input type="hidden" name="jobId" value={j.id} />
-                        <Button type="submit" variant="ghost" size="xs">
+                        <ConfirmSubmitButton
+                          variant="ghost"
+                          size="xs"
+                          confirmMessage="Delete this maintenance job? It is removed permanently and cannot be recovered."
+                        >
                           Delete
-                        </Button>
+                        </ConfirmSubmitButton>
                       </form>
                     </span>
                   ) : (
@@ -521,9 +526,13 @@ export default async function MaintenancePage({
                   </FormDialog>
                   <form action={removeTaskAction} className="inline">
                     <input type="hidden" name="taskId" value={t.id} />
-                    <Button type="submit" variant="ghost" size="xs">
+                    <ConfirmSubmitButton
+                      variant="ghost"
+                      size="xs"
+                      confirmMessage="Remove this recurring task? It disappears from this list (its history is kept)."
+                    >
                       Remove
-                    </Button>
+                    </ConfirmSubmitButton>
                   </form>
                 </span>,
               ],
