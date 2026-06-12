@@ -67,6 +67,8 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ documentId }, { status: 201 });
   } catch (e) {
+    // Generic message to the client; real cause to the server log.
+    console.error("[uploads] upload failed:", e);
     const message = e instanceof Error ? e.message : "";
     if (/storage is not configured/i.test(message)) {
       return NextResponse.json({ error: message }, { status: 503 });
