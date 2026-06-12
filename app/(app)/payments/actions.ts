@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { postPayment, voidPayment } from "@/lib/services/payments";
+import { waiveCharge } from "@/lib/services/charges";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 
@@ -97,4 +98,54 @@ export async function voidPaymentAction(fd: FormData): Promise<void> {
   revalidatePath("/tenants", "layout");
   // Receipt pages render the payment's voided state.
   revalidatePath("/receipts", "layout");
+}
+
+export interface WaiveChargeState {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+}
+
+/**
+ * Waive (fully or partially) an open rent charge / late fee as an append-only
+ * ledger reversal. Validation problems are RETURNED as state (useActionState).
+ */
+export async function waiveChargeAction(
+  _prev: WaiveChargeState,
+  fd: FormData,
+): Promise<WaiveChargeState> {
+  await requireCapability("payments.manage");
+  const entryId = String(fd.get("entryId") ?? "");
+  if (!entryId) return { error: "Missing charge id." };
+  const reason = String(fd.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to waive a charge." };
+
+  let amountCents: bigint;
+  try {
+    amountCents = toCents(String(fd.get("amount") ?? ""));
+  } catch {
+    return { error: "Enter a valid amount (e.g. 75.00)." };
+  }
+  if (amountCents <= 0n) return { error: "Amount must be positive." };
+
+  try {
+    const res = await waiveCharge({
+      entryId,
+      amountCents,
+      reason,
+      actor: await auditActor(),
+    });
+    revalidatePath(`/tenants/${res.tenantId}`);
+    revalidatePath("/payments");
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      message:
+        res.remainingOutstandingCents > 0n
+          ? "Charge partially waived; the rest stays outstanding."
+          : "Charge waived in full.",
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to waive the charge." };
+  }
 }

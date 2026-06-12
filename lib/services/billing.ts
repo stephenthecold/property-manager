@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type { Lease } from "@/lib/generated/prisma/client";
 import { fromCents } from "@/lib/money";
+import { netReversalsIntoCharges } from "@/lib/accounting/allocation";
 import {
   computeLateFeeCents,
   dailyLateFeeAccruals,
@@ -173,7 +174,7 @@ export async function assessLateFeesForLease(
 ): Promise<number> {
   if (lease.lateFeeType === "none") return 0;
 
-  const [rentCharges, lateFees, allocations] = await Promise.all([
+  const [rentCharges, lateFees, allocations, reversals] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: { leaseId: lease.id, entryType: "rent_charge" },
     }),
@@ -183,6 +184,12 @@ export async function assessLateFeesForLease(
     }),
     prisma.chargeAllocation.findMany({
       where: { chargeEntry: { leaseId: lease.id } },
+    }),
+    // Waiver/void reversals — netted into their target charge below so a
+    // waived rent charge stops accruing daily late fees.
+    prisma.ledgerEntry.findMany({
+      where: { leaseId: lease.id, entryType: "reversal", reversesEntryId: { not: null } },
+      select: { amountCents: true, reversesEntryId: true },
     }),
   ]);
 
@@ -208,11 +215,24 @@ export async function assessLateFeesForLease(
     if (reversedIds.has(a.id)) continue;
     allocated[a.chargeEntryId] = (allocated[a.chargeEntryId] ?? 0n) + a.amountCents;
   }
+  // Effective (waiver-netted) amount per rent charge — same pure netting the
+  // snapshot loaders use. Reversals pointing at non-charges are ignored.
+  const effectiveAmountByCharge = new Map(
+    netReversalsIntoCharges(
+      rentCharges.map((c) => ({
+        entryId: c.id,
+        amountCents: c.amountCents,
+        dueDate: c.effectiveDate,
+      })),
+      reversals,
+    ).map((c) => [c.entryId, c.amountCents] as const),
+  );
 
   let created = 0;
   for (const ch of rentCharges) {
     if (!ch.periodKey) continue;
-    const outstanding = ch.amountCents - (allocated[ch.id] ?? 0n);
+    const effectiveCents = effectiveAmountByCharge.get(ch.id) ?? ch.amountCents;
+    const outstanding = effectiveCents - (allocated[ch.id] ?? 0n);
     if (outstanding <= 0n) continue;
     if (now <= graceDeadline(ch.effectiveDate, lease.gracePeriodDays, tz)) continue;
 
@@ -266,7 +286,8 @@ export async function assessLateFeesForLease(
     if (dailyPosted.has(ch.periodKey)) continue;
     const fee = computeLateFeeCents({
       type: lease.lateFeeType,
-      rentChargeCents: ch.amountCents,
+      // Percentage fees price off the effective (waiver-netted) charge.
+      rentChargeCents: effectiveCents,
       fixedAmountCents: lease.lateFeeAmountCents,
       bps: lease.lateFeeBps,
     });
