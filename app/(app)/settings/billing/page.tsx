@@ -2,14 +2,14 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { fromCents } from "@/lib/money";
-import { ApplyTermsForm, BillingDefaultsForm } from "./billing-form";
+import { ApplyTermsForm, BillingDefaultsForm, PaymentMethodsForm } from "./billing-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
 export default async function BillingSettingsPage() {
   await requireCapability("billing.settings");
-  const { billing } = await getAppSettings();
+  const { billing, cashAppCashtag } = await getAppSettings();
   const activeLeases = await prisma.lease.count({
     where: { status: { in: ["active", "month_to_month"] } },
   });
@@ -51,6 +51,15 @@ export default async function BillingSettingsPage() {
         </CardHeader>
         <CardContent>
           <ApplyTermsForm activeLeases={activeLeases} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How tenants pay</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PaymentMethodsForm initialCashtag={cashAppCashtag ?? ""} />
         </CardContent>
       </Card>
     </div>

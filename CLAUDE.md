@@ -46,11 +46,19 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   once any OIDC sign-in exists (first-run bootstrap may do the initial OIDC configuration).
 - **Every mutation is audited** in-transaction via `withAudit`/`writeAudit`; `AuditLog` is
   append-only (DB trigger).
-- **Optional modules** (Financials, Maintenance) are flags on `AppSettings.modules`
-  (Settings → Modules). Module pages `redirect("/dashboard")` and module actions throw via
-  `assertModuleEnabled` when off; **disabling only hides UI — never delete module data**.
-  `PropertyExpense`/`MaintenanceJob` are operating records, NOT ledger entries: they never
-  touch tenant balances. Financing (mortgage) and purchase date are **Property-level** fields.
+- **Optional modules** (Financials, Maintenance, Tenant Portal) are flags on
+  `AppSettings.modules` (Settings → Modules). Module pages `redirect("/dashboard")` and module
+  actions throw via `assertModuleEnabled` when off; **disabling only hides UI — never delete
+  module data**. `PropertyExpense`/`MaintenanceJob`/`TenantRequest` are operating records, NOT
+  ledger entries: they never touch tenant balances. Financing (mortgage) and purchase date are
+  **Property-level** fields.
+- **Tenant portal is a separate LOCAL auth lane**: `/portal` + `/api/portal` are staff-middleware
+  PUBLIC_PREFIXES; the only gate is `lib/portal/session.ts` (opaque 256-bit cookie tokens stored
+  as sha-256 hashes — never NextAuth/OIDC/staff `User` rows). Every portal page/action re-checks
+  the portal session AND scopes queries to the signed-in tenant; portal file downloads go through
+  `/api/portal/files/[id]` (ownership-checked), never `/api/files`. Credentials live in
+  `lib/services/portal-auth.ts` (argon2id passwords via invite links, hashed 6-digit SMS codes,
+  lockouts, enumeration-safe generic responses).
 
 ## UI conventions
 

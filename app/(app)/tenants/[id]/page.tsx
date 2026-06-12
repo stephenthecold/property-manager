@@ -10,6 +10,10 @@ import {
   snapshotFromAccounting,
 } from "@/lib/services/accounting";
 import { listDocuments } from "@/lib/services/documents";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { getDisplayRole } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
+import { PortalAccessCard } from "./portal-access-card";
 import {
   buildReminderVars,
   DEFAULT_TEMPLATES,
@@ -36,6 +40,7 @@ import { WaiveChargeDialog } from "@/components/app/waive-charge-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
+import { ChangeHistory } from "@/components/app/change-history";
 import { FormDialog } from "@/components/app/form-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -184,9 +189,23 @@ export default async function TenantDetail({
   // Pre-render the default SMS template bodies server-side (the dialog is a
   // client component and must not import lib/reminders). With no active lease,
   // fall back to the most recent lease's figures, else empty strings.
+  const appSettings = await getAppSettings();
+  const canManagePortal =
+    appSettings.modules.tenantPortal &&
+    hasCapability(
+      (await getDisplayRole()).actingRole,
+      "portal.manage",
+      appSettings.rolePermissions,
+    );
+  const portalAccount = canManagePortal
+    ? await prisma.tenantPortalAccount.findUnique({
+        where: { tenantId: tenant.id },
+      })
+    : null;
   const templateLease = activeLease ?? tenant.leases[0] ?? null;
   const templateCurrency = templateLease?.unit.property.currency ?? "USD";
   const templateVars = buildReminderVars({
+    cashAppTag: appSettings.cashAppCashtag,
     tenantFirstName: tenant.firstName,
     tenantLastName: tenant.lastName,
     propertyName: templateLease?.unit.property.name ?? "",
@@ -1095,6 +1114,28 @@ export default async function TenantDetail({
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="preferredPaymentMethod">Preferred payment method</Label>
+              <select
+                id="preferredPaymentMethod"
+                name="preferredPaymentMethod"
+                defaultValue={tenant.preferredPaymentMethod ?? ""}
+                className="h-9 w-full rounded-md border px-3 text-sm capitalize"
+              >
+                <option value="">Not set</option>
+                {["cash", "check", "money_order", "card", "ach", "online", "cash_app", "other"].map(
+                  (m) => (
+                    <option key={m} value={m}>
+                      {m.replace(/_/g, " ")}
+                    </option>
+                  ),
+                )}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Informational — cash preference means staff arrange pickups.
+                Tenants can change this themselves in the portal.
+              </p>
+            </div>
             <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">
                 <input
@@ -1135,12 +1176,45 @@ export default async function TenantDetail({
             {summary("Emergency contact", tenant.emergencyContactName ?? "—")}
             {summary("Emergency phone", tenant.emergencyContactPhone ?? "—")}
             {summary("SMS consent", tenant.smsConsent ? "Yes" : "No")}
+            {summary(
+              "Preferred payment",
+              tenant.preferredPaymentMethod
+                ? tenant.preferredPaymentMethod.replace(/_/g, " ")
+                : "—",
+            )}
           </div>
           {tenant.notes && (
             <p className="mt-3 text-sm text-muted-foreground">{tenant.notes}</p>
           )}
         </CardContent>
       </Card>
+
+      {canManagePortal && (
+        <PortalAccessCard
+          tenantId={tenant.id}
+          account={{
+            exists: !!portalAccount,
+            isActive: portalAccount?.isActive ?? false,
+            hasPassword: !!portalAccount?.passwordHash,
+            invitePending:
+              !!portalAccount?.inviteExpiresAt &&
+              portalAccount.inviteExpiresAt > now,
+            lastLoginAt: portalAccount?.lastLoginAt
+              ? portalAccount.lastLoginAt.toLocaleDateString()
+              : null,
+            email: portalAccount?.email ?? null,
+            phone: portalAccount?.phone ?? null,
+          }}
+        />
+      )}
+
+      <ChangeHistory
+        refs={[
+          { entityType: "Tenant", entityId: tenant.id },
+          ...allLeases.map((l) => ({ entityType: "Lease", entityId: l.id })),
+          ...payments.map((p) => ({ entityType: "Payment", entityId: p.id })),
+        ]}
+      />
     </div>
   );
 }

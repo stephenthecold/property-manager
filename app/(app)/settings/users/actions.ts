@@ -147,3 +147,42 @@ export async function exitViewAs(): Promise<void> {
   }
   revalidatePath("/", "layout");
 }
+
+/** Admin-managed notification settings for any user (Settings → Users). */
+export async function setUserNotifications(fd: FormData): Promise<void> {
+  await requireCapability("users.manage");
+  const userId = str(fd, "userId");
+  if (!userId) fail("Invalid user.");
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) fail("User not found.");
+
+  const phoneRaw = str(fd, "phone");
+  if (phoneRaw !== "" && !/^\+?[0-9() .-]{7,20}$/.test(phoneRaw)) {
+    fail("That phone number doesn't look valid.");
+  }
+  const data = {
+    phone: phoneRaw === "" ? null : phoneRaw,
+    notifyOverdueDigest: fd.get("notifyOverdueDigest") === "on",
+    notifyMaintenanceDigest: fd.get("notifyMaintenanceDigest") === "on",
+    notifyCashPickup: fd.get("notifyCashPickup") === "on",
+  };
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "user.notifications.updated",
+      entityType: "User",
+      entityId: target.id,
+      before: {
+        phone: target.phone,
+        notifyOverdueDigest: target.notifyOverdueDigest,
+        notifyMaintenanceDigest: target.notifyMaintenanceDigest,
+        notifyCashPickup: target.notifyCashPickup,
+      },
+    },
+    async (tx) => {
+      await tx.user.update({ where: { id: target.id }, data });
+      return { result: undefined, after: data };
+    },
+  );
+  revalidatePath("/settings/users");
+}

@@ -161,10 +161,13 @@ export function LeaseTemplateUploadForm() {
 export function LandlordSignatureForm({
   currentName,
   signatureUrl,
+  initialsUrl,
 }: {
   currentName: string | null;
   /** Short-lived signed URL of the stored drawn signature, when one exists. */
   signatureUrl: string | null;
+  /** Short-lived signed URL of the stored initials image, when one exists. */
+  initialsUrl: string | null;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<LeaseSettingsState, FormData>(
@@ -217,6 +220,14 @@ export function LandlordSignatureForm({
               No drawing saved — the typed name is used in cursive style.
             </p>
           )}
+          {initialsUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL
+            <img
+              src={initialsUrl}
+              alt="Saved landlord initials"
+              className="max-h-10 rounded border bg-white object-contain p-1"
+            />
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -245,6 +256,17 @@ export function LandlordSignatureForm({
             Leave the pad empty to keep the current drawing. Managers and above
             apply this signature automatically when they send a lease for
             e-signature.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Drawn initials (optional)</Label>
+          <SignaturePad name="initialsImage" width={220} height={110} />
+          <p className="text-xs text-muted-foreground">
+            Stamped wherever the agreement has a{" "}
+            <code className="rounded bg-muted px-1">{"{{landlord_initials}}"}</code>{" "}
+            marker. Empty pad keeps the current initials; with none saved, typed
+            initials are derived from the signature name.
           </p>
         </div>
 

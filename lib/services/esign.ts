@@ -13,6 +13,10 @@ import {
   renderSignedArtifactHtml,
   type ArtifactSigner,
 } from "@/lib/esign/artifact";
+import {
+  documentNeedsInitials,
+  markerPassthroughVars,
+} from "@/lib/esign/markers";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
 import { renderTemplate } from "@/lib/reminders/templates";
 import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
@@ -191,10 +195,12 @@ export async function createSigningRequest(i: {
   }
 
   // Freeze the agreement exactly as the printable page renders it today.
-  const documentText = renderTemplate(
-    app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT,
-    vars,
-  );
+  // Signature/initial markers survive substitution (passthrough vars) so the
+  // signing page and final artifact can stamp marks at every occurrence.
+  const documentText = renderTemplate(app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT, {
+    ...markerPassthroughVars(),
+    ...vars,
+  });
   const documentSha256 = sha256Hex(documentText);
 
   // One signer per tenant (primary + co-tenants), de-duplicated. Raw tokens
@@ -216,6 +222,7 @@ export async function createSigningRequest(i: {
         documentSha256,
         landlordName: app.landlordSignatureName,
         landlordSignatureKey: app.landlordSignatureImageKey,
+        landlordInitialsKey: app.landlordInitialsImageKey,
         landlordSignedAt: now,
         expiresAt,
         sentAt: now,
@@ -427,6 +434,12 @@ export async function completeIfAllSigned(
             s.signatureKind === "drawn"
               ? await loadPngDataUrl(s.signatureImageKey)
               : undefined,
+          initialsKind: s.initialsKind === "drawn" ? "drawn" : s.initialsKind === "typed" ? "typed" : undefined,
+          initialsText: s.initialsText ?? undefined,
+          initialsImageDataUrl:
+            s.initialsKind === "drawn"
+              ? await loadPngDataUrl(s.initialsImageKey)
+              : undefined,
           ip: s.signerIp ?? undefined,
         });
       }
@@ -439,6 +452,7 @@ export async function completeIfAllSigned(
           name: request.landlordName ?? app.businessName,
           signedAtISO: (request.landlordSignedAt ?? request.sentAt).toISOString(),
           signatureImageDataUrl: await loadPngDataUrl(request.landlordSignatureKey),
+          initialsImageDataUrl: await loadPngDataUrl(request.landlordInitialsKey),
         },
         signers,
         completedAtISO: now.toISOString(),
@@ -507,21 +521,37 @@ export type RecordSignatureResult =
   | { ok: false; code: SignErrorCode };
 
 const MAX_TYPED_LENGTH = 120;
+const MAX_INITIALS_LENGTH = 8;
 const MAX_DRAWN_BYTES = 150 * 1024;
 // Base64 inflates ~4/3, plus the data: prefix — anything bigger can't decode
 // to <= 150KB, so reject before allocating.
 const MAX_DRAWN_DATAURL_LENGTH = Math.ceil((MAX_DRAWN_BYTES * 4) / 3) + 64;
 
+/** Decode + validate a drawn-mark PNG data URL; null = invalid. */
+function decodeDrawnPng(dataUrl: string): Buffer | null {
+  if (dataUrl.length > MAX_DRAWN_DATAURL_LENGTH) return null;
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
+  if (!match) return null;
+  const body = Buffer.from(match[1], "base64");
+  if (body.byteLength === 0 || body.byteLength > MAX_DRAWN_BYTES) return null;
+  if (!looksLikePng(body)) return null;
+  return body;
+}
+
 /**
  * Record one signer's signature, authenticated ONLY by the link token. Every
  * guard returns a typed code (never throws) so the public page can render the
- * terminal state. The audit row carries no signature contents.
+ * terminal state. The audit row carries no signature contents. When the frozen
+ * document contains {{tenant_initials}} markers, initials are required too.
  */
 export async function recordSignature(i: {
   token: string;
   kind: "typed" | "drawn";
   signatureText?: string;
   signatureImagePngDataUrl?: string;
+  initialsKind?: "typed" | "drawn";
+  initialsText?: string;
+  initialsImagePngDataUrl?: string;
   consent: boolean;
   ip: string | null;
   userAgent: string | null;
@@ -553,6 +583,7 @@ export async function recordSignature(i: {
 
   let signatureText: string | null = null;
   let signatureImageKey: string | null = null;
+  let signatureBody: Buffer | null = null;
   if (i.kind === "typed") {
     const text = i.signatureText?.trim() ?? "";
     if (text.length === 0 || text.length > MAX_TYPED_LENGTH) {
@@ -560,31 +591,52 @@ export async function recordSignature(i: {
     }
     signatureText = text;
   } else {
-    const dataUrl = i.signatureImagePngDataUrl ?? "";
-    if (dataUrl.length > MAX_DRAWN_DATAURL_LENGTH) {
-      return { ok: false, code: "invalid_signature" };
-    }
-    const match = /^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
-    if (!match) return { ok: false, code: "invalid_signature" };
-    const body = Buffer.from(match[1], "base64");
-    if (
-      body.byteLength === 0 ||
-      body.byteLength > MAX_DRAWN_BYTES ||
-      !looksLikePng(body)
-    ) {
-      return { ok: false, code: "invalid_signature" };
-    }
+    signatureBody = decodeDrawnPng(i.signatureImagePngDataUrl ?? "");
+    if (!signatureBody) return { ok: false, code: "invalid_signature" };
     signatureImageKey = `signatures/${signer.id}.png`;
-    try {
+  }
+
+  // Initials, required only when the frozen document has initials markers.
+  // Validate BEFORE storing anything so a bad mark can't half-commit.
+  const needsInitials = documentNeedsInitials(request.documentText);
+  let initialsKind: "typed" | "drawn" | null = null;
+  let initialsText: string | null = null;
+  let initialsImageKey: string | null = null;
+  let initialsBody: Buffer | null = null;
+  if (needsInitials) {
+    if (i.initialsKind === "drawn") {
+      initialsBody = decodeDrawnPng(i.initialsImagePngDataUrl ?? "");
+      if (!initialsBody) return { ok: false, code: "invalid_signature" };
+      initialsKind = "drawn";
+      initialsImageKey = `signatures/${signer.id}-initials.png`;
+    } else {
+      const text = i.initialsText?.trim() ?? "";
+      if (text.length === 0 || text.length > MAX_INITIALS_LENGTH) {
+        return { ok: false, code: "invalid_signature" };
+      }
+      initialsKind = "typed";
+      initialsText = text;
+    }
+  }
+
+  try {
+    if (signatureImageKey && signatureBody) {
       await getFileStorage().put({
         key: signatureImageKey,
-        body,
+        body: signatureBody,
         contentType: "image/png",
       });
-    } catch (e) {
-      console.error(`[esign] drawn-signature store failed for ${signer.id}:`, e);
-      return { ok: false, code: "storage_unavailable" };
     }
+    if (initialsImageKey && initialsBody) {
+      await getFileStorage().put({
+        key: initialsImageKey,
+        body: initialsBody,
+        contentType: "image/png",
+      });
+    }
+  } catch (e) {
+    console.error(`[esign] drawn-mark store failed for ${signer.id}:`, e);
+    return { ok: false, code: "storage_unavailable" };
   }
 
   const won = await prisma.$transaction(async (tx) => {
@@ -597,6 +649,9 @@ export async function recordSignature(i: {
         signatureKind: i.kind,
         signatureText,
         signatureImageKey,
+        initialsKind,
+        initialsText,
+        initialsImageKey,
         consentAt: now,
         signerIp: i.ip,
         signerUserAgent: i.userAgent,
@@ -646,6 +701,8 @@ export type SigningPageData =
       businessName: string;
       kind: SigningKind;
       documentText: string;
+      /** The frozen document has {{tenant_initials}} markers → capture initials too. */
+      needsInitials: boolean;
       landlordName: string | null;
       landlordSignedAtISO: string | null;
       expiresAtISO: string;
@@ -691,6 +748,7 @@ export async function getSigningPageData(
     businessName,
     kind: request.kind === "renewal" ? "renewal" : "lease",
     documentText: request.documentText,
+    needsInitials: documentNeedsInitials(request.documentText),
     landlordName: request.landlordName,
     landlordSignedAtISO: request.landlordSignedAt?.toISOString() ?? null,
     expiresAtISO: request.expiresAt.toISOString(),

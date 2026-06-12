@@ -9,6 +9,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import {
   applyChargeTermsToActiveLeases,
   saveBillingDefaultsAction,
+  savePaymentMethodsAction,
   type BillingState,
 } from "./actions";
 
@@ -173,6 +174,39 @@ export function ApplyTermsForm({ activeLeases }: { activeLeases: number }) {
           </ConfirmSubmitButton>
         )}
       </div>
+    </form>
+  );
+}
+
+export function PaymentMethodsForm({ initialCashtag }: { initialCashtag: string }) {
+  const [state, formAction, pending] = useActionState<BillingState, FormData>(
+    savePaymentMethodsAction,
+    {},
+  );
+
+  return (
+    <form action={formAction} className="max-w-lg space-y-3">
+      <StateAlerts state={state} />
+      <div className="space-y-2">
+        <Label htmlFor="cashAppCashtag">Cash App cashtag</Label>
+        <Input
+          id="cashAppCashtag"
+          name="cashAppCashtag"
+          defaultValue={initialCashtag}
+          placeholder="$YourBusiness"
+          maxLength={21}
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown to tenants as a way to pay: use {"{{cash_app_tag}}"} or{" "}
+          {"{{cash_app_link}}"} in reminder templates (Settings → Messaging) and
+          it appears in the tenant portal&apos;s payment panel. Cash App has no
+          API — record incoming payments manually with the “cash app” method and
+          the transaction reference. Leave blank to disable.
+        </p>
+      </div>
+      <Button type="submit" size="sm" disabled={pending}>
+        {pending ? "Saving…" : "Save payment methods"}
+      </Button>
     </form>
   );
 }

@@ -42,6 +42,9 @@ export default async function AppLayout({
     ...(app.modules.maintenance && can("maintenance.manage")
       ? [{ href: "/maintenance", label: "Maintenance" }]
       : []),
+    ...(app.modules.tenantPortal && can("portal.manage")
+      ? [{ href: "/requests", label: "Requests" }]
+      : []),
   ];
   const showSettings = (
     ["billing.settings", "organization.settings", "messaging.settings", "auth.settings", "users.manage"] as Capability[]

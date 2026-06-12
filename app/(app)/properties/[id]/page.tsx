@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { ChangeHistory } from "@/components/app/change-history";
 
 export const runtime = "nodejs";
 
@@ -542,6 +543,8 @@ export default async function PropertyDetail({
           </div>
         </CardContent>
       </Card>
+
+      <ChangeHistory refs={[{ entityType: "Property", entityId: property.id }]} />
     </div>
   );
 }

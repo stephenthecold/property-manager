@@ -110,14 +110,39 @@ export async function uploadLeaseTemplateAction(
 // UploadedDocument: it isn't a lease/tenant record, just org branding-like
 // config consumed by e-sign sends.
 const LANDLORD_SIGNATURE_KEY = "signatures/landlord.png";
+const LANDLORD_INITIALS_KEY = "signatures/landlord-initials.png";
 const SIGNATURE_MAX_BYTES = 150 * 1024;
 const SIGNATURE_MAX_DATAURL_LENGTH =
   Math.ceil((SIGNATURE_MAX_BYTES * 4) / 3) + 64;
 
+/** Validate a drawn-mark PNG data URL and return its bytes, or an error string. */
+function decodeDrawnDataUrl(
+  dataUrl: string,
+  what: string,
+): Buffer | { error: string } {
+  if (dataUrl.length > SIGNATURE_MAX_DATAURL_LENGTH) {
+    return { error: `Drawn ${what} is too large (max 150 KB).` };
+  }
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
+  if (!match) {
+    return { error: `Drawn ${what} could not be read — please redraw it.` };
+  }
+  const body = Buffer.from(match[1], "base64");
+  if (body.byteLength === 0 || body.byteLength > SIGNATURE_MAX_BYTES) {
+    return { error: `Drawn ${what} is too large (max 150 KB).` };
+  }
+  if (!looksLikePng(body)) {
+    return { error: `Drawn ${what} could not be read — please redraw it.` };
+  }
+  return body;
+}
+
 /**
  * Save the landlord signature (typed name + optional drawn PNG from the
- * signature pad). An empty pad keeps the currently stored image. Managers+
- * (esign.manage) apply this signature when sending e-sign requests.
+ * signature pad) and optional drawn initials. An empty pad keeps the
+ * currently stored image. Managers+ (esign.manage) apply these marks when
+ * sending e-sign requests; initials are stamped at {{landlord_initials}}
+ * markers (typed initials derived from the name when no image is saved).
  */
 export async function saveLandlordSignatureAction(
   _prev: LeaseSettingsState,
@@ -136,42 +161,51 @@ export async function saveLandlordSignatureAction(
 
   // undefined = keep the stored image; a key = replace it.
   let imageKey: string | undefined;
-  const dataUrl = String(fd.get("signatureImage") ?? "");
-  if (dataUrl !== "") {
-    if (dataUrl.length > SIGNATURE_MAX_DATAURL_LENGTH) {
-      return { error: "Drawn signature is too large (max 150 KB)." };
-    }
-    const match = /^data:image\/png;base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl);
-    if (!match) {
-      return { error: "Drawn signature could not be read — please redraw it." };
-    }
-    const body = Buffer.from(match[1], "base64");
-    if (body.byteLength === 0 || body.byteLength > SIGNATURE_MAX_BYTES) {
-      return { error: "Drawn signature is too large (max 150 KB)." };
-    }
-    if (!looksLikePng(body)) {
-      return { error: "Drawn signature could not be read — please redraw it." };
-    }
+  let initialsImageKey: string | undefined;
+  const marks: {
+    field: string;
+    what: string;
+    key: string;
+    assign: (k: string) => void;
+  }[] = [
+    {
+      field: "signatureImage",
+      what: "signature",
+      key: LANDLORD_SIGNATURE_KEY,
+      assign: (k) => (imageKey = k),
+    },
+    {
+      field: "initialsImage",
+      what: "initials",
+      key: LANDLORD_INITIALS_KEY,
+      assign: (k) => (initialsImageKey = k),
+    },
+  ];
+  for (const mark of marks) {
+    const dataUrl = String(fd.get(mark.field) ?? "");
+    if (dataUrl === "") continue;
+    const body = decodeDrawnDataUrl(dataUrl, mark.what);
+    if (!Buffer.isBuffer(body)) return body;
     try {
       await getFileStorage().put({
-        key: LANDLORD_SIGNATURE_KEY,
+        key: mark.key,
         body,
         contentType: "image/png",
       });
-      imageKey = LANDLORD_SIGNATURE_KEY;
+      mark.assign(mark.key);
     } catch (e) {
-      console.error("[settings/leases] landlord signature upload failed:", e);
+      console.error(`[settings/leases] landlord ${mark.what} upload failed:`, e);
       return {
         error:
           e instanceof Error && /storage is not configured/i.test(e.message)
             ? "File storage is not configured (set STORAGE_PROVIDER=local or s3) — drawn signatures are unavailable. You can still save the typed name."
-            : "Could not store the drawn signature — check the server log.",
+            : `Could not store the drawn ${mark.what} — check the server log.`,
       };
     }
   }
 
   try {
-    await saveLandlordSignature(name, imageKey, actor);
+    await saveLandlordSignature(name, imageKey, actor, initialsImageKey);
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Failed to save the signature.",
@@ -182,13 +216,13 @@ export async function saveLandlordSignatureAction(
   return {
     ok: true,
     message:
-      imageKey !== undefined
+      imageKey !== undefined || initialsImageKey !== undefined
         ? "Landlord signature saved (name + drawing)."
         : "Landlord signature saved.",
   };
 }
 
-/** Clear the saved landlord signature (name + drawn image reference). */
+/** Clear the saved landlord signature (name + drawn image references). */
 export async function clearLandlordSignatureAction(
   _prev: LeaseSettingsState,
   _fd: FormData,
@@ -197,7 +231,7 @@ export async function clearLandlordSignatureAction(
   const actor = await auditActor();
 
   try {
-    await saveLandlordSignature(null, null, actor);
+    await saveLandlordSignature(null, null, actor, null);
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Failed to clear the signature.",

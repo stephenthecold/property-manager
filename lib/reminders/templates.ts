@@ -23,6 +23,8 @@ export function buildReminderVars(i: {
   amountDueFormatted: string;
   dueDateFormatted: string;
   balanceFormatted: string;
+  /** Canonical "$Cashtag" (AppSettings.cashAppCashtag); empty vars when null. */
+  cashAppTag?: string | null;
 }): TemplateVars {
   return {
     tenant_name: `${i.tenantFirstName} ${i.tenantLastName}`.trim(),
@@ -32,6 +34,8 @@ export function buildReminderVars(i: {
     amount_due: i.amountDueFormatted,
     due_date: i.dueDateFormatted,
     balance: i.balanceFormatted,
+    cash_app_tag: i.cashAppTag ?? "",
+    cash_app_link: i.cashAppTag ? `https://cash.app/${i.cashAppTag}` : "",
   };
 }
 

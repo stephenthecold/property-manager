@@ -3,7 +3,10 @@ import cron from "node-cron";
 import { runBilling } from "@/lib/services/billing";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import { runScheduledReminders } from "@/lib/services/reminders";
-import { runWeeklyStaffDigest } from "@/lib/services/staff-digest";
+import {
+  runWeeklyMaintenanceDigest,
+  runWeeklyStaffDigest,
+} from "@/lib/services/staff-digest";
 
 /**
  * Dedicated billing worker: a daily idempotent run that generates due rent
@@ -57,6 +60,16 @@ async function runStaffDigestOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] staff digest failed:", e);
+  }
+  // The maintenance digest shares the Monday cadence; a failure in one digest
+  // never blocks the other.
+  try {
+    const res = await runWeeklyMaintenanceDigest(new Date());
+    console.log(
+      `[worker] maintenance digest: sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+    );
+  } catch (e) {
+    console.error("[worker] maintenance digest failed:", e);
   }
 }
 

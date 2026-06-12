@@ -25,10 +25,13 @@ const STORAGE_NOT_CONFIGURED_FALLBACK =
 export function UploadDocumentDialog({
   tenantId,
   paymentId,
+  receiptId,
   trigger = "Upload document",
 }: {
   tenantId?: string;
   paymentId?: string;
+  /** Attaching to a receipt locks the type to receipt_photo. */
+  receiptId?: string;
   trigger?: string;
 }) {
   const router = useRouter();
@@ -37,7 +40,7 @@ export function UploadDocumentDialog({
   const [error, setError] = useState<string | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
 
-  const defaultType = tenantId || paymentId ? "receipt_photo" : "other";
+  const defaultType = tenantId || paymentId || receiptId ? "receipt_photo" : "other";
 
   function handleOpenChange(next: boolean) {
     if (next) {
@@ -106,6 +109,7 @@ export function UploadDocumentDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           {tenantId && <input type="hidden" name="tenantId" value={tenantId} />}
           {paymentId && <input type="hidden" name="paymentId" value={paymentId} />}
+          {receiptId && <input type="hidden" name="receiptId" value={receiptId} />}
           <div className="space-y-2">
             <Label htmlFor="file">File</Label>
             <input
@@ -118,21 +122,25 @@ export function UploadDocumentDialog({
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="uploadType">Document type</Label>
-            <select
-              id="uploadType"
-              name="uploadType"
-              defaultValue={defaultType}
-              className="h-9 w-full rounded-md border px-3 text-sm capitalize"
-            >
-              {UPLOAD_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
-          </div>
+          {receiptId ? (
+            <input type="hidden" name="uploadType" value="receipt_photo" />
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="uploadType">Document type</Label>
+              <select
+                id="uploadType"
+                name="uploadType"
+                defaultValue={defaultType}
+                className="h-9 w-full rounded-md border px-3 text-sm capitalize"
+              >
+                {UPLOAD_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Input id="notes" name="notes" placeholder="Optional" />

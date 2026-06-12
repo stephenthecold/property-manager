@@ -69,7 +69,7 @@ async function renderDefaultBody(
       ? snapshot.currentPeriodOutstandingCents
       : expectedMonthlyChargeCents(lease);
 
-  const { templates } = await getAppSettings();
+  const { templates, cashAppCashtag } = await getAppSettings();
   return renderTemplate(
     templates[reminderType],
     buildReminderVars({
@@ -80,6 +80,7 @@ async function renderDefaultBody(
       amountDueFormatted: formatCurrency(amountDueCents, currency),
       dueDateFormatted,
       balanceFormatted: formatCurrency(snapshot.netBalanceCents, currency),
+      cashAppTag: cashAppCashtag,
     }),
   );
 }

@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "other"];
+const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "cash_app", "other"];
 
 export interface LeaseOption {
   id: string;

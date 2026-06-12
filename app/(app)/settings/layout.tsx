@@ -6,7 +6,9 @@ import { SettingsNav } from "@/components/app/settings-nav";
 
 export const runtime = "nodejs";
 
-const SETTINGS_LINKS: { href: string; label: string; cap: Capability }[] = [
+// cap: null = self-service section, visible to every signed-in staff member.
+const SETTINGS_LINKS: { href: string; label: string; cap: Capability | null }[] = [
+  { href: "/settings/notifications", label: "Notifications", cap: null },
   { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
   { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
   { href: "/settings/leases", label: "Leases", cap: "organization.settings" },
@@ -26,8 +28,8 @@ export default async function SettingsLayout({
   const { rolePermissions } = await getAppSettings();
 
   // Show only the sections this role can edit; each page re-checks its own gate.
-  const links = SETTINGS_LINKS.filter((l) =>
-    hasCapability(actingRole, l.cap, rolePermissions),
+  const links = SETTINGS_LINKS.filter(
+    (l) => l.cap === null || hasCapability(actingRole, l.cap, rolePermissions),
   );
   if (links.length === 0) redirect("/dashboard");
 

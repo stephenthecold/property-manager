@@ -5,8 +5,9 @@ import {
   renderTemplate,
 } from "@/lib/reminders/templates";
 
-function vars() {
+function vars(over: { cashAppTag?: string | null } = {}) {
   return buildReminderVars({
+    ...over,
     tenantFirstName: "Ada",
     tenantLastName: "Lovelace",
     propertyName: "Maple Court",
@@ -60,7 +61,15 @@ describe("buildReminderVars", () => {
       amount_due: "$1,250.00",
       due_date: "June 1, 2026",
       balance: "$450.00",
+      cash_app_tag: "",
+      cash_app_link: "",
     });
+  });
+
+  it("renders the cashtag and link when one is configured", () => {
+    const v = vars({ cashAppTag: "$NewEdgeRentals" });
+    expect(v.cash_app_tag).toBe("$NewEdgeRentals");
+    expect(v.cash_app_link).toBe("https://cash.app/$NewEdgeRentals");
   });
 });
 

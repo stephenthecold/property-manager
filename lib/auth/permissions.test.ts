@@ -28,6 +28,9 @@ const LEGACY_MIN: Record<Capability, Role> = {
   // esign.manage is new (no true legacy gate); manager mirrors leases.manage,
   // matching the product rule that managers+ sign the landlord side.
   "esign.manage": "manager",
+  // portal.manage is new (no legacy gate); manager mirrors tenants.manage —
+  // the staff who manage tenants also manage their portal access/requests.
+  "portal.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",

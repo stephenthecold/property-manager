@@ -118,3 +118,93 @@ export function formatOverdueDigest(
 export function isoWeekKey(now: Date): string {
   return DateTime.fromJSDate(now, { zone: "utc" }).toFormat("kkkk-'W'WW");
 }
+
+// ---------------------------------------------------------------------------
+// Weekly maintenance-schedule digest (same Monday cron as the overdue digest)
+// ---------------------------------------------------------------------------
+
+/** One pending job with a due date inside the digest window (or overdue). */
+export interface MaintenanceDigestJobRow {
+  title: string;
+  propertyName: string;
+  /** Unit-scoped job; null = whole property. */
+  unitLabel: string | null;
+  /** "yyyy-MM-dd" due date in the property timezone. */
+  dueISO: string;
+  overdue: boolean;
+}
+
+/** One recurring monthly task whose next occurrence is inside the window. */
+export interface MaintenanceDigestTaskRow {
+  title: string;
+  propertyName: string;
+  /** "yyyy-MM-dd" next occurrence in the property timezone. */
+  dueISO: string;
+}
+
+export interface MaintenanceDigestInput {
+  businessName: string;
+  now: Date;
+  jobs: MaintenanceDigestJobRow[];
+  tasks: MaintenanceDigestTaskRow[];
+}
+
+function digestLine(d: {
+  dueISO: string;
+  title: string;
+  propertyName: string;
+  unitLabel?: string | null;
+  suffix?: string;
+}): string {
+  const where = d.unitLabel
+    ? `${d.propertyName} · ${d.unitLabel}`
+    : d.propertyName;
+  return `${d.dueISO} — ${d.title} — ${where}${d.suffix ?? ""}`;
+}
+
+/**
+ * Build the weekly maintenance digest email. Returns null when there is
+ * nothing scheduled (the caller must not send an empty digest). Jobs and
+ * tasks are each sorted by date then title so output is deterministic.
+ */
+export function formatMaintenanceDigest(
+  input: MaintenanceDigestInput,
+): { subject: string; text: string } | null {
+  const { businessName, now, jobs, tasks } = input;
+  const total = jobs.length + tasks.length;
+  if (total === 0) return null;
+
+  const byDate = <T extends { dueISO: string; title: string }>(a: T, b: T) =>
+    a.dueISO.localeCompare(b.dueISO) || a.title.localeCompare(b.title);
+  const sortedJobs = [...jobs].sort(byDate);
+  const sortedTasks = [...tasks].sort(byDate);
+  const overdueCount = sortedJobs.filter((j) => j.overdue).length;
+
+  const subject = `Maintenance this week: ${total} item${total === 1 ? "" : "s"}${
+    overdueCount > 0 ? ` (${overdueCount} overdue)` : ""
+  } — ${businessName}`;
+
+  const sections: string[] = [
+    `Maintenance scheduled as of ${now.toISOString().slice(0, 10)}:`,
+    "",
+  ];
+  if (sortedJobs.length > 0) {
+    sections.push(
+      "Jobs:",
+      ...sortedJobs.map((j) =>
+        digestLine({ ...j, suffix: j.overdue ? " (OVERDUE)" : "" }),
+      ),
+      "",
+    );
+  }
+  if (sortedTasks.length > 0) {
+    sections.push(
+      "Recurring tasks:",
+      ...sortedTasks.map((t) => digestLine({ ...t, suffix: " (monthly)" })),
+      "",
+    );
+  }
+  sections.push(`Sent by ${businessName} property manager — weekly maintenance digest`);
+
+  return { subject, text: sections.join("\n") };
+}

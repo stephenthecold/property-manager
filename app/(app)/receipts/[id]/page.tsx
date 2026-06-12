@@ -2,13 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getReceiptWithContext } from "@/lib/services/receipts";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { getDocumentDownloadUrl, listDocuments } from "@/lib/services/documents";
+import { getFileStorage } from "@/lib/providers/storage";
+import { getDisplayRole } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/money";
 import { markSentAction } from "@/app/(app)/receipts/actions";
 import { EmailReceiptButton } from "./email-receipt-button";
 import { PrintButton } from "@/components/app/print-button";
+import { ChangeHistory } from "@/components/app/change-history";
+import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
@@ -29,12 +34,27 @@ export default async function ReceiptPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [ctx, app] = await Promise.all([
+  const [ctx, app, { actingRole }] = await Promise.all([
     getReceiptWithContext(id),
     getAppSettings(),
+    getDisplayRole(),
   ]);
   if (!ctx) notFound();
   const { receipt, payment, tenant, unit, property } = ctx;
+  const canAttach = hasCapability(actingRole, "documents.manage", app.rolePermissions);
+
+  // Attached paper-receipt photos (camera uploads): signed, short-lived URLs.
+  const photoDocs = await listDocuments({ receiptId: receipt.id });
+  const storage = getFileStorage();
+  const photos = await Promise.all(
+    photoDocs.map(async (d) => ({
+      id: d.id,
+      fileName: d.fileName,
+      isImage: (d.fileType ?? "").startsWith("image/"),
+      url: await storage.getSignedUrl(d.fileUrl),
+      createdAt: d.createdAt,
+    })),
+  );
 
   let logoUrl: string | null = null;
   if (app.logoDocumentId) {
@@ -173,6 +193,68 @@ export default async function ReceiptPage({
           </div>
         </CardContent>
       </Card>
+
+      {(photos.length > 0 || canAttach) && (
+        <Card className="print-hidden">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Receipt photos</CardTitle>
+            {canAttach && (
+              <UploadDocumentDialog
+                receiptId={receipt.id}
+                tenantId={receipt.tenantId ?? undefined}
+                paymentId={receipt.paymentId ?? undefined}
+                trigger="Attach photo"
+              />
+            )}
+          </CardHeader>
+          <CardContent>
+            {photos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No photos attached. Use “Attach photo” to add a picture of the
+                paper receipt, check, or money order.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {photos.map((p) =>
+                  p.isImage ? (
+                    <a
+                      key={p.id}
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL */}
+                      <img
+                        src={p.url}
+                        alt={p.fileName ?? "Receipt photo"}
+                        className="h-32 w-32 rounded-md border object-cover"
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      key={p.id}
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex h-32 w-32 items-center justify-center rounded-md border p-2 text-center text-xs text-muted-foreground hover:bg-muted/30"
+                    >
+                      {p.fileName ?? "Attachment"}
+                    </a>
+                  ),
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <ChangeHistory
+        refs={[
+          { entityType: "Receipt", entityId: receipt.id },
+          ...(payment ? [{ entityType: "Payment", entityId: payment.id }] : []),
+        ]}
+      />
     </div>
   );
 }

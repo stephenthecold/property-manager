@@ -68,6 +68,7 @@ enum PaymentMethod {
   card
   ach
   online
+  cash_app
   other
 }
 
@@ -144,6 +145,13 @@ model User {
   isActive      Boolean   @default(true)
   // Bumped to invalidate outstanding JWTs (role change, disable, break-glass use).
   securityStamp String    @default(cuid())
+  // Staff notifications (self-service at Settings → Notifications; admins can
+  // edit anyone's from Settings → Users). Digests go to manager+ roles by
+  // email; phone enables SMS for the urgent cash-pickup alerts.
+  phone                   String?
+  notifyOverdueDigest     Boolean @default(true)
+  notifyMaintenanceDigest Boolean @default(true)
+  notifyCashPickup        Boolean @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -282,9 +290,16 @@ model AppSettings {
 
   // Saved landlord signature, auto-applied to outgoing e-sign requests by
   // managers+ (esign.manage). Image is a storage key (drawn PNG); name is the
-  // typed signature line.
+  // typed signature line. Initials image is optional — when absent, typed
+  // initials are derived from landlordSignatureName at {{landlord_initials}}.
   landlordSignatureName     String?
   landlordSignatureImageKey String?
+  landlordInitialsImageKey  String?
+
+  // Cash App: org cashtag (e.g. "$NewEdgeRentals") surfaced as the
+  // {{cash_app_tag}}/{{cash_app_link}} template variables and in the tenant
+  // portal's "how to pay" panel. Manual recording only — Cash App has no API.
+  cashAppCashtag String?
 
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
@@ -434,11 +449,16 @@ model Tenant {
   smsConsent            Boolean  @default(false)
   notes                 String?
   isActive              Boolean  @default(true)
+  // How this tenant prefers to pay (set by staff or by the tenant in the
+  // portal). cash → staff arrange pickup; informational, never gates payments.
+  preferredPaymentMethod PaymentMethod?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  leases   Lease[]
-  coLeases LeaseTenant[]
+  leases        Lease[]
+  coLeases      LeaseTenant[]
+  portalAccount TenantPortalAccount?
+  requests      TenantRequest[]
 
   @@index([lastName, firstName])
 }
@@ -807,6 +827,7 @@ model SigningRequest {
 
   landlordName         String?
   landlordSignatureKey String? // storage key of the applied signature image
+  landlordInitialsKey  String? // storage key of the applied initials image
   landlordSignedAt     DateTime?
 
   // UploadedDocument.id of the final signed HTML artifact (loose ref).
@@ -842,6 +863,11 @@ model SigningSigner {
   signatureKind     String? // "typed" | "drawn"
   signatureText     String? // typed-name signature
   signatureImageKey String? // storage key for a drawn signature PNG
+  // Initials, captured alongside the signature when the agreement text has
+  // {{tenant_initials}} markers; stamped at every marker for this signer.
+  initialsKind      String? // "typed" | "drawn"
+  initialsText      String?
+  initialsImageKey  String?
   consentAt         DateTime?
   signerIp          String?
   signerUserAgent   String?
@@ -849,5 +875,100 @@ model SigningSigner {
   createdAt         DateTime @default(now())
 
   @@index([requestId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Tenant portal (module "tenantPortal") — LOCAL tenant credentials, completely
+// separate from the staff User table and OIDC. Tenants sign in with email +
+// password (set via an invite link) or a one-time SMS code; sessions are
+// opaque 256-bit cookie tokens stored only as sha-256 hashes, like e-sign
+// link tokens. Disabling the module blocks logins but keeps all data.
+// ---------------------------------------------------------------------------
+
+model TenantPortalAccount {
+  id       String @id @default(cuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Login identifiers, copied from the tenant at invite time but owned by the
+  // account so editing the tenant record never silently changes a login.
+  email String? @unique
+  phone String? @unique
+
+  passwordHash String? // argon2id; null until the invite is accepted
+  isActive     Boolean @default(true)
+
+  // Invite / password-reset link (sha-256 of the raw token; the raw token
+  // exists only inside the sent link).
+  inviteTokenHash String?   @unique
+  inviteExpiresAt DateTime?
+
+  // SMS one-time code login: sha-256 of the 6-digit code, short-lived,
+  // attempt-capped, resend rate-limited via otpLastSentAt.
+  otpHash       String?
+  otpExpiresAt  DateTime?
+  otpAttempts   Int       @default(0)
+  otpLastSentAt DateTime?
+
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions TenantPortalSession[]
+}
+
+model TenantPortalSession {
+  id        String              @id @default(cuid())
+  accountId String
+  account   TenantPortalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash String              @unique // sha-256 of the raw cookie token
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime            @default(now())
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+enum TenantRequestType {
+  maintenance
+  cash_pickup
+}
+
+enum TenantRequestStatus {
+  open
+  in_progress
+  done
+  declined
+}
+
+/// Requests tenants submit from the portal: maintenance issues and "I'll pay
+/// cash — please pick it up". Operating records, NOT ledger entries — they
+/// never touch tenant balances. Staff work the queue at /requests; a
+/// maintenance request can be converted into a MaintenanceJob (loose ref).
+model TenantRequest {
+  id       String            @id @default(cuid())
+  tenantId String
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leaseId  String? // the lease the tenant was viewing when they submitted
+  type     TenantRequestType
+  message  String?
+
+  status           TenantRequestStatus @default(open)
+  maintenanceJobId String? // set when converted to a MaintenanceJob
+  handledBy        String?
+  handledAt        DateTime?
+  resolutionNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
   @@index([tenantId])
 }
