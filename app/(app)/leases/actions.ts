@@ -11,8 +11,18 @@ import { generateChargesForLease } from "@/lib/services/billing";
 import { daysBetween, parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { sanitizeUtilities } from "@/lib/config/lease";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { parseDepositRows } from "@/lib/leases/deposits";
 import { DateTime } from "luxon";
 import type { LateFeeType, LeaseStatus } from "@/lib/generated/prisma/enums";
+
+/**
+ * Validation failures are RETURNED, never thrown: a thrown error in a server
+ * action surfaces in production as the opaque "A server error occurred"
+ * digest page instead of an inline message (see settings/billing/actions.ts).
+ */
+export interface CreateLeaseState {
+  error?: string;
+}
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -73,32 +83,71 @@ function parseLateFeeTerms(fd: FormData): {
   return { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents };
 }
 
-export async function createLease(fd: FormData): Promise<void> {
+export async function createLease(
+  _prev: CreateLeaseState,
+  fd: FormData,
+): Promise<CreateLeaseState> {
   await requireCapability("leases.manage");
   const tenantId = str(fd, "tenantId");
   const unitId = str(fd, "unitId");
   const rentRaw = str(fd, "rentAmount");
   if (!tenantId || !unitId || !rentRaw) {
-    throw new Error("Tenant, unit, and rent amount are required.");
+    return { error: "Tenant, unit, and rent amount are required." };
+  }
+  let rentAmountCents: bigint;
+  try {
+    rentAmountCents = toCents(rentRaw);
+  } catch {
+    return { error: "Monthly rent must be a valid amount (e.g. 1200.00)." };
+  }
+  if (rentAmountCents <= 0n) {
+    return { error: "Monthly rent must be greater than zero." };
   }
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
     include: { property: true },
   });
-  if (!unit) throw new Error("Unit not found.");
+  if (!unit) return { error: "Unit not found." };
   const tz = unit.property.timezone;
 
+  // parseLateFeeTerms throws (it is shared with updateLease); surface its
+  // message inline instead of letting it crash the action.
+  let lateFeeTerms: ReturnType<typeof parseLateFeeTerms>;
+  try {
+    lateFeeTerms = parseLateFeeTerms(fd);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Invalid late-fee terms." };
+  }
   const { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents } =
-    parseLateFeeTerms(fd);
-  const status = (str(fd, "status") || "active") as LeaseStatus;
+    lateFeeTerms;
+
+  const statusRaw = str(fd, "status") || "active";
+  if (!["draft", "active", "month_to_month"].includes(statusRaw)) {
+    return { error: "Status must be draft, active, or month-to-month." };
+  }
+  const status = statusRaw as LeaseStatus;
+
+  const dueDay = Number(str(fd, "dueDay") || "1");
+  if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+    return { error: "Due day must be between 1 and 31." };
+  }
+  const gracePeriodDays = Number(str(fd, "gracePeriodDays") || "0");
+  if (!Number.isInteger(gracePeriodDays) || gracePeriodDays < 0) {
+    return { error: "Grace period must be 0 or more days." };
+  }
+
   const now = new Date();
-  const startDate = str(fd, "startDate")
-    ? (parseDateOnlyInZone(str(fd, "startDate"), tz) ?? new Date(str(fd, "startDate")))
+  const startRaw = str(fd, "startDate");
+  const startDate = startRaw
+    ? (parseDateOnlyInZone(startRaw, tz) ?? new Date(startRaw))
     : now;
+  if (Number.isNaN(startDate.getTime())) {
+    return { error: "Start date must be a valid date." };
+  }
 
   const endRaw = str(fd, "endDate");
   const endDate = endRaw ? parseDateOnlyInZone(endRaw, tz) : null;
-  if (endRaw && !endDate) throw new Error("End date must be a valid date.");
+  if (endRaw && !endDate) return { error: "End date must be a valid date." };
 
   // Backdated leases: optionally start billing at the NEXT due date instead
   // of back-filling every period since startDate, and post what the tenant
@@ -111,26 +160,50 @@ export async function createLease(fd: FormData): Promise<void> {
   try {
     openingBalanceCents = openingRaw ? toCents(openingRaw) : 0n;
   } catch {
-    throw new Error("Opening balance must be a valid amount (e.g. 500.00).");
+    return { error: "Opening balance must be a valid amount (e.g. 500.00)." };
   }
   if (openingBalanceCents < 0n) {
-    throw new Error("Opening balance cannot be negative (use a credit adjustment instead).");
+    return {
+      error: "Opening balance cannot be negative (use a credit adjustment instead).",
+    };
   }
   if (openingBalanceCents > 0n && billingStart !== "current") {
-    throw new Error(
-      "An opening balance only applies when billing starts at the next due date — " +
+    return {
+      error:
+        "An opening balance only applies when billing starts at the next due date — " +
         "with full-history billing the back-filled charges already represent the past debt.",
-    );
+    };
   }
+
+  const securityRaw = str(fd, "securityDeposit");
+  let securityDepositCents: bigint;
+  try {
+    securityDepositCents = securityRaw ? toCents(securityRaw) : 0n;
+  } catch {
+    return { error: "Security deposit must be a valid amount (e.g. 1200.00)." };
+  }
+  if (securityDepositCents < 0n) {
+    return { error: "Security deposit cannot be negative." };
+  }
+
+  // Additional itemized deposits, serialized by the form into one JSON field.
+  const depositsParsed = parseDepositRows(str(fd, "depositsJson"));
+  if ("error" in depositsParsed) return { error: depositsParsed.error };
+  const deposits = depositsParsed.deposits;
 
   // Internet add-on now lives on the LEASE; the fee falls back to the
   // org-wide default rate.
   const internetEnabled = fd.get("internetEnabled") === "on";
   const internetFeeRaw = str(fd, "internetFee");
-  const internetFeeCents = internetFeeRaw
-    ? toCents(internetFeeRaw)
-    : (await getAppSettings()).billing.internetFeeCents;
-  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
+  let internetFeeCents: bigint;
+  try {
+    internetFeeCents = internetFeeRaw
+      ? toCents(internetFeeRaw)
+      : (await getAppSettings()).billing.internetFeeCents;
+  } catch {
+    return { error: "Internet fee must be a valid amount (e.g. 25.00)." };
+  }
+  if (internetFeeCents < 0n) return { error: "Internet fee cannot be negative." };
 
   const utilitiesPaid = sanitizeUtilities(
     fd.getAll("utilities").map((v) => String(v)),
@@ -147,6 +220,42 @@ export async function createLease(fd: FormData): Promise<void> {
     ),
   ];
 
+  // The pickers hide occupied tenants, but never trust the UI: reject anyone
+  // (primary or co-tenant) already on an active/month-to-month lease.
+  const selectedIds = [tenantId, ...coTenantIds];
+  const [selectedTenants, occupiedPrimary, occupiedCo] = await Promise.all([
+    prisma.tenant.findMany({
+      where: { id: { in: selectedIds } },
+      select: { id: true },
+    }),
+    prisma.lease.findMany({
+      where: {
+        tenantId: { in: selectedIds },
+        status: { in: ["active", "month_to_month"] },
+      },
+      select: { tenantId: true },
+    }),
+    prisma.leaseTenant.findMany({
+      where: {
+        tenantId: { in: selectedIds },
+        lease: { status: { in: ["active", "month_to_month"] } },
+      },
+      select: { tenantId: true },
+    }),
+  ]);
+  if (selectedTenants.length !== selectedIds.length) {
+    return { error: "One or more selected tenants no longer exist." };
+  }
+  const occupied = new Set(
+    [...occupiedPrimary, ...occupiedCo].map((r) => r.tenantId),
+  );
+  if (occupied.has(tenantId)) {
+    return { error: "The selected tenant is already on an active lease." };
+  }
+  if (coTenantIds.some((id) => occupied.has(id))) {
+    return { error: "One or more selected co-tenants are already on an active lease." };
+  }
+
   let lease;
   try {
     lease = await prisma.$transaction(async (tx) => {
@@ -157,14 +266,14 @@ export async function createLease(fd: FormData): Promise<void> {
           startDate,
           endDate,
           billingStartDate,
-          rentAmountCents: toCents(rentRaw),
-          dueDay: Number(str(fd, "dueDay") || "1"),
-          gracePeriodDays: Number(str(fd, "gracePeriodDays") || "0"),
+          rentAmountCents,
+          dueDay,
+          gracePeriodDays,
           lateFeeType,
           lateFeeAmountCents,
           lateFeeBps,
           lateFeeMaxCents,
-          securityDepositCents: centsOrNull(str(fd, "securityDeposit")) ?? 0n,
+          securityDepositCents,
           internetEnabled,
           internetFeeCents,
           utilitiesPaid,
@@ -177,6 +286,17 @@ export async function createLease(fd: FormData): Promise<void> {
       if (coTenantIds.length > 0) {
         await tx.leaseTenant.createMany({
           data: coTenantIds.map((id) => ({ leaseId: created.id, tenantId: id })),
+        });
+      }
+      if (deposits.length > 0) {
+        await tx.leaseDeposit.createMany({
+          data: deposits.map((d) => ({
+            leaseId: created.id,
+            label: d.label,
+            amountCents: d.amountCents,
+            // Whole-deposit toggle, same rule as addLeaseDeposit.
+            nonRefundableCents: d.nonRefundable ? d.amountCents : 0n,
+          })),
         });
       }
       if (openingBalanceCents > 0n) {
@@ -204,13 +324,15 @@ export async function createLease(fd: FormData): Promise<void> {
           coTenantIds,
           openingBalanceCents,
           billingStartDate,
+          depositCount: deposits.length,
+          depositLabels: deposits.map((d) => d.label),
         },
       });
       return created;
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      throw new Error("That unit already has an active lease.");
+      return { error: "That unit already has an active lease." };
     }
     throw e;
   }
@@ -654,4 +776,165 @@ export async function terminateLease(fd: FormData): Promise<void> {
   });
   revalidatePath("/leases");
   revalidatePath(`/tenants/${lease.tenantId}`);
+}
+
+/**
+ * Guard failures for the archive/delete row actions land back on the leases
+ * list as a ?error= banner instead of being thrown — a thrown server-action
+ * error renders as the opaque production digest page (same pattern as
+ * settings/users/actions.ts).
+ */
+function failToLeases(message: string): never {
+  redirect(`/leases?error=${encodeURIComponent(message)}`);
+}
+
+/**
+ * Archive a terminated lease: hides it from the default list without touching
+ * any history. Only ended/eviction leases may be archived (an archived lease
+ * can never be an active one).
+ */
+export async function archiveLeaseAction(fd: FormData): Promise<void> {
+  await requireCapability("leases.manage");
+  const leaseId = str(fd, "leaseId");
+  if (!leaseId) failToLeases("Missing lease id.");
+  const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
+  if (!lease) failToLeases("Lease not found.");
+  if (lease.status !== "ended" && lease.status !== "eviction") {
+    failToLeases("Only terminated leases (ended or eviction) can be archived.");
+  }
+  if (lease.isArchived) {
+    revalidatePath("/leases");
+    return; // already archived — nothing to do
+  }
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "lease.archived",
+      entityType: "Lease",
+      entityId: lease.id,
+      before: { status: lease.status, isArchived: lease.isArchived },
+    },
+    async (tx) => {
+      const updated = await tx.lease.update({
+        where: { id: lease.id },
+        data: { isArchived: true },
+      });
+      return { result: updated, after: { status: updated.status, isArchived: true } };
+    },
+  );
+
+  revalidatePath("/leases");
+  revalidatePath(`/tenants/${lease.tenantId}`);
+}
+
+/** Bring an archived lease back into the regular lists. */
+export async function unarchiveLeaseAction(fd: FormData): Promise<void> {
+  await requireCapability("leases.manage");
+  const leaseId = str(fd, "leaseId");
+  if (!leaseId) failToLeases("Missing lease id.");
+  const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
+  if (!lease) failToLeases("Lease not found.");
+  if (!lease.isArchived) {
+    revalidatePath("/leases");
+    return; // already unarchived — nothing to do
+  }
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "lease.unarchived",
+      entityType: "Lease",
+      entityId: lease.id,
+      before: { status: lease.status, isArchived: lease.isArchived },
+    },
+    async (tx) => {
+      const updated = await tx.lease.update({
+        where: { id: lease.id },
+        data: { isArchived: false },
+      });
+      return { result: updated, after: { status: updated.status, isArchived: false } };
+    },
+  );
+
+  revalidatePath("/leases");
+  revalidatePath(`/tenants/${lease.tenantId}`);
+}
+
+/**
+ * SAFE delete for a terminated lease that was a MISTAKE: no payments and no
+ * ledger activity beyond the system-minted charges (rent_charge/late_fee)
+ * every active lease generates automatically. Anything operator-entered —
+ * payments, adjustments (incl. opening balances), reversals — is financial
+ * history and makes the lease archive-only. The audit row is written FIRST,
+ * inside the same transaction, so the before-snapshot is captured while the
+ * lease (and its cascading children) still exists; if the delete fails, the
+ * audit row rolls back with it.
+ */
+export async function deleteLeaseAction(fd: FormData): Promise<void> {
+  await requireCapability("leases.manage");
+  const leaseId = str(fd, "leaseId");
+  if (!leaseId) failToLeases("Missing lease id.");
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    include: { _count: { select: { payments: true, ledgerEntries: true } } },
+  });
+  if (!lease) failToLeases("Lease not found.");
+  if (lease.status !== "ended" && lease.status !== "eviction") {
+    failToLeases("Only terminated leases (ended or eviction) can be deleted.");
+  }
+  if (lease._count.payments > 0) {
+    failToLeases(
+      "This lease has recorded payments — archive it instead; payment history is never deleted.",
+    );
+  }
+  const manualEntry = await prisma.ledgerEntry.findFirst({
+    where: {
+      leaseId: lease.id,
+      entryType: { notIn: ["rent_charge", "late_fee"] },
+    },
+    select: { id: true },
+  });
+  if (manualEntry) {
+    failToLeases(
+      "This lease has ledger activity beyond auto-generated charges (e.g. an opening balance or adjustment) — archive it instead.",
+    );
+  }
+
+  const actor = await auditActor();
+  await prisma.$transaction(async (tx) => {
+    await writeAudit(tx, {
+      ...actor,
+      action: "lease.deleted",
+      entityType: "Lease",
+      entityId: lease.id,
+      before: {
+        tenantId: lease.tenantId,
+        unitId: lease.unitId,
+        startDate: lease.startDate,
+        status: lease.status,
+        rentAmountCents: lease.rentAmountCents,
+        ledgerEntryCount: lease._count.ledgerEntries,
+      },
+    });
+    // Reminder.leaseId / UploadedDocument.leaseId are loose string refs (no
+    // FK), so the cascade won't touch them — null them out so they don't
+    // dangle on a deleted lease.
+    await tx.reminder.updateMany({
+      where: { leaseId: lease.id },
+      data: { leaseId: null },
+    });
+    await tx.uploadedDocument.updateMany({
+      where: { leaseId: lease.id },
+      data: { leaseId: null },
+    });
+    // Cascades remove LeaseTenant/LeaseDeposit/LedgerEntry (and the
+    // ChargeAllocations hanging off those entries); PropertyExpense.leaseId
+    // is SetNull automatically.
+    await tx.lease.delete({ where: { id: lease.id } });
+  });
+
+  revalidatePath("/leases");
+  revalidatePath(`/tenants/${lease.tenantId}`);
+  revalidatePath(`/units/${lease.unitId}`);
 }

@@ -3,8 +3,16 @@ import { prisma } from "@/lib/db";
 import { formatCurrency, sumCents } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { LeaseStatus } from "@/lib/generated/prisma/enums";
-import { terminateLease } from "./actions";
+import {
+  terminateLease,
+  archiveLeaseAction,
+  unarchiveLeaseAction,
+  deleteLeaseAction,
+} from "./actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
@@ -23,16 +31,21 @@ export default async function LeasesPage({
     return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
   };
 
+  const error = first("error");
   const statusRaw = first("status");
-  const status = (LEASE_STATUSES as readonly string[]).includes(statusRaw)
-    ? (statusRaw as LeaseStatus)
-    : undefined;
+  // "archived" is a pseudo-status: it selects on isArchived, not LeaseStatus.
+  const showArchived = statusRaw === "archived";
+  const status =
+    !showArchived && (LEASE_STATUSES as readonly string[]).includes(statusRaw)
+      ? (statusRaw as LeaseStatus)
+      : undefined;
   const propertyId = first("propertyId") || undefined;
 
-  const where: Prisma.LeaseWhereInput = {};
+  // Archived leases are hidden everywhere except the explicit Archived view.
+  const where: Prisma.LeaseWhereInput = { isArchived: showArchived };
   if (status) where.status = status;
   if (propertyId) where.unit = { propertyId };
-  const filtering = Boolean(status || propertyId);
+  const filtering = Boolean(status || propertyId || showArchived);
 
   const properties = await prisma.property.findMany({
     orderBy: { name: "asc" },
@@ -46,11 +59,24 @@ export default async function LeasesPage({
       tenant: true,
       unit: { include: { property: true } },
       deposits: true,
+      _count: { select: { payments: true } },
+      // Deletable = a mistake lease: no payments AND nothing in the ledger
+      // beyond system-minted charges (matches deleteLeaseAction's guard).
+      ledgerEntries: {
+        where: { entryType: { notIn: ["rent_charge", "late_fee"] } },
+        select: { id: true },
+        take: 1,
+      },
     },
   });
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Leases</h1>
         <Button render={<Link href="/leases/new" />}>Create lease</Button>
@@ -62,7 +88,7 @@ export default async function LeasesPage({
           <select
             id="status"
             name="status"
-            defaultValue={status ?? ""}
+            defaultValue={showArchived ? "archived" : (status ?? "")}
             className="h-9 w-44 rounded-md border px-3 text-sm capitalize"
           >
             <option value="">All statuses</option>
@@ -71,6 +97,7 @@ export default async function LeasesPage({
                 {s.replace(/_/g, " ")}
               </option>
             ))}
+            <option value="archived">Archived</option>
           </select>
         </div>
         <div className="space-y-2">
@@ -100,7 +127,7 @@ export default async function LeasesPage({
       </form>
 
       <DataTable
-        emptyMessage="No leases yet."
+        emptyMessage={showArchived ? "No archived leases." : "No leases yet."}
         columns={[
           { key: "tenant", label: "Tenant" },
           { key: "unit", label: "Unit" },
@@ -126,6 +153,7 @@ export default async function LeasesPage({
             l.securityDepositCents,
             ...l.deposits.map((d) => d.amountCents),
           ]);
+          const terminated = l.status === "ended" || l.status === "eviction";
           return {
             key: l.id,
             sortValues: [
@@ -166,17 +194,58 @@ export default async function LeasesPage({
                 {formatCurrency(depositsHeldCents, l.unit.property.currency)}
               </span>,
               l.dueDay,
-              <span key="s" className="capitalize">
-                {l.status.replace("_", " ")}
+              <span key="s" className="flex items-center gap-2">
+                <span className="capitalize">{l.status.replace(/_/g, " ")}</span>
+                {l.isArchived && (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Archived
+                  </Badge>
+                )}
               </span>,
-              (l.status === "active" || l.status === "month_to_month") && (
-                <form key="a" action={terminateLease}>
-                  <input type="hidden" name="leaseId" value={l.id} />
-                  <Button type="submit" variant="outline" size="sm">
-                    Terminate
-                  </Button>
-                </form>
-              ),
+              <div key="a" className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href={`/leases/${l.id}/agreement`} />}
+                >
+                  Agreement
+                </Button>
+                {l.isArchived ? (
+                  <>
+                    <form action={unarchiveLeaseAction}>
+                      <input type="hidden" name="leaseId" value={l.id} />
+                      <Button type="submit" variant="outline" size="sm">
+                        Unarchive
+                      </Button>
+                    </form>
+                    {l._count.payments === 0 && l.ledgerEntries.length === 0 && (
+                      <form action={deleteLeaseAction}>
+                        <input type="hidden" name="leaseId" value={l.id} />
+                        <ConfirmSubmitButton
+                          variant="destructive"
+                          confirmMessage="Permanently delete this lease? Its auto-generated charge history is erased and cannot be recovered."
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    )}
+                  </>
+                ) : l.status === "active" || l.status === "month_to_month" ? (
+                  <form action={terminateLease}>
+                    <input type="hidden" name="leaseId" value={l.id} />
+                    <Button type="submit" variant="outline" size="sm">
+                      Terminate
+                    </Button>
+                  </form>
+                ) : terminated ? (
+                  <form action={archiveLeaseAction}>
+                    <input type="hidden" name="leaseId" value={l.id} />
+                    <Button type="submit" variant="outline" size="sm">
+                      Archive
+                    </Button>
+                  </form>
+                ) : null}
+              </div>,
             ],
           };
         })}
