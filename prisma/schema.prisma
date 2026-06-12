@@ -237,6 +237,33 @@ model AppSettings {
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
 
+  // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
+  // not configured; "stub" logs only; "smtp" sends. Auth is either a password
+  // or OAuth2 (XOAUTH2: Gmail / Microsoft 365); all three secrets are
+  // AES-256-GCM encrypted with SETTINGS_ENC_KEY (field-bound AAD).
+  emailEnabled     Boolean @default(false) // master switch for ALL email sends
+  emailProvider    String?
+  emailFromAddress String?
+  emailFromName    String?
+  emailSmtpHost    String?
+  emailSmtpPort    Int?
+  emailSmtpSecure  Boolean @default(true) // implicit TLS (465); off = STARTTLS (587)
+  emailSmtpUser    String?
+  emailAuthMethod  String? // "password" | "oauth2"
+  emailPasswordCiphertext String?
+  emailPasswordNonce      String?
+  emailPasswordTag        String?
+  emailOauthClientId      String?
+  // OAuth2 token endpoint; null -> Gmail's. Microsoft 365:
+  // https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token
+  emailOauthTokenUrl               String?
+  emailOauthClientSecretCiphertext String?
+  emailOauthClientSecretNonce      String?
+  emailOauthClientSecretTag        String?
+  emailOauthRefreshTokenCiphertext String?
+  emailOauthRefreshTokenNonce      String?
+  emailOauthRefreshTokenTag        String?
+
   // Role -> capability overrides vs. the default hierarchy, e.g.
   // { "viewer": { "reports.view": true }, "manager": { "payments.manage": false } }.
   // Empty object == the built-in defaults (see lib/auth/permissions.ts).

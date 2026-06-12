@@ -7,12 +7,22 @@ import { StubSmsProvider } from "@/lib/providers/sms/stub";
 import { TelnyxSmsProvider } from "@/lib/providers/sms/telnyx";
 import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
 import type { SmsProvider } from "@/lib/providers/sms/types";
+import { StubEmailProvider } from "@/lib/providers/email/stub";
+import { SmtpEmailProvider, type SmtpAuth } from "@/lib/providers/email/smtp";
+import type { EmailProvider } from "@/lib/providers/email/types";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { PermissionMatrix } from "@/lib/auth/permissions";
 import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
 
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
 export const SMS_TOKEN_AAD = "appsettings:smsAuthToken:singleton";
+
+/** AADs binding each encrypted email secret to its row/field. */
+export const EMAIL_PASSWORD_AAD = "appsettings:emailPassword:singleton";
+export const EMAIL_OAUTH_CLIENT_SECRET_AAD =
+  "appsettings:emailOauthClientSecret:singleton";
+export const EMAIL_OAUTH_REFRESH_TOKEN_AAD =
+  "appsettings:emailOauthRefreshToken:singleton";
 
 export interface ModuleFlags {
   /** Expenses, mortgages, profit/ROI (dashboard cards + /financials). */
@@ -55,6 +65,23 @@ export interface ResolvedAppSettings {
   dueSoonDays: number;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
+  /** Master switch for ALL email sends. Config is DB-only (no env fallback). */
+  emailEnabled: boolean;
+  /** null = not configured; "stub" logs only; "smtp" sends. */
+  emailProvider: "stub" | "smtp" | null;
+  emailFromAddress: string | null;
+  emailFromName: string | null;
+  emailSmtpHost: string | null;
+  emailSmtpPort: number | null;
+  emailSmtpSecure: boolean;
+  emailSmtpUser: string | null;
+  emailAuthMethod: "password" | "oauth2" | null;
+  emailOauthClientId: string | null;
+  emailOauthTokenUrl: string | null;
+  /** Presence-only flags — never the secrets themselves. */
+  emailHasPassword: boolean;
+  emailHasOauthClientSecret: boolean;
+  emailHasOauthRefreshToken: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
@@ -124,6 +151,26 @@ async function resolve(): Promise<ResolvedAppSettings> {
     dueSoonDays: row?.reminderDueSoonDays ?? env.REMINDER_DUE_SOON_DAYS,
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+    emailEnabled: row?.emailEnabled ?? false,
+    emailProvider:
+      row?.emailProvider === "stub" || row?.emailProvider === "smtp"
+        ? row.emailProvider
+        : null,
+    emailFromAddress: row?.emailFromAddress ?? null,
+    emailFromName: row?.emailFromName ?? null,
+    emailSmtpHost: row?.emailSmtpHost ?? null,
+    emailSmtpPort: row?.emailSmtpPort ?? null,
+    emailSmtpSecure: row?.emailSmtpSecure ?? true,
+    emailSmtpUser: row?.emailSmtpUser ?? null,
+    emailAuthMethod:
+      row?.emailAuthMethod === "password" || row?.emailAuthMethod === "oauth2"
+        ? row.emailAuthMethod
+        : null,
+    emailOauthClientId: row?.emailOauthClientId ?? null,
+    emailOauthTokenUrl: row?.emailOauthTokenUrl ?? null,
+    emailHasPassword: !!row?.emailPasswordCiphertext,
+    emailHasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
+    emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
     templates,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
@@ -182,6 +229,97 @@ export async function resolveSmsProvider(): Promise<SmsProvider> {
   }
 
   return getSmsProvider();
+}
+
+/**
+ * Effective email provider, from DB config only (email has no env fallback).
+ * Throws with an operator-actionable message when unconfigured/incomplete —
+ * callers surface it as a returned error, mirroring SMS sends.
+ */
+export async function resolveEmailProvider(): Promise<EmailProvider> {
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+
+  if (row?.emailProvider === "stub") return new StubEmailProvider();
+  if (row?.emailProvider !== "smtp") {
+    throw new Error("Email is not configured (Settings → Messaging).");
+  }
+
+  const host = row.emailSmtpHost;
+  const user = row.emailSmtpUser;
+  const fromAddress = row.emailFromAddress;
+  if (!host || !user || !fromAddress) {
+    throw new Error(
+      "Email (SMTP) configuration is incomplete — host, user, and from address are required.",
+    );
+  }
+
+  let auth: SmtpAuth;
+  if (row.emailAuthMethod === "oauth2") {
+    if (
+      !row.emailOauthClientId ||
+      !row.emailOauthClientSecretCiphertext ||
+      !row.emailOauthClientSecretNonce ||
+      !row.emailOauthClientSecretTag ||
+      !row.emailOauthRefreshTokenCiphertext ||
+      !row.emailOauthRefreshTokenNonce ||
+      !row.emailOauthRefreshTokenTag
+    ) {
+      throw new Error(
+        "Email OAuth2 configuration is incomplete — client ID, client secret, and refresh token are required.",
+      );
+    }
+    auth = {
+      method: "oauth2",
+      clientId: row.emailOauthClientId,
+      clientSecret: decryptSecret(
+        {
+          ciphertext: row.emailOauthClientSecretCiphertext,
+          nonce: row.emailOauthClientSecretNonce,
+          tag: row.emailOauthClientSecretTag,
+        },
+        EMAIL_OAUTH_CLIENT_SECRET_AAD,
+      ),
+      refreshToken: decryptSecret(
+        {
+          ciphertext: row.emailOauthRefreshTokenCiphertext,
+          nonce: row.emailOauthRefreshTokenNonce,
+          tag: row.emailOauthRefreshTokenTag,
+        },
+        EMAIL_OAUTH_REFRESH_TOKEN_AAD,
+      ),
+      tokenUrl: row.emailOauthTokenUrl,
+    };
+  } else {
+    if (
+      !row.emailPasswordCiphertext ||
+      !row.emailPasswordNonce ||
+      !row.emailPasswordTag
+    ) {
+      throw new Error("Email (SMTP) password is not set.");
+    }
+    auth = {
+      method: "password",
+      password: decryptSecret(
+        {
+          ciphertext: row.emailPasswordCiphertext,
+          nonce: row.emailPasswordNonce,
+          tag: row.emailPasswordTag,
+        },
+        EMAIL_PASSWORD_AAD,
+      ),
+    };
+  }
+
+  const secure = row.emailSmtpSecure;
+  return new SmtpEmailProvider({
+    host,
+    port: row.emailSmtpPort ?? (secure ? 465 : 587),
+    secure,
+    user,
+    fromAddress,
+    fromName: row.emailFromName,
+    auth,
+  });
 }
 
 export interface BillingDefaultsInput {
@@ -414,6 +552,113 @@ export async function saveMessagingSettings(
         dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
         overdueRemindersEnabled: input.overdueRemindersEnabled,
         tokenChanged: input.smsAuthToken !== undefined,
+      },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface EmailSettingsInput {
+  emailEnabled: boolean;
+  /** null = not configured; "stub" logs only; "smtp" sends. */
+  emailProvider: "stub" | "smtp" | null;
+  emailFromAddress: string | null;
+  emailFromName: string | null;
+  emailSmtpHost: string | null;
+  emailSmtpPort: number | null;
+  emailSmtpSecure: boolean;
+  emailSmtpUser: string | null;
+  emailAuthMethod: "password" | "oauth2" | null;
+  emailOauthClientId: string | null;
+  emailOauthTokenUrl: string | null;
+  /** undefined = keep the stored secret; "" clears it; a string replaces it. */
+  emailPassword?: string;
+  emailOauthClientSecret?: string;
+  emailOauthRefreshToken?: string;
+}
+
+/** Ciphertext/nonce/tag column updates for one optional encrypted secret. */
+function encryptedTripletData(
+  value: string | undefined,
+  aad: string,
+  cols: { ciphertext: string; nonce: string; tag: string },
+): Record<string, string | null> {
+  if (value === undefined) return {};
+  if (value === "") {
+    return { [cols.ciphertext]: null, [cols.nonce]: null, [cols.tag]: null };
+  }
+  const enc = encryptSecret(value, aad);
+  return {
+    [cols.ciphertext]: enc.ciphertext,
+    [cols.nonce]: enc.nonce,
+    [cols.tag]: enc.tag,
+  };
+}
+
+export async function saveEmailSettings(
+  input: EmailSettingsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    emailEnabled: input.emailEnabled,
+    emailProvider: input.emailProvider,
+    emailFromAddress: input.emailFromAddress,
+    emailFromName: input.emailFromName,
+    emailSmtpHost: input.emailSmtpHost,
+    emailSmtpPort: input.emailSmtpPort,
+    emailSmtpSecure: input.emailSmtpSecure,
+    emailSmtpUser: input.emailSmtpUser,
+    emailAuthMethod: input.emailAuthMethod,
+    emailOauthClientId: input.emailOauthClientId,
+    emailOauthTokenUrl: input.emailOauthTokenUrl,
+    ...encryptedTripletData(input.emailPassword, EMAIL_PASSWORD_AAD, {
+      ciphertext: "emailPasswordCiphertext",
+      nonce: "emailPasswordNonce",
+      tag: "emailPasswordTag",
+    }),
+    ...encryptedTripletData(
+      input.emailOauthClientSecret,
+      EMAIL_OAUTH_CLIENT_SECRET_AAD,
+      {
+        ciphertext: "emailOauthClientSecretCiphertext",
+        nonce: "emailOauthClientSecretNonce",
+        tag: "emailOauthClientSecretTag",
+      },
+    ),
+    ...encryptedTripletData(
+      input.emailOauthRefreshToken,
+      EMAIL_OAUTH_REFRESH_TOKEN_AAD,
+      {
+        ciphertext: "emailOauthRefreshTokenCiphertext",
+        nonce: "emailOauthRefreshTokenNonce",
+        tag: "emailOauthRefreshTokenTag",
+      },
+    ),
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    // Never audit secrets — only whether each one changed this save.
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.email.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: {
+        emailEnabled: input.emailEnabled,
+        emailProvider: input.emailProvider,
+        emailFromAddress: input.emailFromAddress,
+        emailSmtpHost: input.emailSmtpHost,
+        emailSmtpPort: input.emailSmtpPort,
+        emailSmtpSecure: input.emailSmtpSecure,
+        emailAuthMethod: input.emailAuthMethod,
+        passwordChanged: input.emailPassword !== undefined,
+        oauthClientSecretChanged: input.emailOauthClientSecret !== undefined,
+        oauthRefreshTokenChanged: input.emailOauthRefreshToken !== undefined,
       },
     });
   });
