@@ -233,7 +233,7 @@ export default async function MaintenancePage({
                     <Badge
                       key="s"
                       variant="outline"
-                      className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+                      className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                     >
                       Completed
                     </Badge>
@@ -241,7 +241,7 @@ export default async function MaintenancePage({
                     <Badge
                       key="s"
                       variant="outline"
-                      className="border-amber-200 bg-amber-100 font-medium text-amber-800"
+                      className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                     >
                       Pending
                     </Badge>
@@ -361,7 +361,7 @@ export default async function MaintenancePage({
                   <Badge
                     key="m"
                     variant="outline"
-                    className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800"
+                    className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                   >
                     Done
                   </Badge>
@@ -369,7 +369,7 @@ export default async function MaintenancePage({
                   <Badge
                     key="m"
                     variant="outline"
-                    className="border-amber-200 bg-amber-100 font-medium text-amber-800"
+                    className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                   >
                     Due
                   </Badge>

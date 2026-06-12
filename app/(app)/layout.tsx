@@ -5,7 +5,9 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability, type Capability } from "@/lib/auth/permissions";
 import { doSignOut } from "@/app/login/actions";
 import { exitViewAs } from "@/app/(app)/settings/users/actions";
+import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { NavLinks, type NavItem } from "@/components/app/nav-links";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -45,12 +47,33 @@ export default async function AppLayout({
     ["billing.settings", "organization.settings", "messaging.settings", "auth.settings", "users.manage"] as Capability[]
   ).some(can);
 
+  // Business logo (uploaded at Settings → Organization) for the banner.
+  let logoUrl: string | null = null;
+  if (app.logoDocumentId) {
+    try {
+      logoUrl = (await getDocumentDownloadUrl(app.logoDocumentId))?.url ?? null;
+    } catch {
+      logoUrl = null; // storage not configured — banner falls back to text only
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="print-hidden border-b bg-card">
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 xl:px-8">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Link href="/dashboard" className="font-semibold whitespace-nowrap">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 font-semibold whitespace-nowrap"
+            >
+              {logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL; next/image can't optimize it
+                <img
+                  src={logoUrl}
+                  alt=""
+                  className="h-7 w-auto max-w-28 rounded object-contain"
+                />
+              )}
               {app.businessName}
             </Link>
             <NavLinks items={navItems} />
@@ -69,6 +92,7 @@ export default async function AppLayout({
             <span className="text-muted-foreground">
               {user.email} · {actingRole}
             </span>
+            <ThemeToggle />
             <form action={doSignOut}>
               <Button type="submit" variant="outline" size="sm">
                 Sign out

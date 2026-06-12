@@ -185,7 +185,7 @@ export default async function AuditPage({
               {e.viaBreakGlass && (
                 <Badge
                   variant="outline"
-                  className="border-red-200 bg-red-100 font-medium text-red-800"
+                  className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
                 >
                   break-glass
                 </Badge>

@@ -149,7 +149,7 @@ export default async function DocumentsPage({
               <Badge
                 key="o"
                 variant="outline"
-                className="border-sky-200 bg-sky-100 font-medium text-sky-800"
+                className="border-sky-200 bg-sky-100 font-medium text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
               >
                 OCR
               </Badge>
