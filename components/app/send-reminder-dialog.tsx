@@ -89,7 +89,7 @@ export function SendReminderDialog({
                 name="reminderType"
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                className="h-9 w-full rounded-md border px-3 text-sm capitalize"
               >
                 {REMINDER_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -107,7 +107,7 @@ export function SendReminderDialog({
                   maxLength={480}
                   required
                   placeholder="Type the SMS to send…"
-                  className="min-h-24 w-full rounded-md border bg-transparent p-2 text-sm"
+                  className="min-h-24 w-full rounded-md border p-2 text-sm"
                 />
               </div>
             ) : (

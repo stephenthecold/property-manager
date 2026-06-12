@@ -146,6 +146,18 @@
   html {
     @apply font-sans;
   }
+  /* Native <select>s (styled inline across forms) and raw textareas get a
+     themed surface here so the page gradient never bleeds through them. */
+  select,
+  textarea {
+    @apply bg-card dark:bg-input/30;
+  }
+  select:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  .dark select option {
+    @apply bg-popover text-popover-foreground;
+  }
 }
 
 /* Printable pages (receipts, reports): hide app chrome, keep the document.

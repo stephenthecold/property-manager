@@ -243,7 +243,7 @@ export default async function DocumentDetailPage({
                   name="leaseId"
                   defaultValue={defaultLeaseId ?? ""}
                   required
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="" disabled>
                     Select lease…
@@ -284,7 +284,7 @@ export default async function DocumentDetailPage({
                   <select
                     id="method"
                     name="method"
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                    className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                   >
                     {METHODS.map((m) => (
                       <option key={m} value={m}>

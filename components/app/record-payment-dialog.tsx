@@ -110,7 +110,7 @@ export function RecordPaymentDialog({
               <select
                 id="method"
                 name="method"
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                className="h-9 w-full rounded-md border px-3 text-sm capitalize"
               >
                 {METHODS.map((m) => (
                   <option key={m} value={m}>

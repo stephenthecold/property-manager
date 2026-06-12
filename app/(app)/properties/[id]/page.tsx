@@ -351,7 +351,7 @@ export default async function PropertyDetail({
                   <select
                     id="buildingId"
                     name="buildingId"
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                    className="h-9 w-full rounded-md border px-3 text-sm"
                   >
                     <option value="">— none —</option>
                     {property.buildings.map((b) => (
@@ -367,7 +367,7 @@ export default async function PropertyDetail({
                     <select
                       id="unitType"
                       name="unitType"
-                      className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                      className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                     >
                       {UNIT_TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -381,7 +381,7 @@ export default async function PropertyDetail({
                     <select
                       id="occupancyStatus"
                       name="occupancyStatus"
-                      className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                      className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                     >
                       {OCC.map((t) => (
                         <option key={t} value={t}>

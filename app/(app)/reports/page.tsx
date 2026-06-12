@@ -51,7 +51,7 @@ function reportHref(type: string, params: Record<string, string | undefined>) {
 }
 
 const SELECT_CLASS =
-  "h-9 w-full rounded-md border bg-transparent px-3 text-sm";
+  "h-9 w-full rounded-md border px-3 text-sm";
 
 export default async function ReportsPage({
   searchParams,

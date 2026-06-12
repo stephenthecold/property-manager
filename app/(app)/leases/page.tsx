@@ -63,7 +63,7 @@ export default async function LeasesPage({
             id="status"
             name="status"
             defaultValue={status ?? ""}
-            className="h-9 w-44 rounded-md border bg-transparent px-3 text-sm capitalize"
+            className="h-9 w-44 rounded-md border px-3 text-sm capitalize"
           >
             <option value="">All statuses</option>
             {LEASE_STATUSES.map((s) => (
@@ -79,7 +79,7 @@ export default async function LeasesPage({
             id="propertyId"
             name="propertyId"
             defaultValue={propertyId ?? ""}
-            className="h-9 w-48 rounded-md border bg-transparent px-3 text-sm"
+            className="h-9 w-48 rounded-md border px-3 text-sm"
           >
             <option value="">All properties</option>
             {properties.map((p) => (

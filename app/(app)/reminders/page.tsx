@@ -29,7 +29,7 @@ const STATUS_CLASS: Record<ReminderStatus, string> = {
 };
 
 const SELECT_CLASS =
-  "h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize";
+  "h-9 w-full rounded-md border px-3 text-sm capitalize";
 
 /** Mask a phone number to its last 4 digits ("+1 555 010 0142" -> "•••• 0142"). */
 function maskPhone(phone: string | null): string {

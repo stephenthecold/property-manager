@@ -79,7 +79,7 @@ export default async function UsersSettingsPage() {
                       <select
                         name="role"
                         defaultValue={u.role}
-                        className="h-8 rounded-md border bg-transparent px-2 text-sm capitalize"
+                        className="h-8 rounded-md border px-2 text-sm capitalize"
                       >
                         {ASSIGNABLE_ROLES.map((r) => (
                           <option key={r} value={r}>

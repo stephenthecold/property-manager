@@ -139,7 +139,7 @@ export function DataTable({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="overflow-hidden rounded-lg border">
+      <div className="overflow-hidden rounded-lg border bg-card text-card-foreground">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/60 hover:bg-muted/60">
@@ -228,7 +228,7 @@ export function DataTable({
                   setPage(0);
                   setPageSize(Number(e.target.value));
                 }}
-                className="h-8 rounded-md border bg-transparent px-2 text-sm text-foreground"
+                className="h-8 rounded-md border px-2 text-sm text-foreground"
               >
                 {PAGE_SIZE_OPTIONS.map((n) => (
                   <option key={n} value={n}>

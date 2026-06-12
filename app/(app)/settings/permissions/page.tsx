@@ -42,7 +42,7 @@ export default async function PermissionsSettingsPage() {
         </p>
 
         <form action={savePermissionsAction} className="space-y-6">
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border bg-card text-card-foreground">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/60">

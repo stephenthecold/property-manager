@@ -100,7 +100,7 @@ export default async function MaintenancePage({
               <select
                 id="mjUnit"
                 name="unitId"
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border px-3 text-sm"
               >
                 <option value="">— property-wide —</option>
                 {units.map((u) => (
@@ -115,7 +115,7 @@ export default async function MaintenancePage({
               <select
                 id="mjProperty"
                 name="propertyId"
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border px-3 text-sm"
               >
                 <option value="">— select —</option>
                 {properties.map((p) => (
@@ -152,7 +152,7 @@ export default async function MaintenancePage({
                 id="fProperty"
                 name="propertyId"
                 defaultValue={filterPropertyId ?? ""}
-                className="h-9 w-48 rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-48 rounded-md border px-3 text-sm"
               >
                 <option value="">All properties</option>
                 {properties.map((p) => (
@@ -168,7 +168,7 @@ export default async function MaintenancePage({
                 id="fStatus"
                 name="status"
                 defaultValue={filterStatus ?? ""}
-                className="h-9 w-36 rounded-md border bg-transparent px-3 text-sm capitalize"
+                className="h-9 w-36 rounded-md border px-3 text-sm capitalize"
               >
                 <option value="">All</option>
                 <option value="pending">Pending</option>
@@ -308,7 +308,7 @@ export default async function MaintenancePage({
                   id="rtProperty"
                   name="propertyId"
                   required
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="">— select —</option>
                   {properties.map((p) => (

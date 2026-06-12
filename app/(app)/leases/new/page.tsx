@@ -57,7 +57,7 @@ export default async function NewLeasePage({
                 name="tenantId"
                 defaultValue={tenantId ?? ""}
                 required
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border px-3 text-sm"
               >
                 <option value="" disabled>
                   Select tenant…
@@ -76,7 +76,7 @@ export default async function NewLeasePage({
                 id="unitId"
                 name="unitId"
                 required
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border px-3 text-sm"
               >
                 <option value="" disabled selected>
                   Select unit…
@@ -96,7 +96,7 @@ export default async function NewLeasePage({
                 name="coTenants"
                 multiple
                 size={3}
-                className="w-full rounded-md border bg-transparent px-3 py-1 text-sm"
+                className="w-full rounded-md border px-3 py-1 text-sm"
               >
                 {tenants.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -138,7 +138,7 @@ export default async function NewLeasePage({
                 <select
                   id="lateFeeType"
                   name="lateFeeType"
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                   defaultValue={billing.lateFeeType}
                 >
                   <option value="none">None</option>
@@ -263,7 +263,7 @@ export default async function NewLeasePage({
                 <select
                   id="status"
                   name="status"
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                   defaultValue="active"
                 >
                   <option value="draft">Draft</option>

@@ -61,7 +61,7 @@ export default async function BillingSettingsPage() {
                   id="lateFeeType"
                   name="lateFeeType"
                   defaultValue={billing.lateFeeType}
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="none">None</option>
                   <option value="fixed">Fixed (one-time)</option>

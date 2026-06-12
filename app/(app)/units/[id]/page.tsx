@@ -138,7 +138,7 @@ export default async function UnitDetail({
                     id="buildingId"
                     name="buildingId"
                     defaultValue={unit.buildingId ?? ""}
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                    className="h-9 w-full rounded-md border px-3 text-sm"
                   >
                     <option value="">— none —</option>
                     {unit.property.buildings.map((b) => (
@@ -154,7 +154,7 @@ export default async function UnitDetail({
                     id="unitType"
                     name="unitType"
                     defaultValue={unit.unitType}
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                    className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                   >
                     {UNIT_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -169,7 +169,7 @@ export default async function UnitDetail({
                     id="occupancyStatus"
                     name="occupancyStatus"
                     defaultValue={unit.occupancyStatus}
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                    className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                   >
                     {OCC.map((t) => (
                       <option key={t} value={t}>
