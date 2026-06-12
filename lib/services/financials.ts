@@ -31,8 +31,7 @@ export interface PropertyFinancialRow {
 }
 
 export interface MortgageProjection {
-  buildingId: string;
-  buildingName: string;
+  propertyId: string;
   propertyName: string;
   monthlyCents: bigint;
   maturityDate: Date | null;
@@ -55,10 +54,7 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
   const since = monthStart(now);
   const [properties, leases, paymentsByProperty, expensesByProperty] =
     await Promise.all([
-      prisma.property.findMany({
-        orderBy: { name: "asc" },
-        include: { buildings: { orderBy: { name: "asc" } } },
-      }),
+      prisma.property.findMany({ orderBy: { name: "asc" } }),
       prisma.lease.findMany({
         where: { status: { in: ["active", "month_to_month"] } },
         include: { unit: { select: { propertyId: true } } },
@@ -86,24 +82,20 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
   const rows: PropertyFinancialRow[] = properties.map((p) => {
     const propLeases = leases.filter((l) => l.unit.propertyId === p.id);
     const expected = sumCents(propLeases.map((l) => expectedMonthlyChargeCents(l)));
-    const activeMortgages = p.buildings.filter(
-      (b) => (b.monthlyMortgageCents ?? 0n) > 0n,
-    );
-    for (const b of activeMortgages) {
+    const hasMortgage = (p.monthlyMortgageCents ?? 0n) > 0n;
+    if (hasMortgage) {
       mortgages.push({
-        buildingId: b.id,
-        buildingName: b.name,
+        propertyId: p.id,
         propertyName: p.name,
-        monthlyCents: b.monthlyMortgageCents ?? 0n,
-        maturityDate: b.mortgageMaturityDate,
-        matured: !mortgageActive(b.mortgageMaturityDate, now),
+        monthlyCents: p.monthlyMortgageCents ?? 0n,
+        maturityDate: p.mortgageMaturityDate,
+        matured: !mortgageActive(p.mortgageMaturityDate, now),
       });
     }
-    const mortgage = sumCents(
-      activeMortgages
-        .filter((b) => mortgageActive(b.mortgageMaturityDate, now))
-        .map((b) => b.monthlyMortgageCents ?? 0n),
-    );
+    const mortgage =
+      hasMortgage && mortgageActive(p.mortgageMaturityDate, now)
+        ? (p.monthlyMortgageCents ?? 0n)
+        : 0n;
     const collected = paymentsMap.get(p.id) ?? 0n;
     const expenses = expensesMap.get(p.id) ?? 0n;
     return {
@@ -139,12 +131,12 @@ export interface ProfitSnapshot {
 }
 
 export async function getProfitSnapshot(now: Date): Promise<ProfitSnapshot> {
-  const [expenseAgg, buildings] = await Promise.all([
+  const [expenseAgg, properties] = await Promise.all([
     prisma.propertyExpense.aggregate({
       _sum: { amountCents: true },
       where: { incurredOn: { gte: monthStart(now) } },
     }),
-    prisma.building.findMany({
+    prisma.property.findMany({
       where: { monthlyMortgageCents: { gt: 0n } },
       select: { monthlyMortgageCents: true, mortgageMaturityDate: true },
     }),
@@ -152,9 +144,9 @@ export async function getProfitSnapshot(now: Date): Promise<ProfitSnapshot> {
   return {
     expensesMonthCents: expenseAgg._sum.amountCents ?? 0n,
     mortgageMonthlyCents: sumCents(
-      buildings
-        .filter((b) => mortgageActive(b.mortgageMaturityDate, now))
-        .map((b) => b.monthlyMortgageCents ?? 0n),
+      properties
+        .filter((p) => mortgageActive(p.mortgageMaturityDate, now))
+        .map((p) => p.monthlyMortgageCents ?? 0n),
     ),
   };
 }

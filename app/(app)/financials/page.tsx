@@ -265,18 +265,18 @@ export default async function FinancialsPage({
         <CardContent>
           {summary.mortgages.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No building mortgages entered. Add the monthly payment and maturity
-              date on a building&apos;s page (Buildings → Edit building).
+              No property mortgages entered. Add the monthly payment and maturity
+              date on a property&apos;s page (Edit property).
             </p>
           ) : (
             <ul className="space-y-2 text-sm">
               {summary.mortgages.map((m) => (
-                <li key={m.buildingId} className="flex flex-wrap items-baseline gap-x-2">
+                <li key={m.propertyId} className="flex flex-wrap items-baseline gap-x-2">
                   <Link
-                    href={`/buildings/${m.buildingId}`}
+                    href={`/properties/${m.propertyId}`}
                     className="font-medium hover:underline"
                   >
-                    {m.propertyName} · {m.buildingName}
+                    {m.propertyName}
                   </Link>
                   <span className="tabular-nums">
                     {formatCurrency(m.monthlyCents)}/mo

@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { getAppSettings } from "@/lib/services/app-settings";
@@ -198,7 +199,40 @@ export default async function PropertyDetail({
                   <Label htmlFor="pcurrency">Currency</Label>
                   <Input id="pcurrency" name="currency" defaultValue={property.currency} />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pmortgage">Monthly mortgage</Label>
+                  <Input
+                    id="pmortgage"
+                    name="monthlyMortgage"
+                    inputMode="decimal"
+                    placeholder="1850.00"
+                    defaultValue={
+                      property.monthlyMortgageCents != null
+                        ? fromCents(property.monthlyMortgageCents)
+                        : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pmaturity">Mortgage matures</Label>
+                  <Input
+                    id="pmaturity"
+                    name="mortgageMaturityDate"
+                    type="date"
+                    defaultValue={
+                      property.mortgageMaturityDate
+                        ? DateTime.fromJSDate(property.mortgageMaturityDate, {
+                            zone: property.timezone,
+                          }).toFormat("yyyy-MM-dd")
+                        : ""
+                    }
+                  />
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Mortgage terms feed the Financials module (net income and payoff
+                projection). Leave blank when paid off / none.
+              </p>
               <div className="space-y-2">
                 <Label htmlFor="pnotes">Notes</Label>
                 <Textarea id="pnotes" name="notes" defaultValue={property.notes ?? ""} />
@@ -263,6 +297,18 @@ export default async function PropertyDetail({
             <Field
               label="Size"
               value={`${property.buildings.length} building(s) · ${property.units.length} unit(s)`}
+            />
+            <Field
+              label="Mortgage"
+              value={
+                property.monthlyMortgageCents != null && property.monthlyMortgageCents > 0n
+                  ? `${formatCurrency(property.monthlyMortgageCents, property.currency)}/mo${
+                      property.mortgageMaturityDate
+                        ? ` · matures ${DateTime.fromJSDate(property.mortgageMaturityDate, { zone: property.timezone }).toFormat("MMM yyyy")}`
+                        : ""
+                    }`
+                  : "None"
+              }
             />
           </div>
           {property.notes && (

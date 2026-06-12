@@ -74,7 +74,7 @@ AuthSettings.
   Financials on, Maintenance off.
 - **Financials module** (`financials.view`/`financials.manage` capabilities, finance+ by
   default): `PropertyExpense` log (utilities/insurance/maintenance/taxes/other, attributable
-  to property/building/unit/lease), building mortgage terms (monthly payment + maturity) with
+  to property/building/unit/lease), property mortgage terms (monthly payment + maturity) with
   payoff projections, per-property net income (`/financials`), and profit cards on the
   dashboard. Confidential dashboard totals (expected/collected) are now gated by
   `financials.view`.
