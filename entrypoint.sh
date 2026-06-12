@@ -32,20 +32,27 @@ fi
 # App phase (runs as node).
 # ---------------------------------------------------------------------------
 
-# Storage preflight: fail LOUDLY at startup instead of at upload time.
+# Storage preflight: fail LOUDLY at startup instead of at upload time. The
+# test mirrors the real upload layout — a NESTED directory plus a file in it —
+# because shares can allow top-level file writes while refusing directory
+# creation (e.g. CIFS dir_mode without the execute bit, or file-only ACLs).
 if [ "${STORAGE_PROVIDER:-stub}" = "local" ]; then
   STORAGE_DIR="${LOCAL_STORAGE_DIR:-.data/uploads}"
   mkdir -p "$STORAGE_DIR" 2>/dev/null || true
-  if ! touch "$STORAGE_DIR/.write-test" 2>/dev/null; then
-    echo "[entrypoint] FATAL: LOCAL_STORAGE_DIR is not writable by the app user (uid 1000): $STORAGE_DIR"
+  if ! mkdir -p "$STORAGE_DIR/.preflight/nested" 2>/dev/null \
+    || ! touch "$STORAGE_DIR/.preflight/nested/.write-test" 2>/dev/null; then
+    echo "[entrypoint] FATAL: LOCAL_STORAGE_DIR does not allow nested directory+file writes by the app user (uid 1000): $STORAGE_DIR"
     echo "[entrypoint] - Named volume: remove any 'user:' override, or run once as root so ownership can be repaired."
-    echo "[entrypoint] - CIFS/NFS bind mount: mount with ownership mapped to the app user, e.g. in /etc/fstab:"
-    echo "[entrypoint]     uid=1000,gid=1000,file_mode=0660,dir_mode=0770"
+    echo "[entrypoint] - CIFS/NFS bind mount: mount with ownership mapped to the app user AND directory create/traverse allowed,"
+    echo "[entrypoint]   e.g. in /etc/fstab:  uid=1000,gid=1000,file_mode=0660,dir_mode=0770"
+    echo "[entrypoint]   (dir_mode needs the execute bit — 0660 on directories breaks everything inside them; the share-side"
+    echo "[entrypoint]   ACL must allow creating FOLDERS, not just files.)"
     echo "[entrypoint] - Check that the mount exists on the host and the path in docker-compose matches LOCAL_STORAGE_DIR."
+    rm -rf "$STORAGE_DIR/.preflight" 2>/dev/null || true
     exit 1
   fi
-  rm -f "$STORAGE_DIR/.write-test"
-  echo "[entrypoint] storage preflight OK: $STORAGE_DIR is writable"
+  rm -rf "$STORAGE_DIR/.preflight"
+  echo "[entrypoint] storage preflight OK: $STORAGE_DIR allows nested writes"
 fi
 
 # Wait for the database to accept connections.

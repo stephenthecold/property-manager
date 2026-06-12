@@ -83,11 +83,13 @@ export async function uploadLeaseTemplateAction(
       actor,
     });
   } catch (e) {
+    // Generic message to the client; real cause to the server log.
+    console.error("[settings/leases] template upload failed:", e);
     return {
       error:
         e instanceof Error && /storage is not configured/i.test(e.message)
           ? "File storage is not configured (set STORAGE_PROVIDER=local or s3) — template uploads are unavailable."
-          : "Template upload failed.",
+          : "Template upload failed — check the server log for the cause.",
     };
   }
 

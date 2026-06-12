@@ -46,11 +46,14 @@ export async function saveOrganizationAction(
       });
       logoDocumentId = documentId;
     } catch (e) {
+      // The UI message stays generic; the CAUSE must reach the server log or
+      // storage failures (mount permissions etc.) are undiagnosable.
+      console.error("[organization] logo upload failed:", e);
       return {
         error:
           e instanceof Error && /storage is not configured/i.test(e.message)
             ? "File storage is not configured (set STORAGE_PROVIDER=local or s3) — logo uploads are unavailable."
-            : "Logo upload failed.",
+            : "Logo upload failed — check the server log for the cause (storage permissions are the usual suspect).",
       };
     }
   } else if (removeLogo) {
