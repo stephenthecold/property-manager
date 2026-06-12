@@ -280,6 +280,12 @@ model AppSettings {
   // on the printable agreement page; null -> the shipped default.
   leaseAgreementText String?
 
+  // Saved landlord signature, auto-applied to outgoing e-sign requests by
+  // managers+ (esign.manage). Image is a storage key (drawn PNG); name is the
+  // typed signature line.
+  landlordSignatureName     String?
+  landlordSignatureImageKey String?
+
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
   // grace/late-fee terms to existing active leases.
@@ -349,6 +355,11 @@ model Property {
   // the loan matures — used to compute net income and project post-payoff income.
   monthlyMortgageCents BigInt?
   mortgageMaturityDate DateTime?
+  // Fixed yearly carrying costs, shown as monthly equivalents (÷12) in
+  // Financials alongside the mortgage; included in net math. One-off
+  // insurance/tax PropertyExpense rows remain separate (special assessments).
+  yearlyInsuranceCents   BigInt?
+  yearlyPropertyTaxCents BigInt?
   purchaseDate DateTime? // date the property/parcel was purchased (informational)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -775,4 +786,68 @@ model RecurringTask {
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, active])
+}
+
+// ---------------------------------------------------------------------------
+// E-signing (built-in provider). A SigningRequest freezes the agreement TEXT
+// at send time (documentText + sha256) so what was signed is immutable even
+// if the lease or template changes later. Each tenant signer gets a 256-bit
+// link token stored only as a sha-256 hash. The landlord side is the saved
+// AppSettings signature, applied by a manager+ when the request is sent.
+// ---------------------------------------------------------------------------
+
+model SigningRequest {
+  id     String @id @default(cuid())
+  leaseId String
+  kind   String @default("lease") // "lease" | "renewal"
+  status String @default("sent") // sent | completed | canceled
+
+  documentText   String
+  documentSha256 String
+
+  landlordName         String?
+  landlordSignatureKey String? // storage key of the applied signature image
+  landlordSignedAt     DateTime?
+
+  // UploadedDocument.id of the final signed HTML artifact (loose ref).
+  signedDocumentId String?
+
+  expiresAt   DateTime
+  sentAt      DateTime  @default(now())
+  completedAt DateTime?
+  canceledAt  DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  signers SigningSigner[]
+
+  @@index([leaseId])
+  @@index([status])
+}
+
+model SigningSigner {
+  id        String         @id @default(cuid())
+  requestId String
+  request   SigningRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  tenantId  String
+  name      String
+  email     String?
+  phone     String?
+
+  // sha-256 hex of the raw link token; the raw token exists only in the sent link.
+  tokenHash String @unique
+
+  signedAt          DateTime?
+  signatureKind     String? // "typed" | "drawn"
+  signatureText     String? // typed-name signature
+  signatureImageKey String? // storage key for a drawn signature PNG
+  consentAt         DateTime?
+  signerIp          String?
+  signerUserAgent   String?
+  lastSentAt        DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([requestId])
+  @@index([tenantId])
 }
