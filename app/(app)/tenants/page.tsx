@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
-import { leaseSnapshot } from "@/lib/services/accounting";
+import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/app/data-table";
@@ -53,15 +53,15 @@ export default async function TenantsPage({
   // Cheap second count for "N of M" when a search is active.
   const total = q ? await prisma.tenant.count() : tenants.length;
 
-  const rows = await Promise.all(
-    tenants.map(async (t) => {
-      const lease = t.leases[0];
-      const snap = lease
-        ? await leaseSnapshot(lease, lease.unit, now, lease.unit.property.timezone)
-        : null;
-      return { tenant: t, lease, snap };
-    }),
-  );
+  // One batched snapshot load for every tenant's active lease (2 queries total).
+  const activeLeases = tenants
+    .map((t) => t.leases[0])
+    .filter((l): l is NonNullable<typeof l> => !!l);
+  const snaps = await batchLeaseSnapshots(activeLeases, now);
+  const rows = tenants.map((t) => {
+    const lease = t.leases[0];
+    return { tenant: t, lease, snap: lease ? snaps.get(lease.id) ?? null : null };
+  });
 
   return (
     <div className="space-y-6">

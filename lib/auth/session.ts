@@ -53,6 +53,28 @@ export async function requireRole(min: Role): Promise<{
 }
 
 /**
+ * API-route variant of requireRole. Never redirects (wrong for fetch/XHR) —
+ * returns the DB user on success or an HTTP status to send otherwise. Uses the
+ * true DB role (not view-as): impersonation is a UI affordance, not an API one.
+ */
+export async function authorizeApiRole(min: Role): Promise<
+  | { ok: true; user: SessionUser; dbUser: NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>> }
+  | { ok: false; status: 401 | 403 }
+> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, status: 401 };
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  if (!dbUser || !dbUser.isActive || !roleAtLeast(dbUser.role as Role, min)) {
+    return { ok: false, status: 403 };
+  }
+  // securityStamp mismatch => the token was invalidated (role change / disable).
+  if (user.securityStamp && dbUser.securityStamp !== user.securityStamp) {
+    return { ok: false, status: 401 };
+  }
+  return { ok: true, user, dbUser };
+}
+
+/**
  * The role the current user is ACTING as (JWT hint + view-as cookie). For
  * nav/UI gating only — actions must still go through requireRole.
  */

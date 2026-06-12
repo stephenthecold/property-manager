@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
-import { getSessionUser } from "@/lib/auth/session";
+import { authorizeApiRole } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { prisma } from "@/lib/db";
 import {
@@ -46,8 +46,14 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ type: string }> },
 ) {
-  const user = await getSessionUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
+  // Financial CSV exports (incl. arbitrary tenant/unit ledgers by id) are a
+  // manager+ capability — closes ledger enumeration by a read-only viewer.
+  const auth = await authorizeApiRole("manager");
+  if (!auth.ok) {
+    return new NextResponse(auth.status === 401 ? "Unauthorized" : "Forbidden", {
+      status: auth.status,
+    });
+  }
 
   const { type } = await params;
   const q = new URL(req.url).searchParams;
@@ -103,7 +109,8 @@ export async function GET(
       if (!/^\d+$/.test(raw)) {
         return new NextResponse("Invalid windowDays", { status: 400 });
       }
-      windowDays = Number(raw);
+      // Clamp to 10 years so a huge value can't drive an unbounded scan.
+      windowDays = Math.min(Number(raw), 3650);
     }
     rows = (await getLeaseExpirations({ windowDays }, now)) as unknown as Record<
       string,

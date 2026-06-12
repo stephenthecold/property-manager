@@ -137,29 +137,29 @@ export default async function TenantDetail({
       )
     : null;
 
-  const ledger = activeLease
-    ? await prisma.ledgerEntry.findMany({
-        where: { leaseId: activeLease.id },
-        orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }],
-      })
-    : [];
-
-  const payments = activeLease
-    ? await prisma.payment.findMany({
-        where: { leaseId: activeLease.id },
-        orderBy: { paymentDate: "desc" },
-      })
-    : [];
+  // Independent reads for this tenant — run them together instead of serially.
+  const [ledger, payments, documents, reminders] = await Promise.all([
+    activeLease
+      ? prisma.ledgerEntry.findMany({
+          where: { leaseId: activeLease.id },
+          orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }],
+        })
+      : Promise.resolve([]),
+    activeLease
+      ? prisma.payment.findMany({
+          where: { leaseId: activeLease.id },
+          orderBy: { paymentDate: "desc" },
+        })
+      : Promise.resolve([]),
+    listDocuments({ tenantId: tenant.id }),
+    prisma.reminder.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+  ]);
 
   const currency = activeLease?.unit.property.currency ?? "USD";
-
-  const documents = await listDocuments({ tenantId: tenant.id });
-
-  const reminders = await prisma.reminder.findMany({
-    where: { tenantId: tenant.id },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
 
   // Pre-render the default SMS template bodies server-side (the dialog is a
   // client component and must not import lib/reminders). With no active lease,

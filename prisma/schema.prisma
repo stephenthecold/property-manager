@@ -492,6 +492,7 @@ model LedgerEntry {
   allocationsAsPayment ChargeAllocation[] @relation("PaymentAllocations")
 
   @@index([leaseId, effectiveDate])
+  @@index([leaseId, entryType])
   @@index([tenantId])
   @@index([reversesEntryId])
   // Partial unique indexes (rent_charge & late_fee per lease+period) are added via raw SQL
@@ -542,6 +543,7 @@ model Payment {
   @@index([leaseId])
   @@index([tenantId])
   @@index([paymentDate])
+  @@index([status, paymentDate])
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { fromCents } from "@/lib/money";
 import { getEnv } from "@/lib/config/env";
@@ -48,6 +49,8 @@ export default async function DocumentDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // Documents can hold sensitive PII/financial scans — manager+ only.
+  await requireRole("manager");
   const { id } = await params;
   const sp = await searchParams;
   const formError = FORM_ERRORS[String(sp.error ?? "")];
