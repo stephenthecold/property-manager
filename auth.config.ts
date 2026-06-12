@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   "/setup",
   "/api/auth",
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
+  "/api/health", // container healthcheck — returns only {ok}, no data
 ];
 
 function isPublic(pathname: string): boolean {

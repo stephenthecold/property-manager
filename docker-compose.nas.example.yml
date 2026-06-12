@@ -1,0 +1,24 @@
+# Store uploads on a host path (e.g. a mounted NAS share) instead of the
+# default `uploads` named volume. Compose merges volume mounts by container
+# path, so this REPLACES the named volume — move existing files across FIRST
+# (see docs/DEPLOYMENT.md "File storage on a network share").
+#
+# Use via .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.nas.example.yml
+#   UPLOADS_HOST_PATH=/mnt/property_manager
+#
+# The app runs as uid/gid 1000 — a CIFS/SMB mount must map ownership to it,
+# e.g. in /etc/fstab:
+#   //nas/property-files /mnt/property_manager cifs credentials=...,uid=1000,gid=1000,file_mode=0660,dir_mode=0770 0 0
+# Set STORAGE_ENCRYPT=true so new files are encrypted before touching the share.
+services:
+  app:
+    volumes:
+      - type: bind
+        source: "${UPLOADS_HOST_PATH:?set UPLOADS_HOST_PATH in .env}"
+        target: /data/uploads
+  worker:
+    volumes:
+      - type: bind
+        source: "${UPLOADS_HOST_PATH:?set UPLOADS_HOST_PATH in .env}"
+        target: /data/uploads

@@ -46,17 +46,30 @@ x-app-env: &app-env
   DEFAULT_CURRENCY: "${DEFAULT_CURRENCY:-USD}"
 
 # One image serves both app and worker. Default is a locally-built tag; set
-# APP_IMAGE to a registry ref (e.g. ghcr.io/<owner>/property-manager:latest,
-# published by .github/workflows/docker-publish.yml) to run a pulled image:
+# APP_IMAGE to a registry ref (published by .github/workflows/docker-publish.yml)
+# to run a pulled image — pin a sha-/version tag for production rather than
+# :latest, so rollouts are deliberate and rollbacks are possible:
+#   APP_IMAGE=ghcr.io/<owner>/property-manager:sha-<commit>
 #   docker compose pull app worker && docker compose up -d
 x-app-image: &app-image
   image: "${APP_IMAGE:-property-manager:local}"
   build: .
 
+# Bounded JSON logs so containers can never fill the host disk.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    <<: *logging
+    mem_limit: "${DB_MEM_LIMIT:-1g}"
+    mem_reservation: 256m
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-pm}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pm}"
@@ -70,8 +83,11 @@ services:
       retries: 10
 
   app:
-    <<: *app-image
+    # merge-key with a list merges both anchors in order (Compose v2 supports this)
+    <<: [*app-image, *logging]
     restart: unless-stopped
+    mem_limit: "${APP_MEM_LIMIT:-1g}"
+    mem_reservation: 256m
     depends_on:
       db:
         condition: service_healthy
@@ -83,16 +99,33 @@ services:
       - "${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000"
     volumes:
       - uploads:/data/uploads
+    # /api/health is unauthenticated and returns only {ok}; start_period covers
+    # the migration run on boot.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     command: ["npm", "run", "start"]
 
   worker:
-    <<: *app-image
+    # merge-key with a list merges both anchors in order (Compose v2 supports this)
+    <<: [*app-image, *logging]
     restart: unless-stopped
+    mem_limit: "${WORKER_MEM_LIMIT:-512m}"
+    mem_reservation: 128m
     depends_on:
       db:
         condition: service_healthy
+      # healthy (not just started): the app applies migrations on boot, so this
+      # also guarantees the worker never runs against an unmigrated schema.
       app:
-        condition: service_started
+        condition: service_healthy
     environment:
       <<: *app-env
       BILLING_CRON: "${BILLING_CRON:-0 1 * * *}"
