@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { updateBuilding } from "../../properties/actions";
 import { Button } from "@/components/ui/button";
@@ -26,13 +25,6 @@ export default async function BuildingDetail({
   });
   if (!building) notFound();
 
-  // Render the stored instant as a date-input value in the property tz.
-  const purchaseValue = building.purchaseDate
-    ? DateTime.fromJSDate(building.purchaseDate, {
-        zone: building.property.timezone,
-      }).toFormat("yyyy-MM-dd")
-    : "";
-
   return (
     <div className="space-y-6">
       <div>
@@ -45,11 +37,6 @@ export default async function BuildingDetail({
             {building.property.name}
           </Link>{" "}
           · {building._count.units} unit{building._count.units === 1 ? "" : "s"}
-          {building.purchaseDate
-            ? ` · purchased ${building.purchaseDate.toLocaleDateString("en-US", {
-                timeZone: building.property.timezone,
-              })}`
-            : ""}
         </p>
       </div>
 
@@ -72,18 +59,10 @@ export default async function BuildingDetail({
                 defaultValue={building.description ?? ""}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="purchaseDate">Purchase date</Label>
-              <Input
-                id="purchaseDate"
-                name="purchaseDate"
-                type="date"
-                defaultValue={purchaseValue}
-              />
-            </div>
             <p className="text-xs text-muted-foreground">
-              Mortgage terms live on the property (Edit property on the
-              property&apos;s page) — they cover the whole parcel, not one building.
+              Purchase date and mortgage terms live on the property (Edit
+              property on the property&apos;s page) — they describe the whole
+              parcel, not one building.
             </p>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>

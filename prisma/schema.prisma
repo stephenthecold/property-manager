@@ -316,6 +316,7 @@ model Property {
   // the loan matures — used to compute net income and project post-payoff income.
   monthlyMortgageCents BigInt?
   mortgageMaturityDate DateTime?
+  purchaseDate DateTime? // date the property/parcel was purchased (informational)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -333,7 +334,6 @@ model Building {
   name         String
   description  String?
   notes        String?
-  purchaseDate DateTime? // date the building was purchased (informational)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

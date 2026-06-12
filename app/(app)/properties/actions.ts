@@ -52,19 +52,11 @@ export async function createBuilding(fd: FormData): Promise<void> {
   if (!propertyId || !name) throw new Error("Building name is required.");
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!property) throw new Error("Property not found.");
-  const purchaseRaw = str(fd, "purchaseDate");
-  const purchaseDate = purchaseRaw
-    ? parseDateOnlyInZone(purchaseRaw, property.timezone)
-    : null;
-  if (purchaseRaw && !purchaseDate) {
-    throw new Error("Purchase date must be a valid date (YYYY-MM-DD).");
-  }
   const building = await prisma.building.create({
     data: {
       propertyId,
       name,
       description: str(fd, "description") || null,
-      purchaseDate,
     },
   });
   await writeAudit(prisma, {
@@ -88,14 +80,6 @@ export async function updateBuilding(fd: FormData): Promise<void> {
   });
   if (!building) throw new Error("Building not found.");
 
-  const purchaseRaw = str(fd, "purchaseDate");
-  const purchaseDate = purchaseRaw
-    ? parseDateOnlyInZone(purchaseRaw, building.property.timezone)
-    : null;
-  if (purchaseRaw && !purchaseDate) {
-    throw new Error("Purchase date must be a valid date (YYYY-MM-DD).");
-  }
-
   await withAudit(
     {
       ...(await auditActor()),
@@ -105,7 +89,6 @@ export async function updateBuilding(fd: FormData): Promise<void> {
       before: {
         name: building.name,
         description: building.description,
-        purchaseDate: building.purchaseDate,
         notes: building.notes,
       },
     },
@@ -116,7 +99,6 @@ export async function updateBuilding(fd: FormData): Promise<void> {
           name,
           description: str(fd, "description") || null,
           notes: str(fd, "notes") || null,
-          purchaseDate,
         },
       });
       return {
@@ -124,7 +106,6 @@ export async function updateBuilding(fd: FormData): Promise<void> {
         after: {
           name: updated.name,
           description: updated.description,
-          purchaseDate: updated.purchaseDate,
           notes: updated.notes,
         },
       };
@@ -219,6 +200,13 @@ export async function updateProperty(fd: FormData): Promise<void> {
   if (maturityRaw && !mortgageMaturityDate) {
     throw new Error("Mortgage maturity date must be a valid date (YYYY-MM-DD).");
   }
+  const purchaseRaw = str(fd, "purchaseDate");
+  const purchaseDate = purchaseRaw
+    ? parseDateOnlyInZone(purchaseRaw, timezone)
+    : null;
+  if (purchaseRaw && !purchaseDate) {
+    throw new Error("Purchase date must be a valid date (YYYY-MM-DD).");
+  }
 
   const data = {
     name,
@@ -232,6 +220,7 @@ export async function updateProperty(fd: FormData): Promise<void> {
     currency,
     monthlyMortgageCents,
     mortgageMaturityDate,
+    purchaseDate,
     isActive: fd.get("isActive") === "on",
   };
 
@@ -253,6 +242,7 @@ export async function updateProperty(fd: FormData): Promise<void> {
         currency: property.currency,
         monthlyMortgageCents: property.monthlyMortgageCents,
         mortgageMaturityDate: property.mortgageMaturityDate,
+        purchaseDate: property.purchaseDate,
         isActive: property.isActive,
       },
     },
