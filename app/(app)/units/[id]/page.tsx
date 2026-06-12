@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { Badge } from "@/components/ui/badge";
 import { updateUnit, deleteUnit } from "../actions";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -53,6 +55,14 @@ export default async function UnitDetail({
     ? await leaseSnapshot(lease, unit, new Date(), unit.property.timezone)
     : null;
   const currency = unit.property.currency;
+
+  const { modules } = await getAppSettings();
+  const openJobs = modules.maintenance
+    ? await prisma.maintenanceJob.findMany({
+        where: { unitId: unit.id, status: "pending" },
+        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -279,6 +289,43 @@ export default async function UnitDetail({
           )}
         </CardContent>
       </Card>
+
+      {modules.maintenance && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Open maintenance jobs</CardTitle>
+            <Link href="/maintenance" className="text-sm font-medium hover:underline">
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {openJobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No open jobs for this unit.
+              </p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {openJobs.map((j) => (
+                  <li key={j.id} className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-amber-200 bg-amber-100 font-medium text-amber-800"
+                    >
+                      Pending
+                    </Badge>
+                    <span className="font-medium">{j.title}</span>
+                    {j.dueDate && (
+                      <span className="text-muted-foreground">
+                        — due {j.dueDate.toLocaleDateString("en-US", { timeZone: "UTC" })}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

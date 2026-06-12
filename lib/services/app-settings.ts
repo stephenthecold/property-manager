@@ -13,6 +13,26 @@ import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
 export const SMS_TOKEN_AAD = "appsettings:smsAuthToken:singleton";
 
+export interface ModuleFlags {
+  /** Expenses, mortgages, profit/ROI (dashboard cards + /financials). */
+  financials: boolean;
+  /** Unit maintenance jobs + recurring monthly tasks (/maintenance). */
+  maintenance: boolean;
+}
+
+/** Defaults when a module key has never been saved. */
+const MODULE_DEFAULTS: ModuleFlags = { financials: true, maintenance: false };
+
+function resolveModules(raw: unknown): ModuleFlags {
+  const obj = (raw ?? {}) as Partial<Record<keyof ModuleFlags, unknown>>;
+  return {
+    financials:
+      typeof obj.financials === "boolean" ? obj.financials : MODULE_DEFAULTS.financials,
+    maintenance:
+      typeof obj.maintenance === "boolean" ? obj.maintenance : MODULE_DEFAULTS.maintenance,
+  };
+}
+
 export interface ResolvedAppSettings {
   /** White-label brand shown in the header, receipts, and reports. */
   businessName: string;
@@ -38,6 +58,8 @@ export interface ResolvedAppSettings {
   templates: Record<ReminderType, string>;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
+  /** Optional feature modules; disabling hides UI but never deletes data. */
+  modules: ModuleFlags;
   /** Org-wide charge defaults ("rates") — prefill new leases/units. */
   billing: {
     dueDay: number;
@@ -100,6 +122,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
     templates,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
+    modules: resolveModules(row?.modules),
     billing: {
       dueDay: row?.defaultDueDay ?? 1,
       graceDays: row?.defaultGraceDays ?? 5,
@@ -194,6 +217,39 @@ export async function saveBillingDefaults(
           }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/** Guard for module-scoped actions: throws when the module is switched off. */
+export async function assertModuleEnabled(name: keyof ModuleFlags): Promise<void> {
+  const { modules } = await getAppSettings();
+  if (!modules[name]) {
+    throw new Error(`The ${name} module is disabled (Settings → Modules).`);
+  }
+}
+
+/** Persist the module flags. Disabling hides UI only — data is retained. */
+export async function saveModules(
+  modules: ModuleFlags,
+  actor: AuditContext,
+): Promise<void> {
+  const modulesJson = { ...modules }; // plain object for Prisma's Json input type
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", modules: modulesJson, updatedBy: actor.actorId ?? null },
+      update: { modules: modulesJson, updatedBy: actor.actorId ?? null },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.modules.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: { modules: resolveModules(before?.modules) },
+      after: { modules },
     });
   });
   invalidateAppSettingsCache();

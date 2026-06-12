@@ -43,6 +43,11 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   once any OIDC sign-in exists (first-run bootstrap may do the initial OIDC configuration).
 - **Every mutation is audited** in-transaction via `withAudit`/`writeAudit`; `AuditLog` is
   append-only (DB trigger).
+- **Optional modules** (Financials, Maintenance) are flags on `AppSettings.modules`
+  (Settings → Modules). Module pages `redirect("/dashboard")` and module actions throw via
+  `assertModuleEnabled` when off; **disabling only hides UI — never delete module data**.
+  `PropertyExpense`/`MaintenanceJob` are operating records, NOT ledger entries: they never
+  touch tenant balances.
 
 ## Gotchas
 

@@ -92,8 +92,11 @@ export default async function OrganizationSettingsPage() {
           <p className="text-xs text-muted-foreground">
             Storage is configured with environment variables (<code>STORAGE_PROVIDER</code> and the{" "}
             <code>S3_*</code> / <code>LOCAL_STORAGE_DIR</code> settings — see{" "}
-            <code>.env.example</code>). Secret keys are read from the environment and never shown or
-            stored here. Change them on the host and restart the app to apply.
+            <code>.env.example</code>). To use a <strong>network share</strong>, mount it on the host
+            (NFS/SMB) and point <code>LOCAL_STORAGE_DIR</code> at the mount; set{" "}
+            <code>STORAGE_ENCRYPT=true</code> so files on the share are encrypted at rest (see{" "}
+            <code>docs/DEPLOYMENT.md</code>). Secret keys are read from the environment and never
+            shown or stored here. Change them on the host and restart the app to apply.
           </p>
         </CardContent>
       </Card>

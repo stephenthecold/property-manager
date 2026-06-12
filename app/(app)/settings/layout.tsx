@@ -13,6 +13,7 @@ const SETTINGS_LINKS: { href: string; label: string; cap: Capability }[] = [
   { href: "/settings/auth", label: "Authentication", cap: "auth.settings" },
   { href: "/settings/users", label: "Users", cap: "users.manage" },
   { href: "/settings/permissions", label: "Permissions", cap: "users.manage" },
+  { href: "/settings/modules", label: "Modules", cap: "organization.settings" },
 ];
 
 export default async function SettingsLayout({

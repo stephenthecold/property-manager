@@ -96,6 +96,22 @@ export async function updateBuilding(fd: FormData): Promise<void> {
     throw new Error("Purchase date must be a valid date (YYYY-MM-DD).");
   }
 
+  // Financing (Financials module): monthly mortgage payment + maturity date.
+  const mortgageRaw = str(fd, "monthlyMortgage");
+  let monthlyMortgageCents: bigint | null = null;
+  if (mortgageRaw) {
+    monthlyMortgageCents = toCents(mortgageRaw);
+    if (monthlyMortgageCents < 0n) throw new Error("Mortgage cannot be negative.");
+    if (monthlyMortgageCents === 0n) monthlyMortgageCents = null;
+  }
+  const maturityRaw = str(fd, "mortgageMaturityDate");
+  const mortgageMaturityDate = maturityRaw
+    ? parseDateOnlyInZone(maturityRaw, building.property.timezone)
+    : null;
+  if (maturityRaw && !mortgageMaturityDate) {
+    throw new Error("Mortgage maturity date must be a valid date (YYYY-MM-DD).");
+  }
+
   await withAudit(
     {
       ...(await auditActor()),
@@ -106,6 +122,8 @@ export async function updateBuilding(fd: FormData): Promise<void> {
         name: building.name,
         description: building.description,
         purchaseDate: building.purchaseDate,
+        monthlyMortgageCents: building.monthlyMortgageCents,
+        mortgageMaturityDate: building.mortgageMaturityDate,
         notes: building.notes,
       },
     },
@@ -117,6 +135,8 @@ export async function updateBuilding(fd: FormData): Promise<void> {
           description: str(fd, "description") || null,
           notes: str(fd, "notes") || null,
           purchaseDate,
+          monthlyMortgageCents,
+          mortgageMaturityDate,
         },
       });
       return {
@@ -125,11 +145,15 @@ export async function updateBuilding(fd: FormData): Promise<void> {
           name: updated.name,
           description: updated.description,
           purchaseDate: updated.purchaseDate,
+          monthlyMortgageCents: updated.monthlyMortgageCents,
+          mortgageMaturityDate: updated.mortgageMaturityDate,
           notes: updated.notes,
         },
       };
     },
   );
+
+  revalidatePath("/financials");
 
   revalidatePath(`/properties/${building.propertyId}`);
   revalidatePath(`/buildings/${building.id}`);

@@ -105,6 +105,35 @@ exists yet) it may perform the initial OIDC configuration, which is the only way
 SSO on a fresh instance. The `BREAK_GLASS=on` env override forces it on and bypasses
 auto-expiry — use only during active recovery.
 
+## File storage on a network share (encrypted)
+
+Uploads can live on a network share while staying encrypted at rest:
+
+1. Mount the share on the Docker host (NFS or SMB/CIFS), e.g.
+   `mount -t cifs //nas/property-files /mnt/property-files -o credentials=...`
+   (add it to `/etc/fstab` so it survives reboots).
+2. Bind it into the app + worker containers and point local storage at it — in a
+   compose override:
+
+   ```yaml
+   services:
+     app:
+       volumes: ["/mnt/property-files:/data/uploads"]
+     worker:
+       volumes: ["/mnt/property-files:/data/uploads"]
+   ```
+
+   and in `.env`: `STORAGE_PROVIDER=local`, `LOCAL_STORAGE_DIR=/data/uploads`.
+3. Set `STORAGE_ENCRYPT=true`. New uploads are AES-256-GCM encrypted before they
+   touch the share (the share host never sees plaintext); files uploaded before
+   enabling stay readable. The key comes from `STORAGE_ENC_KEY` (32 bytes,
+   base64/hex) or, when unset, is derived from `SETTINGS_ENC_KEY` — **back that
+   key up**; without it encrypted files are unrecoverable.
+
+S3-compatible storage should use the provider's own at-rest encryption (SSE)
+instead — presigned URLs hand bytes directly to the browser, so the app never
+gets a chance to decrypt them.
+
 ## Backups & migrations
 
 - Back up the **app** Postgres volume (`db-data`) and, separately, the Authentik volume if
