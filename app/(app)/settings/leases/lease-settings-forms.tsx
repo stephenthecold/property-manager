@@ -4,8 +4,12 @@ import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SignaturePad } from "@/components/app/signature-pad";
 import {
+  clearLandlordSignatureAction,
+  saveLandlordSignatureAction,
   saveLeaseAgreementTextAction,
   uploadLeaseTemplateAction,
   type LeaseSettingsState,
@@ -146,5 +150,116 @@ export function LeaseTemplateUploadForm() {
         {pending ? "Uploading…" : "Upload template"}
       </Button>
     </form>
+  );
+}
+
+/**
+ * Saved landlord signature (typed name + optional drawn PNG). Managers+ with
+ * esign.manage apply it automatically when sending e-sign requests. Leaving
+ * the pad empty keeps the stored drawing; Clear removes name and drawing.
+ */
+export function LandlordSignatureForm({
+  currentName,
+  signatureUrl,
+}: {
+  currentName: string | null;
+  /** Short-lived signed URL of the stored drawn signature, when one exists. */
+  signatureUrl: string | null;
+}) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState<LeaseSettingsState, FormData>(
+    async (prev, fd) => {
+      const next = await saveLandlordSignatureAction(prev, fd);
+      if (next.ok) router.refresh();
+      return next;
+    },
+    {},
+  );
+  const [clearState, clearAction, clearPending] = useActionState<
+    LeaseSettingsState,
+    FormData
+  >(async (prev, fd) => {
+    const next = await clearLandlordSignatureAction(prev, fd);
+    if (next.ok) router.refresh();
+    return next;
+  }, {});
+
+  const error = state.error ?? clearState.error;
+  const message = state.ok ? state.message : clearState.ok ? clearState.message : null;
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {message && (
+        <Alert>
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
+
+      {currentName ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-sm">
+            Saved signature: <span className="font-medium">{currentName}</span>
+          </p>
+          {signatureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL
+            <img
+              src={signatureUrl}
+              alt="Saved landlord signature"
+              className="max-h-16 rounded border bg-white object-contain p-1"
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No drawing saved — the typed name is used in cursive style.
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No landlord signature saved yet. E-sign requests can&apos;t be sent
+          until one is set.
+        </p>
+      )}
+
+      <form action={formAction} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="landlord-signature-name">Signature name</Label>
+          <Input
+            id="landlord-signature-name"
+            name="name"
+            maxLength={120}
+            defaultValue={currentName ?? ""}
+            placeholder="e.g. Warren Properties LLC"
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Drawn signature (optional)</Label>
+          <SignaturePad name="signatureImage" />
+          <p className="text-xs text-muted-foreground">
+            Leave the pad empty to keep the current drawing. Managers and above
+            apply this signature automatically when they send a lease for
+            e-signature.
+          </p>
+        </div>
+
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : "Save signature"}
+        </Button>
+      </form>
+
+      {currentName && (
+        <form action={clearAction}>
+          <Button type="submit" variant="outline" disabled={clearPending}>
+            {clearPending ? "Clearing…" : "Clear saved signature"}
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }

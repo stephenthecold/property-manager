@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
 import {
@@ -9,6 +10,15 @@ import {
 } from "@/lib/services/documents";
 import { getFileStorage } from "@/lib/providers/storage";
 import { DOCX_CONTENT_TYPE, fillDocxTemplate } from "@/lib/documents/docx-fill";
+import {
+  cancelSigningRequest,
+  createSigningRequest,
+  resendSignerLink,
+  type CancelResult,
+  type CreateSigningRequestResult,
+  type ResendResult,
+  type SignerSendStatus,
+} from "@/lib/services/esign";
 
 export interface GenerateDocxState {
   ok?: boolean;
@@ -119,4 +129,107 @@ export async function generateFromTemplateAction(
     downloadUrl,
     fileName,
   };
+}
+
+// ---------------------------------------------------------------------------
+// E-signature panel actions (esign.manage). These are row-style server forms:
+// guard failures land back on the agreement page as ?esign_error= banners —
+// never thrown (a thrown server-action error renders the opaque production
+// digest page). redirect() is never called inside try/catch.
+// ---------------------------------------------------------------------------
+
+function backToAgreement(
+  leaseId: string,
+  result: { error?: string; message?: string },
+): never {
+  const qs = result.error
+    ? `esign_error=${encodeURIComponent(result.error)}`
+    : `esign_message=${encodeURIComponent(result.message ?? "Done.")}`;
+  redirect(`/leases/${leaseId}/agreement?${qs}`);
+}
+
+/** "Jane Doe: sent via SMS + email; John Roe: no message sent …" */
+function describeSends(sends: SignerSendStatus[]): string {
+  if (sends.length === 0) return "No signers.";
+  return sends
+    .map((s) => {
+      const channels = [
+        s.sms === "sent" ? "SMS" : null,
+        s.email === "sent" ? "email" : null,
+      ].filter(Boolean);
+      return channels.length > 0
+        ? `${s.name}: sent via ${channels.join(" + ")}`
+        : `${s.name}: NO message sent (no reachable contact method — fix their phone/email, then Resend)`;
+    })
+    .join("; ");
+}
+
+/** Send the current agreement for e-signature (one signer per tenant). */
+export async function sendEsignRequestAction(fd: FormData): Promise<void> {
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = String(fd.get("leaseId") ?? "").trim();
+  if (!leaseId) redirect("/leases?error=Missing%20lease%20id.");
+  const kind =
+    String(fd.get("kind") ?? "lease") === "renewal" ? "renewal" : "lease";
+
+  let result: CreateSigningRequestResult;
+  try {
+    result = await createSigningRequest({ leaseId, kind, actor });
+  } catch (e) {
+    console.error("[esign] send request failed:", e);
+    result = {
+      ok: false,
+      error: "Could not create the signing request — check the server log.",
+    };
+  }
+  if (!result.ok) backToAgreement(leaseId, { error: result.error });
+  backToAgreement(leaseId, {
+    message: `E-sign request sent. ${describeSends(result.sends)}.`,
+  });
+}
+
+/** Re-mint one signer's link (the old link stops working) and resend it. */
+export async function resendEsignLinkAction(fd: FormData): Promise<void> {
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = String(fd.get("leaseId") ?? "").trim();
+  const signerId = String(fd.get("signerId") ?? "").trim();
+  if (!leaseId) redirect("/leases?error=Missing%20lease%20id.");
+  if (!signerId) backToAgreement(leaseId, { error: "Missing signer." });
+
+  let result: ResendResult;
+  try {
+    result = await resendSignerLink({ signerId, actor });
+  } catch (e) {
+    console.error("[esign] resend failed:", e);
+    result = { ok: false, error: "Could not resend — check the server log." };
+  }
+  if (!result.ok) backToAgreement(leaseId, { error: result.error });
+  backToAgreement(leaseId, {
+    message: `New link sent. ${describeSends([result.send])}.`,
+  });
+}
+
+/** Cancel the in-flight signing request (links already sent stop working). */
+export async function cancelEsignRequestAction(fd: FormData): Promise<void> {
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = String(fd.get("leaseId") ?? "").trim();
+  const requestId = String(fd.get("requestId") ?? "").trim();
+  if (!leaseId) redirect("/leases?error=Missing%20lease%20id.");
+  if (!requestId) backToAgreement(leaseId, { error: "Missing request." });
+
+  let result: CancelResult;
+  try {
+    result = await cancelSigningRequest({ requestId, actor });
+  } catch (e) {
+    console.error("[esign] cancel failed:", e);
+    result = { ok: false, error: "Could not cancel — check the server log." };
+  }
+  if (!result.ok) backToAgreement(leaseId, { error: result.error });
+  backToAgreement(leaseId, { message: "Signing request canceled." });
 }
