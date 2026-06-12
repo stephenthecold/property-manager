@@ -11,7 +11,13 @@ import { Label } from "@/components/ui/label";
 
 export const runtime = "nodejs";
 
-const UPLOAD_TYPES = ["receipt_photo", "lease", "tenant_document", "other"] as const;
+const UPLOAD_TYPES = [
+  "receipt_photo",
+  "lease",
+  "lease_template",
+  "tenant_document",
+  "other",
+] as const;
 
 function formatBytes(bytes: number | null): string {
   if (bytes == null) return "—";

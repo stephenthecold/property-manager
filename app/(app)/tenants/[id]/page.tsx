@@ -238,10 +238,18 @@ export default async function TenantDetail({
             defaultBodies={defaultBodies}
           />
           {activeLease && (
-            <RecordPaymentDialog
-              leaseId={activeLease.id}
-              defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
-            />
+            <>
+              <Button
+                variant="outline"
+                render={<Link href={`/leases/${activeLease.id}/agreement`} />}
+              >
+                Lease agreement
+              </Button>
+              <RecordPaymentDialog
+                leaseId={activeLease.id}
+                defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
+              />
+            </>
           )}
         </div>
       </div>

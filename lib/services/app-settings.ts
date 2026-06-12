@@ -84,6 +84,9 @@ export interface ResolvedAppSettings {
   emailHasOauthRefreshToken: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
+  /** Custom lease-agreement clause text; null = the shipped default
+   *  (DEFAULT_LEASE_AGREEMENT_TEXT in lib/config/lease-agreement.ts). */
+  leaseAgreementText: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -172,6 +175,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     emailHasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
     emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
     templates,
+    leaseAgreementText: row?.leaseAgreementText ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     billing: {
@@ -427,6 +431,36 @@ export async function saveRolePermissions(
       entityId: "singleton",
       before: { rolePermissions: (before?.rolePermissions as PermissionMatrix) ?? {} },
       after: { rolePermissions: matrix },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/**
+ * Persist the lease-agreement clause text. `null` reverts to the shipped
+ * default (lib/config/lease-agreement.ts).
+ */
+export async function saveLeaseAgreementText(
+  text: string | null,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { leaseAgreementText: text, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.lease_agreement.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? { leaseAgreementText: before.leaseAgreementText }
+        : undefined,
+      after: { leaseAgreementText: text },
     });
   });
   invalidateAppSettingsCache();
