@@ -402,7 +402,7 @@ export default async function TenantDetail({
                         id="leaseStatus"
                         name="status"
                         defaultValue={activeLease.status}
-                        className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                        className="h-9 w-full rounded-md border px-3 text-sm"
                       >
                         <option value="active">Active</option>
                         <option value="month_to_month">Month-to-month</option>
@@ -462,7 +462,7 @@ export default async function TenantDetail({
                           name="tenantId"
                           defaultValue=""
                           required
-                          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                          className="h-9 w-full rounded-md border px-3 text-sm"
                         >
                           <option value="" disabled>
                             Select tenant…
@@ -564,7 +564,7 @@ export default async function TenantDetail({
                           id="elFeeType"
                           name="lateFeeType"
                           defaultValue={activeLease.lateFeeType}
-                          className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                          className="h-9 w-full rounded-md border px-3 text-sm"
                         >
                           <option value="none">None</option>
                           <option value="fixed">Fixed (one-time)</option>
@@ -864,7 +864,7 @@ export default async function TenantDetail({
                         <input
                           name="reason"
                           placeholder="Reason"
-                          className="h-8 w-28 rounded border px-2 text-xs"
+                          className="h-8 w-28 rounded border bg-card px-2 text-xs dark:bg-input/30"
                           required
                         />
                         <Button type="submit" variant="outline" size="sm">

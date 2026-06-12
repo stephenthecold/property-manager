@@ -67,7 +67,7 @@ export default async function ReceiptPage({
           <select
             name="method"
             defaultValue="sms"
-            className="h-9 rounded-md border bg-transparent px-3 text-sm capitalize"
+            className="h-9 rounded-md border px-3 text-sm capitalize"
           >
             <option value="sms">sms</option>
             <option value="email">email</option>

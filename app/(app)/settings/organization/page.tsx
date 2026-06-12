@@ -40,19 +40,23 @@ export default async function OrganizationSettingsPage() {
           White-label the app and printable documents with your business identity.
         </p>
       </div>
-      <OrganizationForm
-        initial={{
-          businessName: row?.businessName ?? "",
-          businessLegalName: row?.businessLegalName ?? "",
-          businessAddress: row?.businessAddress ?? "",
-          businessPhone: row?.businessPhone ?? "",
-          businessEmail: row?.businessEmail ?? "",
-          receiptFooter: row?.receiptFooter ?? "",
-          defaultTimezone: row?.defaultTimezone ?? env.DEFAULT_TIMEZONE,
-          defaultCurrency: row?.defaultCurrency ?? env.DEFAULT_CURRENCY,
-          logoUrl,
-        }}
-      />
+      <Card>
+        <CardContent>
+          <OrganizationForm
+            initial={{
+              businessName: row?.businessName ?? "",
+              businessLegalName: row?.businessLegalName ?? "",
+              businessAddress: row?.businessAddress ?? "",
+              businessPhone: row?.businessPhone ?? "",
+              businessEmail: row?.businessEmail ?? "",
+              receiptFooter: row?.receiptFooter ?? "",
+              defaultTimezone: row?.defaultTimezone ?? env.DEFAULT_TIMEZONE,
+              defaultCurrency: row?.defaultCurrency ?? env.DEFAULT_CURRENCY,
+              logoUrl,
+            }}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

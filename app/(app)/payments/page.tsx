@@ -89,7 +89,7 @@ export default async function PaymentsPage({
             id="method"
             name="method"
             defaultValue={method ?? ""}
-            className="h-9 w-40 rounded-md border bg-transparent px-3 text-sm capitalize"
+            className="h-9 w-40 rounded-md border px-3 text-sm capitalize"
           >
             <option value="">All methods</option>
             {METHODS.map((m) => (
@@ -105,7 +105,7 @@ export default async function PaymentsPage({
             id="status"
             name="status"
             defaultValue={status ?? ""}
-            className="h-9 w-36 rounded-md border bg-transparent px-3 text-sm capitalize"
+            className="h-9 w-36 rounded-md border px-3 text-sm capitalize"
           >
             <option value="">All statuses</option>
             {STATUSES.map((s) => (

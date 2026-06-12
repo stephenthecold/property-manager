@@ -76,7 +76,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
               name="smsProvider"
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="h-9 w-full rounded-md border px-3 text-sm"
             >
               <option value="">
                 Use server environment ({initial.envProvider})
@@ -180,7 +180,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
                 placeholder={t.defaultBody}
                 rows={3}
                 maxLength={480}
-                className="w-full rounded-md border bg-transparent p-2 text-sm"
+                className="w-full rounded-md border p-2 text-sm"
               />
             </div>
           ))}

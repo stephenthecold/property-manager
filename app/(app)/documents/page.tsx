@@ -60,7 +60,7 @@ export default async function DocumentsPage({
             id="uploadType"
             name="uploadType"
             defaultValue={uploadType ?? ""}
-            className="h-9 w-48 rounded-md border bg-transparent px-3 text-sm capitalize"
+            className="h-9 w-48 rounded-md border px-3 text-sm capitalize"
           >
             <option value="">All types</option>
             {UPLOAD_TYPES.map((t) => (

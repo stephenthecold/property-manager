@@ -77,7 +77,7 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
           name="businessAddress"
           defaultValue={initial.businessAddress}
           rows={3}
-          className="w-full rounded-md border bg-transparent p-2 text-sm"
+          className="w-full rounded-md border p-2 text-sm"
           placeholder={"123 Main St\nSpringfield, IL 62701"}
         />
       </div>
@@ -121,7 +121,7 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
           name="receiptFooter"
           defaultValue={initial.receiptFooter}
           rows={2}
-          className="w-full rounded-md border bg-transparent p-2 text-sm"
+          className="w-full rounded-md border p-2 text-sm"
           placeholder="Thank you for your payment. Questions? Call us."
         />
       </div>

@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/config/env";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 import { MessagingForm } from "./messaging-form";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
@@ -31,27 +32,31 @@ export default async function MessagingSettingsPage() {
           settings.
         </p>
       </div>
-      <MessagingForm
-        initial={{
-          smsEnabled: row?.smsEnabled ?? true,
-          smsProvider: row?.smsProvider ?? "",
-          smsAccountSid: row?.smsAccountSid ?? "",
-          hasAuthToken: !!row?.smsAuthTokenCiphertext,
-          smsFromNumber: row?.smsFromNumber ?? "",
-          reminderDueSoonDays:
-            row?.reminderDueSoonDays != null ? String(row.reminderDueSoonDays) : "",
-          envDueSoonDays: env.REMINDER_DUE_SOON_DAYS,
-          envProvider: env.SMS_PROVIDER,
-          dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
-          overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
-          templates: TEMPLATE_LABELS.map(({ type, label }) => ({
-            type,
-            label,
-            value: overrides[type] ?? "",
-            defaultBody: DEFAULT_TEMPLATES[type],
-          })),
-        }}
-      />
+      <Card>
+        <CardContent>
+          <MessagingForm
+            initial={{
+              smsEnabled: row?.smsEnabled ?? true,
+              smsProvider: row?.smsProvider ?? "",
+              smsAccountSid: row?.smsAccountSid ?? "",
+              hasAuthToken: !!row?.smsAuthTokenCiphertext,
+              smsFromNumber: row?.smsFromNumber ?? "",
+              reminderDueSoonDays:
+                row?.reminderDueSoonDays != null ? String(row.reminderDueSoonDays) : "",
+              envDueSoonDays: env.REMINDER_DUE_SOON_DAYS,
+              envProvider: env.SMS_PROVIDER,
+              dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
+              overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+              templates: TEMPLATE_LABELS.map(({ type, label }) => ({
+                type,
+                label,
+                value: overrides[type] ?? "",
+                defaultBody: DEFAULT_TEMPLATES[type],
+              })),
+            }}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

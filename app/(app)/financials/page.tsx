@@ -107,7 +107,7 @@ export default async function FinancialsPage({
                     id="exCategory"
                     name="category"
                     required
-                    className="h-9 w-full rounded-md border bg-transparent px-3 text-sm capitalize"
+                    className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c} value={c}>
@@ -136,7 +136,7 @@ export default async function FinancialsPage({
                 <select
                   id="exProperty"
                   name="propertyId"
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="">— select —</option>
                   {properties.map((p) => (
@@ -151,7 +151,7 @@ export default async function FinancialsPage({
                 <select
                   id="exUnit"
                   name="unitId"
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="">— none —</option>
                   {units.map((u) => (
@@ -168,7 +168,7 @@ export default async function FinancialsPage({
                 <select
                   id="exLease"
                   name="leaseId"
-                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
                 >
                   <option value="">— none —</option>
                   {leases.map((l) => (
@@ -318,7 +318,7 @@ export default async function FinancialsPage({
                 id="fProperty"
                 name="propertyId"
                 defaultValue={filterPropertyId ?? ""}
-                className="h-9 w-48 rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-48 rounded-md border px-3 text-sm"
               >
                 <option value="">All properties</option>
                 {properties.map((p) => (
@@ -334,7 +334,7 @@ export default async function FinancialsPage({
                 id="fCategory"
                 name="category"
                 defaultValue={filterCategory ?? ""}
-                className="h-9 w-40 rounded-md border bg-transparent px-3 text-sm capitalize"
+                className="h-9 w-40 rounded-md border px-3 text-sm capitalize"
               >
                 <option value="">All categories</option>
                 {CATEGORIES.map((c) => (
