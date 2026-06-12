@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import type {
   OccupancyStatus,
@@ -31,7 +31,7 @@ function numOrNull(
 }
 
 export async function updateUnit(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const unitId = str(fd, "unitId");
   const unitNumber = str(fd, "unitNumber");
   if (!unitId || !unitNumber) throw new Error("Unit number is required.");
@@ -115,7 +115,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
 }
 
 export async function deleteUnit(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const unitId = str(fd, "unitId");
   if (!unitId) throw new Error("Missing unit id.");
 

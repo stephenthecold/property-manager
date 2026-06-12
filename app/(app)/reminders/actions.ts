@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import {
   sendBulkOverdueReminders,
   sendReminder,
@@ -27,7 +27,7 @@ export async function sendReminderAction(
   _prev: SendReminderState,
   fd: FormData,
 ): Promise<SendReminderState> {
-  await requireRole("manager");
+  await requireCapability("reminders.send");
 
   const tenantId = String(fd.get("tenantId") ?? "").trim();
   if (!tenantId) return { error: "Missing tenant." };
@@ -74,7 +74,7 @@ export async function sendReminderAction(
 }
 
 export async function sendBulkOverdueRemindersAction(): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("reminders.send");
   const r = await sendBulkOverdueReminders(await auditActor());
   revalidatePath("/reminders");
   redirect(

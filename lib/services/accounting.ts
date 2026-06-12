@@ -30,11 +30,24 @@ export interface LeaseAccounting {
 export async function loadLeaseAccounting(
   leaseId: string,
 ): Promise<LeaseAccounting> {
-  const rows = await prisma.ledgerEntry.findMany({
-    where: { leaseId },
-    orderBy: { effectiveDate: "asc" },
-    include: { allocationsAsCharge: true },
-  });
+  const [rows, allAllocations] = await Promise.all([
+    prisma.ledgerEntry.findMany({
+      where: { leaseId },
+      orderBy: { effectiveDate: "asc" },
+      select: {
+        id: true,
+        entryType: true,
+        amountCents: true,
+        effectiveDate: true,
+        periodKey: true,
+      },
+    }),
+    // Active (non-reversed, non-reversing) allocations summed per charge.
+    prisma.chargeAllocation.findMany({
+      where: { chargeEntry: { leaseId } },
+      select: { id: true, chargeEntryId: true, reversesAllocationId: true, amountCents: true },
+    }),
+  ]);
 
   const entries: LedgerEntryInput[] = rows.map((r) => ({
     id: r.id,
@@ -44,7 +57,22 @@ export async function loadLeaseAccounting(
     periodKey: r.periodKey,
   }));
 
-  const charges: ChargeInput[] = rows
+  const charges = chargesFromEntries(rows);
+  const allocatedByCharge = allocatedByChargeFrom(allAllocations);
+
+  return { entries, charges, allocatedByCharge };
+}
+
+/** Charge rows (rent, late fees, positive adjustments) from raw ledger entries. */
+function chargesFromEntries(
+  rows: {
+    id: string;
+    entryType: string;
+    amountCents: bigint;
+    effectiveDate: Date;
+  }[],
+): ChargeInput[] {
+  return rows
     .filter(
       (r) =>
         r.entryType === "rent_charge" ||
@@ -56,25 +84,25 @@ export async function loadLeaseAccounting(
       amountCents: r.amountCents,
       dueDate: r.effectiveDate,
     }));
+}
 
-  // Active (non-reversed, non-reversing) allocations summed per charge.
-  const allAllocations = await prisma.chargeAllocation.findMany({
-    where: { chargeEntry: { leaseId } },
-  });
+/** Sum active (non-reversed, non-reversing) allocations per charge entry. */
+function allocatedByChargeFrom(
+  allocs: { id: string; chargeEntryId: string; reversesAllocationId: string | null; amountCents: bigint }[],
+): AllocatedByCharge {
   const reversedIds = new Set(
-    allAllocations
+    allocs
       .map((a) => a.reversesAllocationId)
       .filter((x): x is string => !!x),
   );
   const allocatedByCharge: AllocatedByCharge = {};
-  for (const a of allAllocations) {
+  for (const a of allocs) {
     if (a.reversesAllocationId) continue; // it's a reversing row
     if (reversedIds.has(a.id)) continue; // it was reversed
     allocatedByCharge[a.chargeEntryId] =
       (allocatedByCharge[a.chargeEntryId] ?? 0n) + a.amountCents;
   }
-
-  return { entries, charges, allocatedByCharge };
+  return allocatedByCharge;
 }
 
 export interface LeaseSnapshot {
@@ -89,6 +117,9 @@ export interface LeaseSnapshot {
   daysSinceLastPayment: number | null;
 }
 
+/** Lease fields the snapshot status logic needs (subset of the Prisma row). */
+type SnapshotLease = Pick<Lease, "id" | "status" | "gracePeriodDays">;
+
 /** Full financial snapshot for a lease, given its unit (for occupancy/status). */
 export async function leaseSnapshot(
   lease: Lease,
@@ -96,9 +127,86 @@ export async function leaseSnapshot(
   now: Date,
   tz: string,
 ): Promise<LeaseSnapshot> {
-  const { entries, charges, allocatedByCharge } =
-    await loadLeaseAccounting(lease.id);
+  const accounting = await loadLeaseAccounting(lease.id);
+  return snapshotFromAccounting(lease, unit, now, tz, accounting);
+}
 
+/**
+ * Snapshots for many leases in a fixed number of queries (two total, regardless
+ * of lease count) instead of two per lease. Pure compute is shared with the
+ * single-lease path so balance math stays identical.
+ */
+export async function batchLeaseSnapshots<
+  L extends SnapshotLease & { unit: Pick<Unit, "occupancyStatus"> & { property: { timezone: string } } },
+>(leases: L[], now: Date): Promise<Map<string, LeaseSnapshot>> {
+  const result = new Map<string, LeaseSnapshot>();
+  if (leases.length === 0) return result;
+  const leaseIds = leases.map((l) => l.id);
+
+  const [rows, allocs] = await Promise.all([
+    prisma.ledgerEntry.findMany({
+      where: { leaseId: { in: leaseIds } },
+      orderBy: { effectiveDate: "asc" },
+      select: {
+        id: true,
+        leaseId: true,
+        entryType: true,
+        amountCents: true,
+        effectiveDate: true,
+        periodKey: true,
+      },
+    }),
+    prisma.chargeAllocation.findMany({
+      where: { chargeEntry: { leaseId: { in: leaseIds } } },
+      select: {
+        id: true,
+        chargeEntryId: true,
+        reversesAllocationId: true,
+        amountCents: true,
+        chargeEntry: { select: { leaseId: true } },
+      },
+    }),
+  ]);
+
+  const rowsByLease = new Map<string, typeof rows>();
+  for (const r of rows) {
+    (rowsByLease.get(r.leaseId) ?? rowsByLease.set(r.leaseId, []).get(r.leaseId)!).push(r);
+  }
+  const allocsByLease = new Map<string, typeof allocs>();
+  for (const a of allocs) {
+    const lid = a.chargeEntry.leaseId;
+    (allocsByLease.get(lid) ?? allocsByLease.set(lid, []).get(lid)!).push(a);
+  }
+
+  for (const lease of leases) {
+    const leaseRows = rowsByLease.get(lease.id) ?? [];
+    const accounting: LeaseAccounting = {
+      entries: leaseRows.map((r) => ({
+        id: r.id,
+        entryType: r.entryType,
+        amountCents: r.amountCents,
+        effectiveDate: r.effectiveDate,
+        periodKey: r.periodKey,
+      })),
+      charges: chargesFromEntries(leaseRows),
+      allocatedByCharge: allocatedByChargeFrom(allocsByLease.get(lease.id) ?? []),
+    };
+    result.set(
+      lease.id,
+      snapshotFromAccounting(lease, lease.unit, now, lease.unit.property.timezone, accounting),
+    );
+  }
+  return result;
+}
+
+/** Pure snapshot computation from already-loaded accounting data. */
+function snapshotFromAccounting(
+  lease: SnapshotLease,
+  unit: Pick<Unit, "occupancyStatus">,
+  now: Date,
+  tz: string,
+  { entries, charges, allocatedByCharge }: LeaseAccounting,
+): LeaseSnapshot {
   const open = computeOpenCharges(charges, allocatedByCharge);
 
   // Current period = most recent rent_charge.

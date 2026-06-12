@@ -33,7 +33,12 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   timezone (Luxon).
 - **Auth**: `proxy.ts` (edge) uses `auth.config.ts` (JWT-only, no Prisma, fails closed);
   `auth.ts` (Node) has the adapter + dynamic OIDC provider built from the DB `AuthSettings`.
-  JWT role is a hint — use `requireRole` (DB-authoritative + `securityStamp`) for sensitive ops.
+  JWT role is a hint. **Gate mutations/sensitive pages with `requireCapability(cap)`** (and API
+  routes with `authorizeApiCapability`) — the capability layer (`lib/auth/permissions.ts`) is
+  DB-authoritative (+ `securityStamp`) and configurable per role at Settings → Permissions; its
+  defaults reproduce the old `requireRole` hierarchy. Use bare `requireRole` only for a hard
+  role floor. New capability? Add it to `CAPABILITIES`, map a default in `MIN_ROLE`, and update
+  the `permissions.test.ts` legacy-equivalence map.
   Break-glass is off by default, owner-only, auto-expiring, and cannot change auth settings
   once any OIDC sign-in exists (first-run bootstrap may do the initial OIDC configuration).
 - **Every mutation is audited** in-transaction via `withAudit`/`writeAudit`; `AuditLog` is

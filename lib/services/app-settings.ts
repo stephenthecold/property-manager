@@ -7,6 +7,7 @@ import { StubSmsProvider } from "@/lib/providers/sms/stub";
 import { TwilioSmsProvider } from "@/lib/providers/sms/twilio";
 import type { SmsProvider } from "@/lib/providers/sms/types";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
+import type { PermissionMatrix } from "@/lib/auth/permissions";
 import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
 
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
@@ -35,6 +36,8 @@ export interface ResolvedAppSettings {
   overdueRemindersEnabled: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
+  /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
+  rolePermissions: PermissionMatrix;
   /** Org-wide charge defaults ("rates") — prefill new leases/units. */
   billing: {
     dueDay: number;
@@ -96,6 +99,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
     templates,
+    rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     billing: {
       dueDay: row?.defaultDueDay ?? 1,
       graceDays: row?.defaultGraceDays ?? 5,
@@ -190,6 +194,30 @@ export async function saveBillingDefaults(
           }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/** Persist the role→capability override matrix (already diffed to non-defaults). */
+export async function saveRolePermissions(
+  matrix: PermissionMatrix,
+  actor: AuditContext,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", rolePermissions: matrix, updatedBy: actor.actorId ?? null },
+      update: { rolePermissions: matrix, updatedBy: actor.actorId ?? null },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.permissions.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: { rolePermissions: (before?.rolePermissions as PermissionMatrix) ?? {} },
+      after: { rolePermissions: matrix },
     });
   });
   invalidateAppSettingsCache();

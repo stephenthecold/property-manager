@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import { attachDocument, runOcrOnDocument } from "@/lib/services/documents";
 import { postPayment } from "@/lib/services/payments";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 
 export async function runOcrAction(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("documents.manage");
   const documentId = String(fd.get("documentId") ?? "").trim();
   if (!documentId) throw new Error("Missing document id.");
 
@@ -22,7 +22,7 @@ export async function runOcrAction(fd: FormData): Promise<void> {
 }
 
 export async function createPaymentFromDocumentAction(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("payments.manage");
   const leaseId = String(fd.get("leaseId") ?? "").trim();
   const documentId = String(fd.get("documentId") ?? "").trim();
   const idempotencyKey = String(fd.get("idempotencyKey") ?? "").trim();

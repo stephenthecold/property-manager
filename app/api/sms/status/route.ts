@@ -41,7 +41,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
     return new NextResponse(null, { status: 204 });
   } catch (e) {
-    console.error("[sms:status] webhook error:", e);
+    // Log only the error message, never the raw webhook payload/object.
+    console.error(
+      "[sms:status] webhook processing failed:",
+      e instanceof Error ? e.message : "unknown error",
+    );
     return new NextResponse(null, { status: 204 });
   }
 }

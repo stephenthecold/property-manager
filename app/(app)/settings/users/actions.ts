@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit, writeAudit } from "@/lib/audit/audit";
 import { isRole, roleAtLeast } from "@/lib/auth/rbac";
 import { VIEW_AS_COOKIE } from "@/lib/auth/view-as";
@@ -21,7 +21,7 @@ function str(fd: FormData, key: string): string {
  * grant a role above their own.
  */
 export async function setUserRole(fd: FormData): Promise<void> {
-  const { dbUser: actor } = await requireRole("admin");
+  const { dbUser: actor } = await requireCapability("users.manage");
   const userId = str(fd, "userId");
   const roleRaw = str(fd, "role");
   if (!userId || !isRole(roleRaw)) throw new Error("Invalid user or role.");
@@ -62,7 +62,7 @@ export async function setUserRole(fd: FormData): Promise<void> {
 
 /** Activate/deactivate a user (deactivation also invalidates their JWT). */
 export async function setUserActive(fd: FormData): Promise<void> {
-  const { dbUser: actor } = await requireRole("admin");
+  const { dbUser: actor } = await requireCapability("users.manage");
   const userId = str(fd, "userId");
   const isActive = str(fd, "isActive") === "true";
   if (!userId) throw new Error("Missing user id.");
@@ -101,7 +101,7 @@ export async function setUserActive(fd: FormData): Promise<void> {
  * privileges, so it is safe to store client-side.
  */
 export async function startViewAs(fd: FormData): Promise<void> {
-  const { dbUser } = await requireRole("admin");
+  const { dbUser } = await requireCapability("users.manage");
   const roleRaw = str(fd, "role");
   if (!isRole(roleRaw)) throw new Error("Invalid role.");
   await writeAudit(prisma, {

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { toCents } from "@/lib/money";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type {
@@ -18,7 +18,7 @@ function str(fd: FormData, key: string): string {
 }
 
 export async function createProperty(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   // DB-configured org defaults win over env (Settings -> Organization).
   const app = await getAppSettings();
   const name = str(fd, "name");
@@ -46,7 +46,7 @@ export async function createProperty(fd: FormData): Promise<void> {
 }
 
 export async function createBuilding(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const name = str(fd, "name");
   if (!propertyId || !name) throw new Error("Building name is required.");
@@ -78,7 +78,7 @@ export async function createBuilding(fd: FormData): Promise<void> {
 }
 
 export async function updateBuilding(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const buildingId = str(fd, "buildingId");
   const name = str(fd, "name");
   if (!buildingId || !name) throw new Error("Building name is required.");
@@ -136,7 +136,7 @@ export async function updateBuilding(fd: FormData): Promise<void> {
 }
 
 export async function createUnit(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const buildingId = str(fd, "buildingId") || null;
   const unitNumber = str(fd, "unitNumber");
@@ -178,7 +178,7 @@ export async function createUnit(fd: FormData): Promise<void> {
 }
 
 export async function updateProperty(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const name = str(fd, "name");
   if (!propertyId || !name) throw new Error("Property name is required.");
@@ -252,7 +252,7 @@ export async function setPropertyActive(
   propertyId: string,
   isActive: boolean,
 ): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("properties.manage");
   await prisma.property.update({ where: { id: propertyId }, data: { isActive } });
   await writeAudit(prisma, {
     ...(await auditActor()),

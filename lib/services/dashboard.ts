@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { sumCents } from "@/lib/money";
-import { leaseSnapshot, type LeaseSnapshot } from "@/lib/services/accounting";
+import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { AccountStatus } from "@/lib/accounting";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 
@@ -91,32 +91,26 @@ export async function getDashboard(
     .filter((u) => u.occupancyStatus !== "occupied")
     .reduce((s, u) => s + (typeof u._count === "number" ? u._count : 0), 0);
 
-  const snapshots: { lease: (typeof leases)[number]; snap: LeaseSnapshot }[] = [];
-  for (const lease of leases) {
-    const snap = await leaseSnapshot(
-      lease,
-      lease.unit,
-      now,
-      lease.unit.property.timezone,
-    );
-    snapshots.push({ lease, snap });
-  }
+  const snaps = await batchLeaseSnapshots(leases, now);
 
-  const leaseRows: DashboardLeaseRow[] = snapshots.map(({ lease, snap }) => ({
-    leaseId: lease.id,
-    tenantId: lease.tenantId,
-    tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
-    unitLabel: lease.unit.unitNumber,
-    propertyName: lease.unit.property.name,
-    status: snap.status,
-    netBalanceCents: snap.netBalanceCents,
-    pastDueCents:
-      snap.aging.d1_30 +
-      snap.aging.d31_60 +
-      snap.aging.d61_90 +
-      snap.aging.d90plus,
-    lastPaymentDays: snap.daysSinceLastPayment,
-  }));
+  const leaseRows: DashboardLeaseRow[] = leases.map((lease) => {
+    const snap = snaps.get(lease.id)!;
+    return {
+      leaseId: lease.id,
+      tenantId: lease.tenantId,
+      tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+      unitLabel: lease.unit.unitNumber,
+      propertyName: lease.unit.property.name,
+      status: snap.status,
+      netBalanceCents: snap.netBalanceCents,
+      pastDueCents:
+        snap.aging.d1_30 +
+        snap.aging.d31_60 +
+        snap.aging.d61_90 +
+        snap.aging.d90plus,
+      lastPaymentDays: snap.daysSinceLastPayment,
+    };
+  });
 
   const overdueBalanceCents = sumCents(leaseRows.map((r) => r.pastDueCents));
   const overdueTenants = leaseRows.filter((r) => r.status === "overdue").length;

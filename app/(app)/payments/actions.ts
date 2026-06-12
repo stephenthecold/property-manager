@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import { postPayment, voidPayment } from "@/lib/services/payments";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
@@ -20,7 +20,7 @@ export async function recordPayment(
   _prev: RecordPaymentState,
   fd: FormData,
 ): Promise<RecordPaymentState> {
-  await requireRole("manager");
+  await requireCapability("payments.manage");
   const leaseId = String(fd.get("leaseId") ?? "");
   const amountRaw = String(fd.get("amount") ?? "");
   const idempotencyKey = String(fd.get("idempotencyKey") ?? "");
@@ -87,7 +87,7 @@ export async function recordPayment(
 }
 
 export async function voidPaymentAction(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("payments.manage");
   const paymentId = String(fd.get("paymentId") ?? "");
   const reason = String(fd.get("reason") ?? "").trim() || "Voided by user";
   if (!paymentId) throw new Error("Missing payment id.");

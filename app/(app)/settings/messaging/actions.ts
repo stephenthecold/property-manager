@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { writeAudit } from "@/lib/audit/audit";
 import { prisma } from "@/lib/db";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import {
   getAppSettings,
   resolveSmsProvider,
@@ -31,7 +31,7 @@ export async function saveMessagingAction(
   _prev: MessagingState,
   fd: FormData,
 ): Promise<MessagingState> {
-  await requireRole("admin");
+  await requireCapability("messaging.settings");
 
   const providerRaw = String(fd.get("smsProvider") ?? "");
   const smsProvider =
@@ -96,7 +96,7 @@ export async function sendTestSmsAction(
   _prev: MessagingState,
   fd: FormData,
 ): Promise<MessagingState> {
-  await requireRole("admin");
+  await requireCapability("messaging.settings");
   const to = String(fd.get("testPhone") ?? "").trim();
   if (!to) return { error: "Enter a phone number for the test message." };
 

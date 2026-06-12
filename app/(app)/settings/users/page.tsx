@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { roleRank } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/generated/prisma/enums";
 import { setUserRole, setUserActive, startViewAs } from "./actions";
@@ -15,7 +15,7 @@ const ASSIGNABLE_ROLES = ["viewer", "manager", "finance", "admin"] as const;
 const VIEW_AS_ROLES = ["viewer", "manager", "finance"] as const;
 
 export default async function UsersSettingsPage() {
-  const { dbUser: me } = await requireRole("admin");
+  const { dbUser: me } = await requireCapability("users.manage");
   // Sort by hierarchy (highest first) in JS: the Postgres enum order doesn't
   // match ROLE_ORDER ('finance' was appended by ALTER TYPE ADD VALUE).
   const users = (

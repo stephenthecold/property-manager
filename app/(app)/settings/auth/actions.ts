@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type { Role } from "@/lib/generated/prisma/enums";
-import { auditActor, requireRole } from "@/lib/auth/session";
+import { auditActor, requireCapability } from "@/lib/auth/session";
 import { encryptSecret } from "@/lib/auth/crypto";
 import {
   CLIENT_SECRET_AAD,
@@ -23,7 +23,7 @@ export async function saveOidcSettings(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
-  const { user } = await requireRole("admin");
+  const { user } = await requireCapability("auth.settings");
   // A break-glass session is the IdP bypass; once OIDC has actually been used
   // (any Account row exists) it must NOT be able to repoint auth. Before that —
   // the first-run bootstrap — break-glass is the only session that can exist,
@@ -107,7 +107,7 @@ export async function testConnectionAction(
   _prev: OidcTestResult,
   formData: FormData,
 ): Promise<OidcTestResult> {
-  await requireRole("admin");
+  await requireCapability("auth.settings");
   const issuer = String(formData.get("issuer") ?? "").trim();
   if (!issuer) return { ok: false, error: "Enter an issuer URL first." };
   return testOidcConnection(issuer);
@@ -116,7 +116,7 @@ export async function testConnectionAction(
 export async function disableBreakGlassAction(
   _formData: FormData,
 ): Promise<void> {
-  const { user, dbUser } = await requireRole("admin");
+  const { user, dbUser } = await requireCapability("auth.settings");
   await disableBreakGlass(`manual by ${dbUser.email}`);
   await writeAudit(prisma, {
     ...(await auditActor()),

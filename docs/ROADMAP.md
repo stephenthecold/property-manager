@@ -46,19 +46,36 @@ report filters (property/date range/window), list search & filters (tenants/paym
 and the read-only **audit-log viewer** (`/audit`, admin+). Printable pages stand in for PDF
 generation (no headless-browser dependency); CSV cells are formula-injection-guarded.
 
-Also: a **Settings hub** (owner-only, audited) — Organization (white-label name/logo/receipt
-footer, default tz/currency for new properties) and Messaging (SMS provider with the Twilio
-auth token AES-GCM-encrypted at rest, scheduled-reminder toggles and due-soon window,
-per-type SMS template overrides, test send). DB config wins over env, mirroring AuthSettings.
+Also: a **Settings hub** (audited) — Organization (white-label name/logo/receipt footer,
+default tz/currency, **read-only file-storage status panel**) and Messaging (SMS provider with
+the Twilio auth token AES-GCM-encrypted at rest, scheduled-reminder toggles and due-soon
+window, per-type SMS template overrides, test send). DB config wins over env, mirroring
+AuthSettings.
 
-## Phase 5 — Optional enhancements
+## Phase 4.5 — UX, RBAC, performance & security pass ✅ (built)
 
-Tenant portal, online payments (ACH/card), email reminders, maintenance tickets, lease
-templates/e-sign, QuickBooks export, bank-transaction import.
+- **Tables**: a reusable sortable + paginated `DataTable` (10/20/50 page sizes) across every
+  list; responsive layout from mobile to ultra-wide; colour accents on dashboard stats/tables.
+- **Forms**: add/edit flows moved into pop-out dialogs (`FormDialog`) with the saved values
+  shown on the page; property units shown as a per-building tier list; deposits managed on the
+  lease (non-refundable is a toggle) with a Deposits column on the Leases page.
+- **Role permissions**: an editable capability matrix (`lib/auth/permissions.ts`,
+  Settings → Permissions) layered over the role hierarchy — `requireCapability` /
+  `authorizeApiCapability` enforce it; defaults reproduce the old behaviour.
+- **Performance**: `batchLeaseSnapshots()` collapses the dashboard/report/tenant-list N+1 into
+  two queries; parallelized reads; composite indexes on `LedgerEntry`/`Payment`.
+- **Security**: capability-gated report-export API (closed a ledger-enumeration IDOR) and
+  document detail; `windowDays` clamp; sanitized webhook logging.
 
-## Known Phase-1 simplifications (documented defaults)
+## Phase 5 — Next large phase
+
+See [PHASE5_PLAN.md](./PHASE5_PLAN.md) for the actionable plan. Headline workstreams: tenant
+portal + online payments (ACH/card), email channel, maintenance tickets, DB-overridable
+storage/branding, and the remaining batch-load/perf items from the audit. All attach to
+existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capability layer).
+
+## Known simplifications (documented defaults)
 
 - One currency per property (column exists for multi-currency later).
-- No mid-period proration (full-period rent).
-- One late fee per period (no compounding).
+- One late fee assessment per period (daily-accrual and one-time supported; no compounding).
 - Single organization per deployment (no `organization_id`).

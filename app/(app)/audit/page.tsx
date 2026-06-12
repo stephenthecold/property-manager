@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ export default async function AuditPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Read-only viewer, but the audit trail itself is sensitive: admins/owners only.
-  await requireRole("admin");
+  await requireCapability("audit.view");
 
   const sp = await searchParams;
   const first = (key: string): string => {

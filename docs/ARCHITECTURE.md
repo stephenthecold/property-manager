@@ -45,6 +45,12 @@ prisma/                             # schema, migrations (incl. raw-SQL partial 
   **fails closed**; the DB-backed provider/jwt logic lives in `auth.ts` (Node runtime). The
   JWT role is a *hint*; `requireRole` does an authoritative DB check (+ `securityStamp`
   revocation) for sensitive actions.
+- **Capability layer over roles**: `lib/auth/permissions.ts` maps 13 capabilities to roles.
+  Mutations/sensitive pages call `requireCapability(cap)` (and API routes
+  `authorizeApiCapability`) instead of a bare role. The default matrix exactly reproduces the
+  role hierarchy; an owner/admin can re-assign capabilities per role at Settings → Permissions
+  (stored as a `rolePermissions` override on `AppSettings`, `{}` = defaults). Owner always has
+  all; a few admin capabilities are locked on so a bad matrix can't lock admins out.
 - **Every mutation is audited** in the same transaction (`withAudit` / `writeAudit`).
   `AuditLog` is append-only (DB trigger blocks UPDATE/DELETE).
 

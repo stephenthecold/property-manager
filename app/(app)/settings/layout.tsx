@@ -1,38 +1,40 @@
-import { requireRole, getDisplayRole } from "@/lib/auth/session";
-import { roleAtLeast } from "@/lib/auth/rbac";
+import { redirect } from "next/navigation";
+import { getDisplayRole } from "@/lib/auth/session";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { hasCapability, type Capability } from "@/lib/auth/permissions";
 import { SettingsNav } from "@/components/app/settings-nav";
 
 export const runtime = "nodejs";
+
+const SETTINGS_LINKS: { href: string; label: string; cap: Capability }[] = [
+  { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
+  { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
+  { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
+  { href: "/settings/auth", label: "Authentication", cap: "auth.settings" },
+  { href: "/settings/users", label: "Users", cap: "users.manage" },
+  { href: "/settings/permissions", label: "Permissions", cap: "users.manage" },
+];
 
 export default async function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // finance+ may enter (for Billing); each page enforces its own stricter gate.
-  await requireRole("finance");
   const { actingRole } = await getDisplayRole();
-  const isAdmin = roleAtLeast(actingRole, "admin");
+  const { rolePermissions } = await getAppSettings();
 
-  const links = [
-    { href: "/settings/billing", label: "Billing" },
-    ...(isAdmin
-      ? [
-          { href: "/settings/organization", label: "Organization" },
-          { href: "/settings/messaging", label: "Messaging" },
-          { href: "/settings/auth", label: "Authentication" },
-          { href: "/settings/users", label: "Users" },
-        ]
-      : []),
-  ];
+  // Show only the sections this role can edit; each page re-checks its own gate.
+  const links = SETTINGS_LINKS.filter((l) =>
+    hasCapability(actingRole, l.cap, rolePermissions),
+  );
+  if (links.length === 0) redirect("/dashboard");
 
   return (
     <div className="space-y-4">
       <div className="border-b pb-3">
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Billing rates are editable by finance and above; everything else is
-          admin-only. Every change is audited.
+          You see only the sections your role can edit. Every change is audited.
         </p>
       </div>
       <SettingsNav links={links} />

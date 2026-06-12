@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { fromCents } from "@/lib/money";
-import { leaseSnapshot } from "@/lib/services/accounting";
+import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import {
@@ -30,12 +30,12 @@ export async function getRentRoll(now: Date): Promise<RentRollRow[]> {
     },
     orderBy: [{ unit: { property: { name: "asc" } } }, { unit: { unitNumber: "asc" } }],
   });
-  const rows: RentRollRow[] = [];
-  for (const l of leases) {
-    const s = await leaseSnapshot(l, l.unit, now, l.unit.property.timezone);
+  const snaps = await batchLeaseSnapshots(leases, now);
+  return leases.map((l) => {
+    const s = snaps.get(l.id)!;
     const pastDue =
       s.aging.d1_30 + s.aging.d31_60 + s.aging.d61_90 + s.aging.d90plus;
-    rows.push({
+    return {
       property: l.unit.property.name,
       unit: l.unit.unitNumber,
       tenant:
@@ -46,9 +46,8 @@ export async function getRentRoll(now: Date): Promise<RentRollRow[]> {
       balance: fromCents(s.netBalanceCents),
       pastDue: fromCents(pastDue),
       lastPaidDays: s.daysSinceLastPayment == null ? "" : String(s.daysSinceLastPayment),
-    });
-  }
-  return rows;
+    };
+  });
 }
 
 export async function getOverdue(now: Date): Promise<RentRollRow[]> {

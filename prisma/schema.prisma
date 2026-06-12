@@ -237,6 +237,11 @@ model AppSettings {
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
 
+  // Role -> capability overrides vs. the default hierarchy, e.g.
+  // { "viewer": { "reports.view": true }, "manager": { "payments.manage": false } }.
+  // Empty object == the built-in defaults (see lib/auth/permissions.ts).
+  rolePermissions Json @default("{}")
+
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
   // grace/late-fee terms to existing active leases.
@@ -492,6 +497,7 @@ model LedgerEntry {
   allocationsAsPayment ChargeAllocation[] @relation("PaymentAllocations")
 
   @@index([leaseId, effectiveDate])
+  @@index([leaseId, entryType])
   @@index([tenantId])
   @@index([reversesEntryId])
   // Partial unique indexes (rent_charge & late_fee per lease+period) are added via raw SQL
@@ -542,6 +548,7 @@ model Payment {
   @@index([leaseId])
   @@index([tenantId])
   @@index([paymentDate])
+  @@index([status, paymentDate])
 }
 
 // ---------------------------------------------------------------------------

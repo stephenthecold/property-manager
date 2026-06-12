@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireRole, auditActor } from "@/lib/auth/session";
+import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 
 function str(fd: FormData, key: string): string {
@@ -11,7 +11,7 @@ function str(fd: FormData, key: string): string {
 }
 
 export async function createTenant(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("tenants.manage");
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
   if (!firstName || !lastName) throw new Error("First and last name are required.");
@@ -39,7 +39,7 @@ export async function createTenant(fd: FormData): Promise<void> {
 }
 
 export async function updateTenant(fd: FormData): Promise<void> {
-  await requireRole("manager");
+  await requireCapability("tenants.manage");
   const tenantId = str(fd, "tenantId");
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");

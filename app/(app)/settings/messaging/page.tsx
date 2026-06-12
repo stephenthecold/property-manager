@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireRole } from "@/lib/auth/session";
+import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
@@ -15,7 +15,7 @@ const TEMPLATE_LABELS: Array<{ type: ReminderType; label: string }> = [
 ];
 
 export default async function MessagingSettingsPage() {
-  await requireRole("admin");
+  await requireCapability("messaging.settings");
   const env = getEnv();
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
   const overrides =
