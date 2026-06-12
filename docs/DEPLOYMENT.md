@@ -36,10 +36,28 @@ Two modes; both apply migrations automatically on app start:
 - **Build from source** (default): `git pull && docker compose up -d --build`.
 - **Pulled image**: CI ([`docker-publish.yml`](../.github/workflows/docker-publish.yml)) pushes
   the image to GHCR on every push to main (`:latest`, `:sha-<commit>`) and on `v*` tags. Set
-  `APP_IMAGE=ghcr.io/<owner>/property-manager:latest` in `.env`, then
+  `APP_IMAGE=ghcr.io/<owner>/property-manager:sha-<commit>` in `.env`, then
   `docker compose pull app worker && docker compose up -d`. The deploy host needs no Node and
-  never compiles anything; pin a `:sha-`/version tag instead of `:latest` for controlled
-  rollouts. If the GHCR package is private, `docker login ghcr.io` with a read-only PAT first.
+  never compiles anything. **Pin a `:sha-`/version tag, not `:latest`**: a pinned tag makes
+  rollouts deliberate, rollbacks trivial, and prevents the failure mode where a newer compose
+  file meets an older `:latest` image that was pulled weeks ago. If the GHCR package is
+  private, `docker login ghcr.io` with a read-only PAT first.
+
+### Upgrading across the non-root change
+
+The app and worker now run as the unprivileged `node` user (uid/gid 1000) instead of root.
+Existing installations almost always upgrade cleanly because the entrypoint briefly starts as
+root, repairs the ownership of an uploads volume created by an older (root-running) release,
+and only then drops privileges. Two cases need attention:
+
+- **CIFS/SMB or NFS bind mounts** for uploads must map ownership to uid/gid 1000 — for CIFS
+  add `uid=1000,gid=1000,file_mode=0660,dir_mode=0770` to the mount options in `/etc/fstab`,
+  then `mount -o remount` (or unmount/mount) the share. The container now **refuses to start**
+  with a clear message if the storage directory is not writable by the app user, instead of
+  failing at upload time.
+- **A `user:` override in a custom compose file** would skip the self-heal step; remove it (the
+  entrypoint drops privileges itself) or chown the volume manually once:
+  `docker run --rm -v <project>_uploads:/u alpine chown -R 1000:1000 /u`.
 
 ## Compose profiles
 
@@ -89,6 +107,35 @@ deployment over plain HTTP.
   secret unrecoverable (env-fallback OIDC config still works).
 - KEK rotation: re-encrypt the stored client secret under the new key (decrypt-with-old,
   encrypt-with-new); ciphertext is version-tagged (`oidcSecretKeyVersion`).
+- **`docker compose config` output is sensitive.** It interpolates and prints every secret
+  (`DATABASE_URL` embeds the DB password; `AUTH_SECRET` etc. are resolved). Never paste it
+  into issues, chats, or anything indexed.
+
+### Rotation runbook (after a suspected exposure)
+
+None of these steps touch your data — the database volume and uploaded files are unaffected.
+Take a backup first anyway (`scripts/backup.sh`), then rotate in this order:
+
+1. **DB password** (no data impact): `docker compose exec db psql -U pm -d property_manager -c
+   "ALTER USER pm WITH PASSWORD '<new>';"` then update `POSTGRES_PASSWORD` in `.env` and
+   `docker compose up -d` (recreates app/worker with the new URL).
+2. **`SETUP_BOOTSTRAP_TOKEN`** (no impact unless mid-setup): generate a new value
+   (`openssl rand -hex 32`), update `.env`, `docker compose up -d`.
+3. **`AUTH_SECRET`** (signs session JWTs): new value via `openssl rand -base64 32`, update
+   `.env`, restart. Everyone is signed out once and logs back in; nothing else changes.
+4. **`SETTINGS_ENC_KEY`** (encrypts DB-stored provider secrets): rotating it makes the stored
+   OIDC client secret, Twilio/Telnyx token, and SMTP/OAuth email secrets undecryptable — the
+   app keeps running, but those integrations fail until you re-enter each secret in
+   Settings → Auth / Messaging. Plan a few minutes of messaging downtime: set the new key,
+   restart, then re-paste the provider secrets from their dashboards. Business data, users,
+   leases, payments, and uploads are untouched.
+5. **`STORAGE_ENC_KEY`** (if set): rotation is **irreversible** — there is ONE key slot and
+   no key versioning, so files encrypted under the old key become permanently unreadable
+   after a rotation. If encryption was never
+   enabled, nothing was ever encrypted with the exposed key; simply generate a fresh key
+   (`openssl rand -base64 32`) when you turn `STORAGE_ENCRYPT` on. If encrypted files DO
+   exist, decrypt them first (download via the app while the old key is in place), rotate,
+   and re-upload.
 
 ## Break-glass operations
 
@@ -120,24 +167,41 @@ uploads included; back up the `uploads` volume alongside `db-data`.
 ## File storage on a network share (encrypted)
 
 Uploads can live on a network share while staying encrypted at rest (the bind
-mount below **replaces** the default `uploads` named volume):
+mount **replaces** the default `uploads` named volume — compose merges volume
+mounts by container path):
 
-1. Mount the share on the Docker host (NFS or SMB/CIFS), e.g.
-   `mount -t cifs //nas/property-files /mnt/property-files -o credentials=...`
-   (add it to `/etc/fstab` so it survives reboots).
-2. Bind it into the app + worker containers and point local storage at it — in a
-   compose override:
+1. Mount the share on the Docker host (NFS or SMB/CIFS) and add it to
+   `/etc/fstab` so it survives reboots. The app runs as uid/gid 1000, so CIFS
+   must map ownership:
 
-   ```yaml
-   services:
-     app:
-       volumes: ["/mnt/property-files:/data/uploads"]
-     worker:
-       volumes: ["/mnt/property-files:/data/uploads"]
+   ```
+   //nas/property-files /mnt/property_manager cifs credentials=/root/.smbcreds,uid=1000,gid=1000,file_mode=0660,dir_mode=0770 0 0
    ```
 
-   and in `.env`: `STORAGE_PROVIDER=local`, `LOCAL_STORAGE_DIR=/data/uploads`.
-3. Set `STORAGE_ENCRYPT=true`. New uploads are AES-256-GCM encrypted before they
+2. Use the shipped override ([`docker-compose.nas.example.yml`](../docker-compose.nas.example.yml))
+   via `.env`:
+
+   ```
+   COMPOSE_FILE=docker-compose.yml:docker-compose.nas.example.yml
+   UPLOADS_HOST_PATH=/mnt/property_manager
+   STORAGE_PROVIDER=local
+   LOCAL_STORAGE_DIR=/data/uploads
+   ```
+
+3. **Move existing files first** — the named volume stops being mounted once
+   the override is active:
+
+   ```bash
+   docker compose down app worker
+   docker run --rm -v <project>_uploads:/from -v /mnt/property_manager:/to alpine cp -a /from/. /to/
+   docker compose up -d
+   ```
+
+   (`<project>` is the compose project name, usually the repo directory name —
+   `docker volume ls | grep uploads` shows it.) The entrypoint preflight fails
+   the container with a clear message if the share is missing or not writable
+   by uid 1000, so a broken mount can no longer silently strand uploads.
+4. Set `STORAGE_ENCRYPT=true`. New uploads are AES-256-GCM encrypted before they
    touch the share (the share host never sees plaintext); files uploaded before
    enabling stay readable. The key comes from `STORAGE_ENC_KEY` (32 bytes,
    base64/hex) or, when unset, is derived from `SETTINGS_ENC_KEY` — **back that
@@ -152,6 +216,10 @@ gets a chance to decrypt them.
 - Back up the **app** Postgres volume (`db-data`), the **uploads** volume
   (`uploads` — leases, receipts, the logo), and, separately, the Authentik
   volume if bundled (`authentik-db`) — keep them decoupled.
+- [`scripts/backup.sh`](../scripts/backup.sh) does both in one shot (pg_dump +
+  uploads tarball, named-volume and NAS layouts, retention via
+  `RETENTION_DAYS`); run it from cron on the deploy host:
+  `0 3 * * * cd /opt/property-manager && ./scripts/backup.sh`.
 - Migrations apply automatically on app start (`RUN_MIGRATIONS=1`, single replica). For
   scale-out, move migration to a one-shot job/release step.
 - The `AuditLog` table is append-only at the DB level (a trigger blocks UPDATE/DELETE).
