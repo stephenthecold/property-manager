@@ -17,11 +17,20 @@ overdue detection, a dashboard, and reports.
 - **Reports & audit** — rent roll, overdue, cash income summary, lease expirations,
   payments-by-method, tenant/unit ledgers (CSV + on-screen), list search/filters, and a
   read-only audit-log viewer over the append-only audit trail.
-- **Web-configurable settings** — white-labeling (business name, logo, receipt footer, org
-  defaults) and messaging (SMS provider with encrypted Twilio credentials, reminder behavior,
-  editable message templates, test send) under Settings; owner-only and fully audited.
-- **Self-hosted auth** — Authentik (OIDC) with a web config UI, an installer, and a hardened
-  **break-glass** emergency login for when SSO is unavailable.
+- **Web-configurable settings** — white-labeling (business name, logo — shown in the header,
+  on receipts, and as the favicon — receipt footer, org defaults), messaging (SMS provider
+  with encrypted Twilio credentials, reminder behavior, editable templates, test send), an
+  **editable role-permission matrix**, and **feature module toggles**; fully audited.
+- **Optional modules** — **Financials** (expense log, property mortgage terms, per-property
+  net income/ROI with payoff projections, dashboard profit cards; finance+ only) and
+  **Maintenance** (per-unit job tracker whose completion costs flow into expenses, plus
+  recurring monthly tasks). Disabling a module hides it without deleting data.
+- **Themed UI** — sortable/paginated tables everywhere, pop-out edit dialogs, one-click rent
+  collection from the dashboard, and light/dark gradient themes with a header toggle.
+- **Self-hosted auth** — Authentik (OIDC) with a web config UI, Authentik group→role mapping,
+  an installer, and a hardened **break-glass** emergency login for when SSO is unavailable.
+- **Storage anywhere** — local disk, a mounted network share with **AES-256-GCM encryption at
+  rest**, or S3-compatible object storage.
 - **Runs as Docker Compose** — Postgres + app + billing/reminder worker; Authentik, MinIO, and
   Caddy behind optional profiles.
 
@@ -75,11 +84,13 @@ npm test                   # accounting unit-test matrix
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — stack, directory map, invariants
+- [Architecture](docs/ARCHITECTURE.md) — stack, directory map, invariants, UI layer
 - [Accounting model](docs/accounting.md) — money/ledger/FIFO/late-fee/status rules
-- [Authentik / OIDC setup](docs/AUTHENTIK.md)
-- [Deployment & operations](docs/DEPLOYMENT.md) — TLS, secrets, break-glass, backups
-- [Roadmap](docs/ROADMAP.md) — Phases 2–5 and how they attach to existing groundwork
+- [Authentik / OIDC setup](docs/AUTHENTIK.md) — incl. group→role mapping
+- [Deployment & operations](docs/DEPLOYMENT.md) — TLS, secrets, break-glass, backups,
+  encrypted network-share storage
+- [Roadmap](docs/ROADMAP.md) — what's built (Phases 1–4.7)
+- [Phase 5 plan](docs/PHASE5_PLAN.md) — tenant portal, online payments, email, and more
 
 ## Tech
 

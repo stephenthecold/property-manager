@@ -1,7 +1,8 @@
 # Roadmap
 
-Phases 1–4 are built and runnable. Phase 5 items attach to the same seams
-(`sourceType/sourceId`, provider interfaces, `AuditLog`) without reshaping the schema.
+Phases 1–4.7 are built and deployed. Phase 5 items attach to the same seams
+(`sourceType/sourceId`, provider interfaces, `AuditLog`, the capability layer) without
+reshaping the schema — see [PHASE5_PLAN.md](./PHASE5_PLAN.md).
 
 ## Phase 1 — Core admin app ✅ (built)
 
@@ -87,6 +88,21 @@ AuthSettings.
 - **Encrypted file storage**: `STORAGE_ENCRYPT=true` wraps the local provider with AES-256-GCM
   at rest (network-share friendly; key from `STORAGE_ENC_KEY` or derived from
   `SETTINGS_ENC_KEY`); plaintext files from before stay readable. See DEPLOYMENT.md.
+- **Parcel-level fields**: monthly mortgage + maturity date and the purchase date were moved
+  from `Building` to `Property` (data-preserving migrations: payments summed / earliest date).
+
+## Phase 4.7 — Theming & branding ✅ (built)
+
+- **Two gradient themes** with a header light/dark toggle (next-themes, persisted per
+  browser): "Slate & Sky" (cool blue-gray light) and "Navy Night" (deep navy dark). CSS
+  variables in `app/globals.css`; print media always forces light so receipts/reports never
+  print light-on-paper.
+- **Full control re-skin**: inputs/textareas/native selects get solid themed surfaces via the
+  components + a base-layer rule (no `bg-transparent` bleed-through); bare tables sit on card
+  surfaces; all tinted badges carry `dark:` variants; the Organization/Auth/Messaging settings
+  forms are carded. Verified with a 45-screenshot both-themes sweep.
+- **Branding**: the uploaded business logo shows in the app banner and as a dynamic favicon
+  (`app/icon.tsx`, logo or letter-tile fallback; `favicon.ico` legacy fallback).
 
 ## Phase 5 — Next large phase
 
