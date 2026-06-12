@@ -1,7 +1,10 @@
 # CLAUDE.md
 
-Rental property-management platform. Phase 1 is built and runnable. The original product spec
-is in the repo owner's notes; this file is the working guide. See [`docs/`](docs/) for details.
+Rental property-management platform. Phases 1–4.7 are built and deployed (core app, receipts,
+SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) — see
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for what exists and
+[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. This file is the working
+guide; [`docs/`](docs/) has the details.
 
 ## Commands
 
@@ -47,7 +50,24 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   (Settings → Modules). Module pages `redirect("/dashboard")` and module actions throw via
   `assertModuleEnabled` when off; **disabling only hides UI — never delete module data**.
   `PropertyExpense`/`MaintenanceJob` are operating records, NOT ledger entries: they never
-  touch tenant balances.
+  touch tenant balances. Financing (mortgage) and purchase date are **Property-level** fields.
+
+## UI conventions
+
+- **Lists use [`DataTable`](components/app/data-table.tsx)** (client sort + 10/20/50
+  pagination). The server page renders every cell (links, badges, server-action forms) and
+  passes them in; money sort values cross the boundary as `String(cents)`.
+- **Add/edit forms live in [`FormDialog`](components/app/form-dialog.tsx)** pop-outs (server
+  forms passed as children; closes on submit + refreshes). Keep the saved values visible on
+  the page outside the dialog.
+- **Two themes** via CSS variables in [`app/globals.css`](app/globals.css): `:root` =
+  "Slate & Sky" light, `.dark` = "Navy Night" dark (next-themes class toggle in the header).
+  Rules: never `bg-transparent` on form controls (native selects/textareas are themed by a
+  base-layer rule); every colored tint (`bg-*-100`-style badge) needs `dark:` variants; print
+  always forces light variables. Client components reading the theme must avoid
+  hydration-attribute mismatches (constant labels, mount-gated icons — see `theme-toggle.tsx`).
+- **Branding**: the Settings → Organization logo renders in the header and as the favicon
+  (`app/icon.tsx`, `force-dynamic`).
 
 ## Gotchas
 
@@ -58,6 +78,14 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   so the worker/seed/CLI (plain Node via tsx) can import the data services.
 - Add `export const dynamic = "force-dynamic"` to DB-reading public pages so `next build`
   doesn't prerender them against a DB.
+- **File storage**: `STORAGE_ENCRYPT=true` wraps the LOCAL provider with AES-256-GCM at rest
+  (network-share use; key = `STORAGE_ENC_KEY` or HKDF of `SETTINGS_ENC_KEY` — losing it makes
+  files unrecoverable). `/api/files` decrypts on serve; old plaintext files stay readable.
+  S3 should use bucket SSE instead (presigned URLs bypass the app).
+- Batch accounting reads with `batchLeaseSnapshots()` (2 queries for N leases) instead of
+  calling `leaseSnapshot()` in a loop; both share the same pure compute.
+- One known lint error pre-exists in `record-payment-dialog.tsx`
+  (react-hooks/set-state-in-effect); everything else lints clean.
 
 When extending (Phases 2–5), attach to existing seams (`sourceType/sourceId`, provider
 interfaces, `AuditLog`) rather than reshaping the schema. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
