@@ -455,10 +455,11 @@ export async function addLeaseDeposit(fd: FormData): Promise<void> {
 
   const amountCents = toCents(amountRaw);
   if (amountCents <= 0n) throw new Error("Deposit amount must be positive.");
-  const nonRefundableCents = centsOrNull(str(fd, "nonRefundable")) ?? 0n;
-  if (nonRefundableCents < 0n || nonRefundableCents > amountCents) {
-    throw new Error("Non-refundable portion must be between 0 and the deposit amount.");
-  }
+  // "Non-refundable" is a toggle: the whole deposit is either refundable or not.
+  const nonRefundableCents =
+    fd.get("nonRefundable") === "on" || fd.get("nonRefundable") === "true"
+      ? amountCents
+      : 0n;
 
   await withAudit(
     {
@@ -485,6 +486,7 @@ export async function addLeaseDeposit(fd: FormData): Promise<void> {
   );
 
   revalidatePath(`/tenants/${lease.tenantId}`);
+  revalidatePath("/leases");
 }
 
 export async function removeLeaseDeposit(fd: FormData): Promise<void> {
@@ -516,6 +518,7 @@ export async function removeLeaseDeposit(fd: FormData): Promise<void> {
   );
 
   revalidatePath(`/tenants/${dep.lease.tenantId}`);
+  revalidatePath("/leases");
 }
 
 export async function scheduleRentIncrease(fd: FormData): Promise<void> {
