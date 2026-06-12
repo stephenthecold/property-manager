@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { PaymentMethod, PaymentStatus } from "@/lib/generated/prisma/enums";
+import { voidPaymentAction } from "./actions";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Button } from "@/components/ui/button";
@@ -170,6 +172,7 @@ export default async function PaymentsPage({
           { key: "status", label: "Status" },
           { key: "receipt", label: "Receipt", className: "hidden lg:table-cell" },
           { key: "amount", label: "Amount", align: "right", numeric: true },
+          { key: "action", label: "Action", align: "right", sortable: false },
         ]}
         rows={payments.map((p) => {
           const receipt =
@@ -184,6 +187,7 @@ export default async function PaymentsPage({
               p.status,
               receipt?.receiptNumber ?? null,
               String(p.amountCents),
+              null,
             ],
             cells: [
               p.paymentDate.toLocaleDateString(),
@@ -222,6 +226,35 @@ export default async function PaymentsPage({
               <span key="a" className="tabular-nums">
                 {formatCurrency(p.amountCents, p.lease.unit.property.currency)}
               </span>,
+              // Voiding works regardless of lease status — payments on
+              // terminated/archived leases are only reachable from here (the
+              // tenant page shows history for the ACTIVE lease only).
+              p.status === "posted" ? (
+                <form
+                  key="ac"
+                  action={voidPaymentAction}
+                  className="flex justify-end gap-2"
+                >
+                  <input type="hidden" name="paymentId" value={p.id} />
+                  <input
+                    name="reason"
+                    placeholder="Reason"
+                    className="h-8 w-28 rounded border bg-card px-2 text-xs dark:bg-input/30"
+                    required
+                  />
+                  <ConfirmSubmitButton
+                    variant="outline"
+                    size="sm"
+                    confirmMessage={`Void this ${formatCurrency(p.amountCents, p.lease.unit.property.currency)} payment for ${p.lease.tenant.firstName} ${p.lease.tenant.lastName}? An offsetting reversal is added; the original is kept.`}
+                  >
+                    Void
+                  </ConfirmSubmitButton>
+                </form>
+              ) : (
+                <span key="ac" className="text-xs text-muted-foreground">
+                  —
+                </span>
+              ),
             ],
           };
         })}
