@@ -8,6 +8,7 @@ import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
+import type { FormState } from "@/lib/forms";
 
 const CATEGORIES = ["utilities", "insurance", "maintenance", "taxes", "other"] as const;
 
@@ -15,18 +16,26 @@ function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
 }
 
-export async function createExpenseAction(fd: FormData): Promise<void> {
+export async function createExpenseAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   const { dbUser } = await requireCapability("financials.manage");
   await assertModuleEnabled("financials");
 
   const categoryRaw = str(fd, "category");
   if (!(CATEGORIES as readonly string[]).includes(categoryRaw)) {
-    throw new Error("Choose an expense category.");
+    return { error: "Choose an expense category." };
   }
   const category = categoryRaw as ExpenseCategory;
 
-  const amountCents = toCents(str(fd, "amount"));
-  if (amountCents <= 0n) throw new Error("Expense amount must be positive.");
+  let amountCents: bigint;
+  try {
+    amountCents = toCents(str(fd, "amount"));
+  } catch {
+    return { error: "Enter a valid amount (e.g. 125.00)." };
+  }
+  if (amountCents <= 0n) return { error: "Expense amount must be positive." };
 
   // Attribution: lease wins (derives unit+property), then unit (derives
   // property), else the selected property.
@@ -44,31 +53,33 @@ export async function createExpenseAction(fd: FormData): Promise<void> {
       where: { id: leaseId },
       include: { unit: true },
     });
-    if (!lease) throw new Error("Lease not found.");
+    if (!lease) return { error: "Lease not found." };
     resolvedLeaseId = lease.id;
     unitId = lease.unitId;
     buildingId = lease.unit.buildingId;
     propertyId = lease.unit.propertyId;
   } else if (unitIdRaw) {
     const unit = await prisma.unit.findUnique({ where: { id: unitIdRaw } });
-    if (!unit) throw new Error("Unit not found.");
+    if (!unit) return { error: "Unit not found." };
     unitId = unit.id;
     buildingId = unit.buildingId;
     propertyId = unit.propertyId;
   } else if (propertyIdRaw) {
     propertyId = propertyIdRaw;
   } else {
-    throw new Error("Pick a property, unit, or lease for the expense.");
+    return { error: "Pick a property, unit, or lease for the expense." };
   }
 
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) return { error: "Property not found." };
 
   const dateRaw = str(fd, "incurredOn");
   const incurredOn = dateRaw
     ? parseDateOnlyInZone(dateRaw, property.timezone)
     : new Date();
-  if (dateRaw && !incurredOn) throw new Error("Date must be a valid date (YYYY-MM-DD).");
+  if (dateRaw && !incurredOn) {
+    return { error: "Date must be a valid date (YYYY-MM-DD)." };
+  }
 
   await withAudit(
     {
@@ -101,6 +112,7 @@ export async function createExpenseAction(fd: FormData): Promise<void> {
 
   revalidatePath("/financials");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function deleteExpenseAction(fd: FormData): Promise<void> {

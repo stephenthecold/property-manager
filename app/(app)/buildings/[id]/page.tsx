@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateBuilding } from "../../properties/actions";
-import { Button } from "@/components/ui/button";
+import { ActionForm } from "@/components/app/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +45,12 @@ export default async function BuildingDetail({
           <CardTitle className="text-base">Edit building</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={updateBuilding} className="space-y-3 max-w-lg">
+          <ActionForm
+            action={updateBuilding}
+            submitLabel="Save changes"
+            successMessage="Building saved."
+            className="space-y-3 max-w-lg"
+          >
             <input type="hidden" name="buildingId" value={building.id} />
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
@@ -68,10 +73,7 @@ export default async function BuildingDetail({
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" defaultValue={building.notes ?? ""} />
             </div>
-            <Button type="submit" size="sm">
-              Save changes
-            </Button>
-          </form>
+          </ActionForm>
         </CardContent>
       </Card>
     </div>

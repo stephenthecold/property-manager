@@ -295,24 +295,21 @@ export default async function MaintenancePage({
                         triggerSize="xs"
                         title="Complete job"
                         description={j.title}
+                        action={completeJobAction}
+                        submitLabel="Mark completed"
                       >
-                        <form action={completeJobAction} className="space-y-3">
-                          <input type="hidden" name="jobId" value={j.id} />
-                          <div className="space-y-2">
-                            <Label htmlFor={`cost-${j.id}`}>
-                              Cost (optional — logs a maintenance expense)
-                            </Label>
-                            <Input
-                              id={`cost-${j.id}`}
-                              name="cost"
-                              inputMode="decimal"
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <Button type="submit" size="sm">
-                            Mark completed
-                          </Button>
-                        </form>
+                        <input type="hidden" name="jobId" value={j.id} />
+                        <div className="space-y-2">
+                          <Label htmlFor={`cost-${j.id}`}>
+                            Cost (optional — logs a maintenance expense)
+                          </Label>
+                          <Input
+                            id={`cost-${j.id}`}
+                            name="cost"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                          />
+                        </div>
                       </FormDialog>
                       <form action={deleteJobAction} className="inline">
                         <input type="hidden" name="jobId" value={j.id} />

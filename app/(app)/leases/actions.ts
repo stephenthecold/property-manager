@@ -14,6 +14,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { parseDepositRows } from "@/lib/leases/deposits";
 import { DateTime } from "luxon";
 import type { LateFeeType, LeaseStatus } from "@/lib/generated/prisma/enums";
+import type { FormState } from "@/lib/forms";
 
 /**
  * Validation failures are RETURNED, never thrown: a thrown error in a server
@@ -355,21 +356,29 @@ export async function createLease(
  * day is locked once anything has been billed — periodKeys derive from it, so
  * changing it would re-key (and re-bill) every elapsed period.
  */
-export async function updateLease(fd: FormData): Promise<void> {
+export async function updateLease(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
-  if (!leaseId) throw new Error("Missing lease id.");
+  if (!leaseId) return { error: "Missing lease id." };
   const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) return { error: "Lease not found." };
 
   const rentRaw = str(fd, "rentAmount");
-  if (!rentRaw) throw new Error("Monthly rent is required.");
-  const rentAmountCents = toCents(rentRaw);
-  if (rentAmountCents <= 0n) throw new Error("Monthly rent must be positive.");
+  if (!rentRaw) return { error: "Monthly rent is required." };
+  let rentAmountCents: bigint;
+  try {
+    rentAmountCents = toCents(rentRaw);
+  } catch {
+    return { error: "Monthly rent must be a valid amount (e.g. 1200.00)." };
+  }
+  if (rentAmountCents <= 0n) return { error: "Monthly rent must be positive." };
 
   const dueDay = Number(str(fd, "dueDay") || String(lease.dueDay));
   if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
-    throw new Error("Due day must be between 1 and 31.");
+    return { error: "Due day must be between 1 and 31." };
   }
   if (dueDay !== lease.dueDay) {
     const charged = await prisma.ledgerEntry.findFirst({
@@ -377,26 +386,40 @@ export async function updateLease(fd: FormData): Promise<void> {
       select: { id: true },
     });
     if (charged) {
-      throw new Error(
-        "The due day cannot be changed once rent has been charged — period " +
+      return {
+        error:
+          "The due day cannot be changed once rent has been charged — period " +
           "identity derives from it, and changing it would re-bill every past " +
           "period. End this lease and create a new one instead.",
-      );
+      };
     }
   }
   const gracePeriodDays = Number(str(fd, "gracePeriodDays") || "0");
   if (!Number.isInteger(gracePeriodDays) || gracePeriodDays < 0) {
-    throw new Error("Grace period must be 0 or more days.");
+    return { error: "Grace period must be 0 or more days." };
   }
 
+  let lateFeeTerms: ReturnType<typeof parseLateFeeTerms>;
+  try {
+    lateFeeTerms = parseLateFeeTerms(fd);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Invalid late-fee terms." };
+  }
   const { lateFeeType, lateFeeAmountCents, lateFeeBps, lateFeeMaxCents } =
-    parseLateFeeTerms(fd);
+    lateFeeTerms;
 
   const internetEnabled = fd.get("internetEnabled") === "on";
   const internetFeeRaw = str(fd, "internetFee");
-  if (!internetFeeRaw) throw new Error("Internet fee is required (enter 0 for none).");
-  const internetFeeCents = toCents(internetFeeRaw);
-  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
+  if (!internetFeeRaw) {
+    return { error: "Internet fee is required (enter 0 for none)." };
+  }
+  let internetFeeCents: bigint;
+  try {
+    internetFeeCents = toCents(internetFeeRaw);
+  } catch {
+    return { error: "Internet fee must be a valid amount (e.g. 25.00)." };
+  }
+  if (internetFeeCents < 0n) return { error: "Internet fee cannot be negative." };
 
   const data = {
     rentAmountCents,
@@ -445,6 +468,7 @@ export async function updateLease(fd: FormData): Promise<void> {
   revalidatePath(`/tenants/${lease.tenantId}`);
   revalidatePath(`/units/${lease.unitId}`);
   revalidatePath("/leases");
+  return { ok: true };
 }
 
 /**
@@ -453,25 +477,28 @@ export async function updateLease(fd: FormData): Promise<void> {
  * renewal should be scheduled separately as a rent increase so period pricing
  * stays historically correct.
  */
-export async function renewLease(fd: FormData): Promise<void> {
+export async function renewLease(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
-  if (!leaseId) throw new Error("Missing lease id.");
+  if (!leaseId) return { error: "Missing lease id." };
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
     include: { unit: { include: { property: true } } },
   });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) return { error: "Lease not found." };
   if (lease.status === "ended") {
-    throw new Error("This lease has ended — create a new lease instead.");
+    return { error: "This lease has ended — create a new lease instead." };
   }
 
   const tz = lease.unit.property.timezone;
   const endRaw = str(fd, "endDate");
   const endDate = endRaw ? parseDateOnlyInZone(endRaw, tz) : null;
-  if (endRaw && !endDate) throw new Error("End date must be a valid date.");
+  if (endRaw && !endDate) return { error: "End date must be a valid date." };
   if (endDate && endDate <= lease.startDate) {
-    throw new Error("End date must be after the lease start date.");
+    return { error: "End date must be after the lease start date." };
   }
   const statusRaw = str(fd, "status");
   const status =
@@ -499,17 +526,21 @@ export async function renewLease(fd: FormData): Promise<void> {
   revalidatePath(`/tenants/${lease.tenantId}`);
   revalidatePath(`/units/${lease.unitId}`);
   revalidatePath("/leases");
+  return { ok: true };
 }
 
-export async function addCoTenant(fd: FormData): Promise<void> {
+export async function addCoTenant(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const tenantId = str(fd, "tenantId");
-  if (!leaseId || !tenantId) throw new Error("Choose a tenant to add.");
+  if (!leaseId || !tenantId) return { error: "Choose a tenant to add." };
   const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) return { error: "Lease not found." };
   if (lease.tenantId === tenantId) {
-    throw new Error("That tenant is already the primary tenant on this lease.");
+    return { error: "That tenant is already the primary tenant on this lease." };
   }
 
   try {
@@ -527,13 +558,14 @@ export async function addCoTenant(fd: FormData): Promise<void> {
     );
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      throw new Error("That tenant is already on this lease.");
+      return { error: "That tenant is already on this lease." };
     }
     throw e;
   }
 
   revalidatePath(`/tenants/${lease.tenantId}`);
   revalidatePath(`/tenants/${tenantId}`);
+  return { ok: true };
 }
 
 export async function removeCoTenant(fd: FormData): Promise<void> {
@@ -564,19 +596,27 @@ export async function removeCoTenant(fd: FormData): Promise<void> {
   revalidatePath(`/tenants/${row.tenantId}`);
 }
 
-export async function addLeaseDeposit(fd: FormData): Promise<void> {
+export async function addLeaseDeposit(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const label = str(fd, "label");
   const amountRaw = str(fd, "amount");
   if (!leaseId || !label || !amountRaw) {
-    throw new Error("Deposit label and amount are required.");
+    return { error: "Deposit label and amount are required." };
   }
   const lease = await prisma.lease.findUnique({ where: { id: leaseId } });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) return { error: "Lease not found." };
 
-  const amountCents = toCents(amountRaw);
-  if (amountCents <= 0n) throw new Error("Deposit amount must be positive.");
+  let amountCents: bigint;
+  try {
+    amountCents = toCents(amountRaw);
+  } catch {
+    return { error: "Deposit amount must be a valid amount (e.g. 500.00)." };
+  }
+  if (amountCents <= 0n) return { error: "Deposit amount must be positive." };
   // "Non-refundable" is a toggle: the whole deposit is either refundable or not.
   const nonRefundableCents =
     fd.get("nonRefundable") === "on" || fd.get("nonRefundable") === "true"
@@ -609,6 +649,7 @@ export async function addLeaseDeposit(fd: FormData): Promise<void> {
 
   revalidatePath(`/tenants/${lease.tenantId}`);
   revalidatePath("/leases");
+  return { ok: true };
 }
 
 export async function removeLeaseDeposit(fd: FormData): Promise<void> {
@@ -643,30 +684,38 @@ export async function removeLeaseDeposit(fd: FormData): Promise<void> {
   revalidatePath("/leases");
 }
 
-export async function scheduleRentIncrease(fd: FormData): Promise<void> {
+export async function scheduleRentIncrease(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("leases.manage");
   const leaseId = str(fd, "leaseId");
   const amountRaw = str(fd, "newRentAmount");
   const dateRaw = str(fd, "effectiveDate");
   if (!leaseId || !amountRaw || !dateRaw) {
-    throw new Error("New rent amount and effective date are required.");
+    return { error: "New rent amount and effective date are required." };
   }
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
     include: { unit: { include: { property: true } } },
   });
-  if (!lease) throw new Error("Lease not found.");
+  if (!lease) return { error: "Lease not found." };
   if (lease.status !== "active" && lease.status !== "month_to_month") {
-    throw new Error("Rent increases can only be scheduled on active leases.");
+    return { error: "Rent increases can only be scheduled on active leases." };
   }
 
-  const newRent = toCents(amountRaw);
-  if (newRent <= 0n) throw new Error("New rent must be greater than zero.");
+  let newRent: bigint;
+  try {
+    newRent = toCents(amountRaw);
+  } catch {
+    return { error: "New rent must be a valid amount (e.g. 1300.00)." };
+  }
+  if (newRent <= 0n) return { error: "New rent must be greater than zero." };
   const tz = lease.unit.property.timezone;
   const effectiveDate = parseDateOnlyInZone(dateRaw, tz);
-  if (!effectiveDate) throw new Error("Effective date must be a valid date.");
+  if (!effectiveDate) return { error: "Effective date must be a valid date." };
   if (daysBetween(new Date(), effectiveDate, tz) < 0) {
-    throw new Error("Effective date must be today or later.");
+    return { error: "Effective date must be today or later." };
   }
   // Already-charged periods are immutable (append-only ledger + idempotency
   // index), so an increase dated into a charged period could never apply to it.
@@ -679,9 +728,9 @@ export async function scheduleRentIncrease(fd: FormData): Promise<void> {
     select: { periodKey: true },
   });
   if (lastCharged?.periodKey && effectiveKey <= lastCharged.periodKey) {
-    throw new Error(
-      `Rent through the period due ${lastCharged.periodKey} has already been charged; choose a later effective date.`,
-    );
+    return {
+      error: `Rent through the period due ${lastCharged.periodKey} has already been charged; choose a later effective date.`,
+    };
   }
 
   await withAudit(
@@ -717,6 +766,7 @@ export async function scheduleRentIncrease(fd: FormData): Promise<void> {
   revalidatePath(`/tenants/${lease.tenantId}`);
   revalidatePath(`/units/${lease.unitId}`);
   revalidatePath("/leases");
+  return { ok: true };
 }
 
 export async function cancelRentIncrease(fd: FormData): Promise<void> {

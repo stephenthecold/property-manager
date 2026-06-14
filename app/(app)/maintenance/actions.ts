@@ -8,6 +8,7 @@ import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
+import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -124,17 +125,29 @@ export async function createJobAction(fd: FormData): Promise<void> {
   revalidate(unitId);
 }
 
-export async function completeJobAction(fd: FormData): Promise<void> {
+export async function completeJobAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   const { dbUser } = await requireCapability("maintenance.manage");
   await assertModuleEnabled("maintenance");
   const id = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
-  if (!job) throw new Error("Job not found.");
-  if (job.status === "completed") return; // double-submit no-op
+  if (!job) return { error: "Job not found." };
+  if (job.status === "completed") return { ok: true }; // double-submit no-op
 
   const costRaw = str(fd, "cost");
-  const costCents = costRaw ? toCents(costRaw) : null;
-  if (costCents != null && costCents < 0n) throw new Error("Cost cannot be negative.");
+  let costCents: bigint | null = null;
+  if (costRaw) {
+    try {
+      costCents = toCents(costRaw);
+    } catch {
+      return { error: "Cost must be a valid amount (e.g. 150.00)." };
+    }
+  }
+  if (costCents != null && costCents < 0n) {
+    return { error: "Cost cannot be negative." };
+  }
 
   await withAudit(
     {
@@ -173,6 +186,7 @@ export async function completeJobAction(fd: FormData): Promise<void> {
   revalidate(job.unitId);
   revalidatePath("/financials");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function reopenJobAction(fd: FormData): Promise<void> {
