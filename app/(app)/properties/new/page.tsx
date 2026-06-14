@@ -1,7 +1,7 @@
 import { createProperty } from "../actions";
 import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
-import { Button } from "@/components/ui/button";
+import { ActionForm } from "@/components/app/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +19,12 @@ export default async function NewPropertyPage() {
           <CardTitle>Add property</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={createProperty} className="space-y-4">
+          <ActionForm
+            action={createProperty}
+            submitLabel="Create property"
+            submitSize="default"
+            className="space-y-4"
+          >
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input id="name" name="name" required />
@@ -56,8 +61,7 @@ export default async function NewPropertyPage() {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" />
             </div>
-            <Button type="submit">Create property</Button>
-          </form>
+          </ActionForm>
         </CardContent>
       </Card>
     </div>

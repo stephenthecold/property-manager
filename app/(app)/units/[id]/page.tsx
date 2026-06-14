@@ -119,9 +119,14 @@ export default async function UnitDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Unit details</CardTitle>
-          <FormDialog trigger="Edit unit" title="Edit unit" wide>
-            <form action={updateUnit} className="space-y-3">
-              <input type="hidden" name="unitId" value={unit.id} />
+          <FormDialog
+            trigger="Edit unit"
+            title="Edit unit"
+            wide
+            action={updateUnit}
+            submitLabel="Save changes"
+          >
+            <input type="hidden" name="unitId" value={unit.id} />
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="unitNumber">Unit number</Label>
@@ -247,14 +252,10 @@ export default async function UnitDetail({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" name="notes" defaultValue={unit.notes ?? ""} />
-              </div>
-              <Button type="submit" size="sm">
-                Save changes
-              </Button>
-            </form>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea id="notes" name="notes" defaultValue={unit.notes ?? ""} />
+            </div>
           </FormDialog>
         </CardHeader>
         <CardContent>

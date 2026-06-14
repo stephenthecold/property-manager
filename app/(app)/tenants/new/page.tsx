@@ -1,6 +1,6 @@
 import { createTenant } from "../actions";
 import { requireCapability } from "@/lib/auth/session";
-import { Button } from "@/components/ui/button";
+import { ActionForm } from "@/components/app/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +17,12 @@ export default async function NewTenantPage() {
           <CardTitle>Add tenant</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={createTenant} className="space-y-4">
+          <ActionForm
+            action={createTenant}
+            submitLabel="Create tenant"
+            submitSize="default"
+            className="space-y-4"
+          >
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First name</Label>
@@ -60,8 +65,7 @@ export default async function NewTenantPage() {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" />
             </div>
-            <Button type="submit">Create tenant</Button>
-          </form>
+          </ActionForm>
         </CardContent>
       </Card>
     </div>

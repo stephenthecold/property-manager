@@ -12,17 +12,29 @@ import type {
   OccupancyStatus,
   UnitType,
 } from "@/lib/generated/prisma/enums";
+import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
 }
 
-export async function createProperty(fd: FormData): Promise<void> {
+/** "" → null; a non-numeric entry → the "invalid" sentinel (caller errors). */
+function numOrNull(fd: FormData, key: string): number | null | "invalid" {
+  const v = str(fd, key);
+  if (!v) return null;
+  const n = Number(v.replace(/[,\s]/g, ""));
+  return Number.isFinite(n) ? n : "invalid";
+}
+
+export async function createProperty(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   // DB-configured org defaults win over env (Settings -> Organization).
   const app = await getAppSettings();
   const name = str(fd, "name");
-  if (!name) throw new Error("Property name is required.");
+  if (!name) return { error: "Property name is required." };
   const property = await prisma.property.create({
     data: {
       name,
@@ -45,13 +57,16 @@ export async function createProperty(fd: FormData): Promise<void> {
   redirect(`/properties/${property.id}`);
 }
 
-export async function createBuilding(fd: FormData): Promise<void> {
+export async function createBuilding(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const name = str(fd, "name");
-  if (!propertyId || !name) throw new Error("Building name is required.");
+  if (!propertyId || !name) return { error: "Building name is required." };
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) return { error: "Property not found." };
   const building = await prisma.building.create({
     data: {
       propertyId,
@@ -67,18 +82,22 @@ export async function createBuilding(fd: FormData): Promise<void> {
     after: { name, propertyId },
   });
   revalidatePath(`/properties/${propertyId}`);
+  return { ok: true };
 }
 
-export async function updateBuilding(fd: FormData): Promise<void> {
+export async function updateBuilding(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   const buildingId = str(fd, "buildingId");
   const name = str(fd, "name");
-  if (!buildingId || !name) throw new Error("Building name is required.");
+  if (!buildingId || !name) return { error: "Building name is required." };
   const building = await prisma.building.findUnique({
     where: { id: buildingId },
     include: { property: true },
   });
-  if (!building) throw new Error("Building not found.");
+  if (!building) return { error: "Building not found." };
 
   await withAudit(
     {
@@ -115,35 +134,50 @@ export async function updateBuilding(fd: FormData): Promise<void> {
 
   revalidatePath(`/properties/${building.propertyId}`);
   revalidatePath(`/buildings/${building.id}`);
+  return { ok: true };
 }
 
-export async function createUnit(fd: FormData): Promise<void> {
+export async function createUnit(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const buildingId = str(fd, "buildingId") || null;
   const unitNumber = str(fd, "unitNumber");
-  if (!propertyId || !unitNumber) throw new Error("Unit number is required.");
+  if (!propertyId || !unitNumber) return { error: "Unit number is required." };
   if (buildingId) {
     const building = await prisma.building.findUnique({ where: { id: buildingId } });
     if (!building || building.propertyId !== propertyId) {
-      throw new Error("Building does not belong to this property.");
+      return { error: "Building does not belong to this property." };
     }
   }
   const rent = str(fd, "defaultRent");
   const internetFeeRaw = str(fd, "internetFee");
-  const internetFeeCents = internetFeeRaw
-    ? toCents(internetFeeRaw)
-    : (await getAppSettings()).billing.internetFeeCents;
-  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
+  let internetFeeCents: bigint;
+  let defaultRentAmountCents: bigint;
+  try {
+    internetFeeCents = internetFeeRaw
+      ? toCents(internetFeeRaw)
+      : (await getAppSettings()).billing.internetFeeCents;
+    defaultRentAmountCents = rent ? toCents(rent) : 0n;
+  } catch {
+    return { error: "Rent and internet fee must be valid amounts (e.g. 1200.00)." };
+  }
+  if (internetFeeCents < 0n) return { error: "Internet fee cannot be negative." };
+  const bedrooms = numOrNull(fd, "bedrooms");
+  if (bedrooms === "invalid") return { error: "Bedrooms must be a number." };
+  const bathrooms = numOrNull(fd, "bathrooms");
+  if (bathrooms === "invalid") return { error: "Bathrooms must be a number." };
   const unit = await prisma.unit.create({
     data: {
       propertyId,
       buildingId,
       unitNumber,
       unitType: (str(fd, "unitType") || "apartment") as UnitType,
-      bedrooms: fd.get("bedrooms") ? Number(fd.get("bedrooms")) : null,
-      bathrooms: fd.get("bathrooms") ? Number(fd.get("bathrooms")) : null,
-      defaultRentAmountCents: rent ? toCents(rent) : 0n,
+      bedrooms,
+      bathrooms,
+      defaultRentAmountCents,
       occupancyStatus: (str(fd, "occupancyStatus") || "vacant") as OccupancyStatus,
       internetEnabled: fd.get("internetEnabled") === "on",
       internetFeeCents,
@@ -157,72 +191,78 @@ export async function createUnit(fd: FormData): Promise<void> {
     after: { unitNumber, propertyId },
   });
   revalidatePath(`/properties/${propertyId}`);
+  return { ok: true };
 }
 
-export async function updateProperty(fd: FormData): Promise<void> {
+export async function updateProperty(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   const propertyId = str(fd, "propertyId");
   const name = str(fd, "name");
-  if (!propertyId || !name) throw new Error("Property name is required.");
+  if (!propertyId || !name) return { error: "Property name is required." };
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) throw new Error("Property not found.");
+  if (!property) return { error: "Property not found." };
 
   const timezone = str(fd, "timezone") || property.timezone;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone });
   } catch {
-    throw new Error(`Unknown IANA timezone: ${timezone}`);
+    return { error: `Unknown IANA timezone: ${timezone}` };
   }
   // An invalid ISO-4217 code would make formatCurrency throw on every page
   // that renders money for this property — validate like the timezone.
   const currency = (str(fd, "currency") || property.currency).toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
-    throw new Error(`Currency must be a 3-letter ISO 4217 code, got: ${currency}`);
+    return { error: `Currency must be a 3-letter ISO 4217 code, got: ${currency}` };
   }
   try {
     new Intl.NumberFormat("en-US", { style: "currency", currency });
   } catch {
-    throw new Error(`Unknown ISO 4217 currency code: ${currency}`);
+    return { error: `Unknown ISO 4217 currency code: ${currency}` };
   }
 
   // Financing (Financials module): monthly mortgage payment + maturity date.
   const mortgageRaw = str(fd, "monthlyMortgage");
-  let monthlyMortgageCents: bigint | null = null;
-  if (mortgageRaw) {
-    monthlyMortgageCents = toCents(mortgageRaw);
-    if (monthlyMortgageCents < 0n) throw new Error("Mortgage cannot be negative.");
-    if (monthlyMortgageCents === 0n) monthlyMortgageCents = null;
-  }
-  // Yearly fixed costs (Financials module): spread as /12 monthly columns there.
   const insuranceRaw = str(fd, "yearlyInsurance");
-  let yearlyInsuranceCents: bigint | null = null;
-  if (insuranceRaw) {
-    yearlyInsuranceCents = toCents(insuranceRaw);
-    if (yearlyInsuranceCents < 0n) {
-      throw new Error("Yearly insurance cannot be negative.");
-    }
-  }
   const propertyTaxRaw = str(fd, "yearlyPropertyTax");
+  let monthlyMortgageCents: bigint | null = null;
+  let yearlyInsuranceCents: bigint | null = null;
   let yearlyPropertyTaxCents: bigint | null = null;
-  if (propertyTaxRaw) {
-    yearlyPropertyTaxCents = toCents(propertyTaxRaw);
-    if (yearlyPropertyTaxCents < 0n) {
-      throw new Error("Yearly property taxes cannot be negative.");
-    }
+  try {
+    if (mortgageRaw) monthlyMortgageCents = toCents(mortgageRaw);
+    if (insuranceRaw) yearlyInsuranceCents = toCents(insuranceRaw);
+    if (propertyTaxRaw) yearlyPropertyTaxCents = toCents(propertyTaxRaw);
+  } catch {
+    return {
+      error:
+        "Mortgage, insurance, and taxes must be valid amounts (e.g. 1500.00).",
+    };
   }
+  if (
+    (monthlyMortgageCents != null && monthlyMortgageCents < 0n) ||
+    (yearlyInsuranceCents != null && yearlyInsuranceCents < 0n) ||
+    (yearlyPropertyTaxCents != null && yearlyPropertyTaxCents < 0n)
+  ) {
+    return { error: "Mortgage, insurance, and taxes cannot be negative." };
+  }
+  // Yearly fixed costs spread as /12 monthly columns in Financials; a zero
+  // mortgage is treated as "none".
+  if (monthlyMortgageCents === 0n) monthlyMortgageCents = null;
   const maturityRaw = str(fd, "mortgageMaturityDate");
   const mortgageMaturityDate = maturityRaw
     ? parseDateOnlyInZone(maturityRaw, timezone)
     : null;
   if (maturityRaw && !mortgageMaturityDate) {
-    throw new Error("Mortgage maturity date must be a valid date (YYYY-MM-DD).");
+    return { error: "Mortgage maturity date must be a valid date (YYYY-MM-DD)." };
   }
   const purchaseRaw = str(fd, "purchaseDate");
   const purchaseDate = purchaseRaw
     ? parseDateOnlyInZone(purchaseRaw, timezone)
     : null;
   if (purchaseRaw && !purchaseDate) {
-    throw new Error("Purchase date must be a valid date (YYYY-MM-DD).");
+    return { error: "Purchase date must be a valid date (YYYY-MM-DD)." };
   }
 
   const data = {
@@ -279,6 +319,7 @@ export async function updateProperty(fd: FormData): Promise<void> {
   revalidatePath(`/properties/${property.id}`);
   revalidatePath("/properties");
   revalidatePath("/financials");
+  return { ok: true };
 }
 
 export async function setPropertyActive(

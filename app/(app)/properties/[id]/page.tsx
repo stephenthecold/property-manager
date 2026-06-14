@@ -8,7 +8,6 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { createBuilding, createUnit, updateProperty } from "../actions";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,9 +164,14 @@ export default async function PropertyDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Property details</CardTitle>
-          <FormDialog trigger="Edit property" title="Edit property" wide>
-            <form action={updateProperty} className="space-y-3">
-              <input type="hidden" name="propertyId" value={property.id} />
+          <FormDialog
+            trigger="Edit property"
+            title="Edit property"
+            wide
+            action={updateProperty}
+            submitLabel="Save property"
+          >
+            <input type="hidden" name="propertyId" value={property.id} />
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="pname">Name</Label>
@@ -301,14 +305,10 @@ export default async function PropertyDetail({
                 />
                 <Label htmlFor="pactive">Active property</Label>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Changing the timezone affects how future due dates and periods are
-                computed; already-billed periods are unchanged.
-              </p>
-              <Button type="submit" size="sm">
-                Save property
-              </Button>
-            </form>
+            <p className="text-xs text-muted-foreground">
+              Changing the timezone affects how future due dates and periods are
+              computed; already-billed periods are unchanged.
+            </p>
           </FormDialog>
         </CardHeader>
         <CardContent>
@@ -393,23 +393,30 @@ export default async function PropertyDetail({
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Units by building</CardTitle>
           <div className="flex gap-2">
-            <FormDialog trigger="Add building" title="Add building">
-              <form action={createBuilding} className="space-y-3">
-                <input type="hidden" name="propertyId" value={property.id} />
-                <div className="space-y-2">
-                  <Label htmlFor="bname">Name</Label>
-                  <Input id="bname" name="name" placeholder="Building A" required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bdesc">Description</Label>
-                  <Input id="bdesc" name="description" />
-                </div>
-                <Button type="submit" size="sm">Add building</Button>
-              </form>
+            <FormDialog
+              trigger="Add building"
+              title="Add building"
+              action={createBuilding}
+              submitLabel="Add building"
+            >
+              <input type="hidden" name="propertyId" value={property.id} />
+              <div className="space-y-2">
+                <Label htmlFor="bname">Name</Label>
+                <Input id="bname" name="name" placeholder="Building A" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bdesc">Description</Label>
+                <Input id="bdesc" name="description" />
+              </div>
             </FormDialog>
-            <FormDialog trigger="Add unit" triggerVariant="default" title="Add unit">
-              <form action={createUnit} className="space-y-3">
-                <input type="hidden" name="propertyId" value={property.id} />
+            <FormDialog
+              trigger="Add unit"
+              triggerVariant="default"
+              title="Add unit"
+              action={createUnit}
+              submitLabel="Add unit"
+            >
+              <input type="hidden" name="propertyId" value={property.id} />
                 <div className="space-y-2">
                   <Label htmlFor="unitNumber">Unit number</Label>
                   <Input id="unitNumber" name="unitNumber" placeholder="Apt 101" required />
@@ -481,8 +488,6 @@ export default async function PropertyDetail({
                     defaultValue={fromCents(billing.internetFeeCents)}
                   />
                 </div>
-                <Button type="submit" size="sm">Add unit</Button>
-              </form>
             </FormDialog>
           </div>
         </CardHeader>

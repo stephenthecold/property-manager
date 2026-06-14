@@ -42,6 +42,7 @@ import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { ChangeHistory } from "@/components/app/change-history";
 import { FormDialog } from "@/components/app/form-dialog";
+import { ActionForm } from "@/components/app/action-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -375,35 +376,32 @@ export default async function TenantDetail({
                       trigger="Schedule rent increase"
                       title="Schedule rent increase"
                       description="Applies to rent charges due on or after the effective date; past periods keep their historical pricing."
+                      action={scheduleRentIncrease}
+                      submitLabel="Schedule"
                     >
-                      <form action={scheduleRentIncrease} className="space-y-3">
-                        <input type="hidden" name="leaseId" value={activeLease.id} />
-                        <div className="space-y-2">
-                          <Label htmlFor="newRentAmount">New monthly rent</Label>
-                          <Input
-                            id="newRentAmount"
-                            name="newRentAmount"
-                            inputMode="decimal"
-                            placeholder="New monthly rent"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="effectiveDate">Effective date</Label>
-                          <Input
-                            id="effectiveDate"
-                            name="effectiveDate"
-                            type="date"
-                            min={DateTime.fromJSDate(now, {
-                              zone: activeLease.unit.property.timezone,
-                            }).toFormat("yyyy-MM-dd")}
-                            required
-                          />
-                        </div>
-                        <Button type="submit" size="sm">
-                          Schedule
-                        </Button>
-                      </form>
+                      <input type="hidden" name="leaseId" value={activeLease.id} />
+                      <div className="space-y-2">
+                        <Label htmlFor="newRentAmount">New monthly rent</Label>
+                        <Input
+                          id="newRentAmount"
+                          name="newRentAmount"
+                          inputMode="decimal"
+                          placeholder="New monthly rent"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="effectiveDate">Effective date</Label>
+                        <Input
+                          id="effectiveDate"
+                          name="effectiveDate"
+                          type="date"
+                          min={DateTime.fromJSDate(now, {
+                            zone: activeLease.unit.property.timezone,
+                          }).toFormat("yyyy-MM-dd")}
+                          required
+                        />
+                      </div>
                     </FormDialog>
                   </div>
                 )}
@@ -425,40 +423,37 @@ export default async function TenantDetail({
                   trigger="Extend / renew"
                   title="Extend / renew lease"
                   description="Clear the date for an open-ended term. For a new rate on re-signing, schedule a rent increase so past periods keep their historical pricing."
+                  action={renewLease}
+                  submitLabel="Extend / renew"
                 >
-                  <form action={renewLease} className="space-y-3">
-                    <input type="hidden" name="leaseId" value={activeLease.id} />
-                    <div className="space-y-2">
-                      <Label htmlFor="leaseEndDate">New end date</Label>
-                      <Input
-                        id="leaseEndDate"
-                        name="endDate"
-                        type="date"
-                        defaultValue={
-                          activeLease.endDate
-                            ? DateTime.fromJSDate(activeLease.endDate, {
-                                zone: activeLease.unit.property.timezone,
-                              }).toFormat("yyyy-MM-dd")
-                            : ""
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="leaseStatus">Status</Label>
-                      <select
-                        id="leaseStatus"
-                        name="status"
-                        defaultValue={activeLease.status}
-                        className="h-9 w-full rounded-md border px-3 text-sm"
-                      >
-                        <option value="active">Active</option>
-                        <option value="month_to_month">Month-to-month</option>
-                      </select>
-                    </div>
-                    <Button type="submit" size="sm">
-                      Extend / renew
-                    </Button>
-                  </form>
+                  <input type="hidden" name="leaseId" value={activeLease.id} />
+                  <div className="space-y-2">
+                    <Label htmlFor="leaseEndDate">New end date</Label>
+                    <Input
+                      id="leaseEndDate"
+                      name="endDate"
+                      type="date"
+                      defaultValue={
+                        activeLease.endDate
+                          ? DateTime.fromJSDate(activeLease.endDate, {
+                              zone: activeLease.unit.property.timezone,
+                            }).toFormat("yyyy-MM-dd")
+                          : ""
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="leaseStatus">Status</Label>
+                    <select
+                      id="leaseStatus"
+                      name="status"
+                      defaultValue={activeLease.status}
+                      className="h-9 w-full rounded-md border px-3 text-sm"
+                    >
+                      <option value="active">Active</option>
+                      <option value="month_to_month">Month-to-month</option>
+                    </select>
+                  </div>
                 </FormDialog>
               </div>
 
@@ -500,32 +495,29 @@ export default async function TenantDetail({
                     triggerSize="xs"
                     title="Add co-tenant"
                     description="Co-tenants share this lease's ledger; the primary tenant stays the billing contact."
+                    action={addCoTenant}
+                    submitLabel="Add co-tenant"
                   >
-                    <form action={addCoTenant} className="space-y-3">
-                      <input type="hidden" name="leaseId" value={activeLease.id} />
-                      <div className="space-y-2">
-                        <Label htmlFor="coTenantId">Tenant</Label>
-                        <select
-                          id="coTenantId"
-                          name="tenantId"
-                          defaultValue=""
-                          required
-                          className="h-9 w-full rounded-md border px-3 text-sm"
-                        >
-                          <option value="" disabled>
-                            Select tenant…
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <div className="space-y-2">
+                      <Label htmlFor="coTenantId">Tenant</Label>
+                      <select
+                        id="coTenantId"
+                        name="tenantId"
+                        defaultValue=""
+                        required
+                        className="h-9 w-full rounded-md border px-3 text-sm"
+                      >
+                        <option value="" disabled>
+                          Select tenant…
+                        </option>
+                        {addableCoTenants.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.lastName}, {t.firstName}
                           </option>
-                          {addableCoTenants.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.lastName}, {t.firstName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <Button type="submit" size="sm">
-                        Add co-tenant
-                      </Button>
-                    </form>
+                        ))}
+                      </select>
+                    </div>
                   </FormDialog>
                 )}
                 {!isPrimaryOnActive && (
@@ -571,8 +563,14 @@ export default async function TenantDetail({
                   title="Edit lease (billing terms)"
                   description="Changes affect future charges only — already-billed periods never change. For a date-effective rate change, use a scheduled rent increase instead of editing the rent here."
                   wide
+                  staticContent
                 >
-                  <form action={updateLease} className="space-y-3">
+                  <ActionForm
+                    action={updateLease}
+                    submitLabel="Save lease"
+                    successMessage="Lease updated."
+                    className="space-y-3"
+                  >
                     <input type="hidden" name="leaseId" value={activeLease.id} />
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
@@ -710,10 +708,7 @@ export default async function TenantDetail({
                         defaultValue={activeLease.notes ?? ""}
                       />
                     </div>
-                    <Button type="submit" size="sm">
-                      Save lease
-                    </Button>
-                  </form>
+                  </ActionForm>
 
                   <div className="mt-4 space-y-3 border-t pt-4">
                     <p className="text-sm font-medium">Additional deposits</p>
@@ -753,8 +748,10 @@ export default async function TenantDetail({
                         </li>
                       )}
                     </ul>
-                    <form
+                    <ActionForm
                       action={addLeaseDeposit}
+                      submitLabel="Add deposit"
+                      successMessage="Deposit added."
                       className="flex flex-wrap items-end gap-2"
                     >
                       <input type="hidden" name="leaseId" value={activeLease.id} />
@@ -791,10 +788,7 @@ export default async function TenantDetail({
                         />
                         Non-refundable
                       </label>
-                      <Button type="submit" variant="outline" size="sm">
-                        Add deposit
-                      </Button>
-                    </form>
+                    </ActionForm>
                     <p className="text-xs text-muted-foreground">
                       The security deposit is part of the lease terms above; track
                       extra deposits (pet, key, …) here. Non-refundable marks the
@@ -1054,8 +1048,13 @@ export default async function TenantDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Tenant details</CardTitle>
-          <FormDialog trigger="Edit tenant" title="Edit tenant" wide>
-            <form action={updateTenant} className="space-y-3">
+          <FormDialog
+            trigger="Edit tenant"
+            title="Edit tenant"
+            wide
+            action={updateTenant}
+            submitLabel="Save tenant"
+          >
             <input type="hidden" name="tenantId" value={tenant.id} />
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
@@ -1162,10 +1161,6 @@ export default async function TenantDetail({
               <Label htmlFor="tenantNotes">Notes</Label>
               <Textarea id="tenantNotes" name="notes" defaultValue={tenant.notes ?? ""} />
             </div>
-              <Button type="submit" size="sm">
-                Save tenant
-              </Button>
-            </form>
           </FormDialog>
         </CardHeader>
         <CardContent>

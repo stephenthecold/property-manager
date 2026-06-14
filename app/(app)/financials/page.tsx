@@ -100,9 +100,14 @@ export default async function FinancialsPage({
           </p>
         </div>
         {canManage && (
-          <FormDialog trigger="Log expense" triggerVariant="default" title="Log expense">
-            <form action={createExpenseAction} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+          <FormDialog
+            trigger="Log expense"
+            triggerVariant="default"
+            title="Log expense"
+            action={createExpenseAction}
+            submitLabel="Log expense"
+          >
+            <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="exCategory">Category</Label>
                   <select
@@ -181,14 +186,10 @@ export default async function FinancialsPage({
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="exDesc">Description</Label>
-                <Input id="exDesc" name="description" placeholder="June water bill" />
-              </div>
-              <Button type="submit" size="sm">
-                Log expense
-              </Button>
-            </form>
+            <div className="space-y-2">
+              <Label htmlFor="exDesc">Description</Label>
+              <Input id="exDesc" name="description" placeholder="June water bill" />
+            </div>
           </FormDialog>
         )}
       </div>

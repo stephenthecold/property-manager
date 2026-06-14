@@ -10,6 +10,7 @@ import {
   invitePortalAccount,
   setPortalAccountActive,
 } from "@/lib/services/portal-auth";
+import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -20,11 +21,16 @@ function parsePreferredMethod(raw: string): PaymentMethod | null {
   return raw in PaymentMethod ? (raw as PaymentMethod) : null;
 }
 
-export async function createTenant(fd: FormData): Promise<void> {
+export async function createTenant(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("tenants.manage");
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
-  if (!firstName || !lastName) throw new Error("First and last name are required.");
+  if (!firstName || !lastName) {
+    return { error: "First and last name are required." };
+  }
   const tenant = await prisma.tenant.create({
     data: {
       firstName,
@@ -48,16 +54,19 @@ export async function createTenant(fd: FormData): Promise<void> {
   redirect(`/tenants/${tenant.id}`);
 }
 
-export async function updateTenant(fd: FormData): Promise<void> {
+export async function updateTenant(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("tenants.manage");
   const tenantId = str(fd, "tenantId");
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
   if (!tenantId || !firstName || !lastName) {
-    throw new Error("First and last name are required.");
+    return { error: "First and last name are required." };
   }
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant) throw new Error("Tenant not found.");
+  if (!tenant) return { error: "Tenant not found." };
 
   const data = {
     firstName,
@@ -101,6 +110,7 @@ export async function updateTenant(fd: FormData): Promise<void> {
 
   revalidatePath(`/tenants/${tenant.id}`);
   revalidatePath("/tenants");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

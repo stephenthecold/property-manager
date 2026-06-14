@@ -10,6 +10,7 @@ import type {
   OccupancyStatus,
   UnitType,
 } from "@/lib/generated/prisma/enums";
+import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -30,40 +31,65 @@ function numOrNull(
   return n;
 }
 
-export async function updateUnit(fd: FormData): Promise<void> {
+export async function updateUnit(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
   await requireCapability("properties.manage");
   const unitId = str(fd, "unitId");
   const unitNumber = str(fd, "unitNumber");
-  if (!unitId || !unitNumber) throw new Error("Unit number is required.");
+  if (!unitId || !unitNumber) return { error: "Unit number is required." };
 
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) throw new Error("Unit not found.");
+  if (!unit) return { error: "Unit not found." };
 
   const buildingId = str(fd, "buildingId") || null;
   if (buildingId) {
     const building = await prisma.building.findUnique({ where: { id: buildingId } });
     if (!building || building.propertyId !== unit.propertyId) {
-      throw new Error("Building does not belong to this property.");
+      return { error: "Building does not belong to this property." };
     }
   }
 
   const internetEnabled = fd.get("internetEnabled") === "on";
   const internetFeeRaw = str(fd, "internetFee");
-  if (!internetFeeRaw) throw new Error("Internet fee is required (enter 0 for none).");
-  const internetFeeCents = toCents(internetFeeRaw);
-  if (internetFeeCents < 0n) throw new Error("Internet fee cannot be negative.");
-
+  if (!internetFeeRaw) {
+    return { error: "Internet fee is required (enter 0 for none)." };
+  }
   const rentRaw = str(fd, "defaultRent");
-  if (!rentRaw) throw new Error("Default rent is required (enter 0 for none).");
+  if (!rentRaw) return { error: "Default rent is required (enter 0 for none)." };
+
+  // numOrNull and toCents throw on malformed input — surface the message inline
+  // rather than letting it become the opaque error page.
+  let internetFeeCents: bigint;
+  let defaultRentAmountCents: bigint;
+  let bedrooms: number | null;
+  let bathrooms: number | null;
+  let squareFeet: number | null;
+  try {
+    internetFeeCents = toCents(internetFeeRaw);
+    defaultRentAmountCents = toCents(rentRaw);
+    bedrooms = numOrNull(fd, "bedrooms", { integer: true, label: "Bedrooms" });
+    bathrooms = numOrNull(fd, "bathrooms", { label: "Bathrooms" });
+    squareFeet = numOrNull(fd, "squareFeet", { integer: true, label: "Square feet" });
+  } catch (e) {
+    return {
+      error:
+        e instanceof Error ? e.message : "Check the rent and unit detail fields.",
+    };
+  }
+  if (internetFeeCents < 0n) {
+    return { error: "Internet fee cannot be negative." };
+  }
   const data = {
     unitNumber,
     buildingId,
     unitType: (str(fd, "unitType") || "apartment") as UnitType,
     occupancyStatus: (str(fd, "occupancyStatus") || "vacant") as OccupancyStatus,
-    bedrooms: numOrNull(fd, "bedrooms", { integer: true, label: "Bedrooms" }),
-    bathrooms: numOrNull(fd, "bathrooms", { label: "Bathrooms" }),
-    squareFeet: numOrNull(fd, "squareFeet", { integer: true, label: "Square feet" }),
-    defaultRentAmountCents: toCents(rentRaw),
+    bedrooms,
+    bathrooms,
+    squareFeet,
+    defaultRentAmountCents,
     internetEnabled,
     internetFeeCents,
     notes: str(fd, "notes") || null,
@@ -112,6 +138,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
 
   revalidatePath(`/units/${unit.id}`);
   revalidatePath(`/properties/${unit.propertyId}`);
+  return { ok: true };
 }
 
 export async function deleteUnit(fd: FormData): Promise<void> {
