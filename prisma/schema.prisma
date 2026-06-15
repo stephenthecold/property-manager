@@ -1063,9 +1063,42 @@ model RentalApplication {
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
 
-  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  property         Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  unit             Unit?             @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  backgroundChecks BackgroundCheck[]
 
   @@index([status, createdAt])
   @@index([unitId])
+}
+
+enum BackgroundCheckStatus {
+  pending // requested; awaiting the provider's decision (async providers)
+  clear // no adverse records
+  consider // adverse records — needs manual (adverse-action) review
+  failed // provider could not complete the check
+  canceled // staff canceled before completion
+}
+
+// Tenant-screening result for a rental application. Operating record only —
+// never a ledger entry, never linked to balances. PII-light: stores a normalized
+// decision + short summary, not raw report contents. See
+// lib/providers/background-check and lib/services/background-check.ts.
+model BackgroundCheck {
+  id            String                @id @default(cuid())
+  applicationId String
+  provider      String // provider name at request time (e.g. "stub")
+  status        BackgroundCheckStatus @default(pending)
+  externalId    String? // provider's reference id for this screening
+  summary       String? // short human-readable finding (no raw PII)
+  reportUrl     String? // link to the provider-hosted report, if any
+  resultJson    Json? // normalized result payload from the provider
+  requestedBy   String? // staff user id who requested (mirrors handledBy)
+  requestedAt   DateTime              @default(now())
+  completedAt   DateTime? // set when the status becomes terminal
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  application RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt])
 }
