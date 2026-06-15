@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { getDashboard } from "@/lib/services/dashboard";
+import { getDashboard, getVacancyOutlook } from "@/lib/services/dashboard";
 import { getProfitSnapshot } from "@/lib/services/financials";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/app/data-table";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,9 +88,10 @@ export default async function DashboardPage() {
   const canCollect = hasCapability(actingRole, "payments.manage", settings.rolePermissions);
   const showProfit = canFinance && settings.modules.financials;
 
-  const [d, profit] = await Promise.all([
+  const [d, profit, vacancies] = await Promise.all([
     getDashboard(now),
     showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
+    getVacancyOutlook(now),
   ]);
   // Fixed monthly costs = mortgage + insurance + taxes (yearly figures /12).
   const fixedCostsMonthlyCents = profit
@@ -169,6 +171,84 @@ export default async function DashboardPage() {
           </>
         )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Vacancy outlook
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              {vacancies.length}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            emptyMessage="No vacant or upcoming-vacant units."
+            columns={[
+              { key: "unit", label: "Unit" },
+              { key: "property", label: "Property", className: "hidden md:table-cell" },
+              { key: "available", label: "Available" },
+              {
+                key: "tenant",
+                label: "Current tenant",
+                className: "hidden sm:table-cell",
+              },
+              { key: "rent", label: "Rent", align: "right", numeric: true },
+            ]}
+            rows={vacancies.map((r) => {
+              const dateLabel = r.availableNow
+                ? "Now"
+                : r.availableOn
+                  ? r.availableOn.toLocaleDateString("en-US", {
+                      timeZone: r.timezone,
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—";
+              return {
+                key: r.unitId,
+                sortValues: [
+                  r.unitLabel,
+                  r.propertyName,
+                  // available-now sorts first; then by date
+                  r.availableNow ? 0 : (r.availableOn?.getTime() ?? 0),
+                  r.currentTenantName ?? "",
+                  String(r.rentCents),
+                ],
+                cells: [
+                  <Link
+                    key="u"
+                    href={`/units/${r.unitId}`}
+                    className="font-medium hover:underline"
+                  >
+                    {r.unitLabel}
+                    {r.buildingName ? (
+                      <span className="text-muted-foreground"> · {r.buildingName}</span>
+                    ) : null}
+                  </Link>,
+                  <span key="p" className="text-muted-foreground">
+                    {r.propertyName}
+                  </span>,
+                  r.availableNow ? (
+                    <Badge key="a">Now</Badge>
+                  ) : (
+                    <span key="a" className="tabular-nums">
+                      {dateLabel}
+                    </span>
+                  ),
+                  <span key="t" className="text-muted-foreground">
+                    {r.currentTenantName ?? "—"}
+                  </span>,
+                  <span key="r" className="tabular-nums">
+                    {formatCurrency(r.rentCents)}
+                  </span>,
+                ],
+              };
+            })}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

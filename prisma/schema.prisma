@@ -426,6 +426,10 @@ model Unit {
   squareFeet             Int?
   defaultRentAmountCents BigInt          @default(0)
   occupancyStatus        OccupancyStatus @default(vacant)
+  // Expected date the unit becomes available (manual override). When unset,
+  // upcoming vacancy is derived from the active lease's endDate. Drives the
+  // dashboard vacancy outlook — see lib/units/vacancy.ts.
+  availableFromDate      DateTime?
   // Internet add-on DEFAULT for new leases on this unit (billing is
   // controlled by the lease's own internet fields).
   internetEnabled        Boolean         @default(false)

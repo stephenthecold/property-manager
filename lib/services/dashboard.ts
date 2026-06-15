@@ -3,6 +3,7 @@ import { sumCents } from "@/lib/money";
 import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { AccountStatus } from "@/lib/accounting";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
+import { compareVacancy, computeVacancy } from "@/lib/units/vacancy";
 
 export interface DashboardLeaseRow {
   leaseId: string;
@@ -34,6 +35,76 @@ export interface DashboardData {
     paymentDate: Date;
     method: string;
   }[];
+}
+
+export interface VacancyRow {
+  unitId: string;
+  unitLabel: string;
+  propertyName: string;
+  /** Property timezone, for date-only formatting of availableOn. */
+  timezone: string;
+  buildingName: string | null;
+  /** Available right now (currently not occupied). */
+  availableNow: boolean;
+  /** Future availability date, or null when availableNow. */
+  availableOn: Date | null;
+  /** Current tenant for an upcoming (still-occupied) vacancy; null otherwise. */
+  currentTenantName: string | null;
+  /** Default/asking rent for the unit. */
+  rentCents: bigint;
+}
+
+/**
+ * Units that are vacant now or have a known upcoming vacancy, soonest first.
+ * Bridges Prisma → the pure `computeVacancy`; never re-implements the logic.
+ */
+export async function getVacancyOutlook(
+  now: Date,
+  propertyId?: string,
+): Promise<VacancyRow[]> {
+  const units = await prisma.unit.findMany({
+    where: propertyId ? { propertyId } : {},
+    include: {
+      property: { select: { name: true, timezone: true } },
+      building: { select: { name: true } },
+      leases: {
+        where: { status: { in: ["active", "month_to_month"] } },
+        select: { endDate: true, tenant: { select: { firstName: true, lastName: true } } },
+        orderBy: { startDate: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  return units
+    .map((u) => {
+      const lease = u.leases[0] ?? null;
+      const vac = computeVacancy(
+        {
+          occupancyStatus: u.occupancyStatus,
+          availableFromDate: u.availableFromDate,
+          activeLeaseEndDate: lease?.endDate ?? null,
+        },
+        now,
+      );
+      return { u, lease, vac };
+    })
+    .filter(({ vac }) => vac.listed)
+    .sort((a, b) => compareVacancy(a.vac, b.vac))
+    .map(({ u, lease, vac }) => ({
+      unitId: u.id,
+      unitLabel: u.unitNumber,
+      propertyName: u.property.name,
+      timezone: u.property.timezone,
+      buildingName: u.building?.name ?? null,
+      availableNow: vac.availableNow,
+      availableOn: vac.availableOn,
+      currentTenantName:
+        vac.state === "upcoming" && lease?.tenant
+          ? `${lease.tenant.firstName} ${lease.tenant.lastName}`
+          : null,
+      rentCents: u.defaultRentAmountCents,
+    }));
 }
 
 function monthStart(now: Date): Date {
