@@ -148,7 +148,7 @@ type SnapshotLease = Pick<Lease, "id" | "status" | "gracePeriodDays">;
 /** Full financial snapshot for a lease, given its unit (for occupancy/status). */
 export async function leaseSnapshot(
   lease: Lease,
-  unit: Pick<Unit, "occupancyStatus">,
+  unit: Pick<Unit, "serviceStatus">,
   now: Date,
   tz: string,
 ): Promise<LeaseSnapshot> {
@@ -162,7 +162,7 @@ export async function leaseSnapshot(
  * single-lease path so balance math stays identical.
  */
 export async function batchLeaseSnapshots<
-  L extends SnapshotLease & { unit: Pick<Unit, "occupancyStatus"> & { property: { timezone: string } } },
+  L extends SnapshotLease & { unit: Pick<Unit, "serviceStatus"> & { property: { timezone: string } } },
 >(leases: L[], now: Date): Promise<Map<string, LeaseSnapshot>> {
   const result = new Map<string, LeaseSnapshot>();
   if (leases.length === 0) return result;
@@ -235,7 +235,7 @@ export async function batchLeaseSnapshots<
  */
 export function snapshotFromAccounting(
   lease: SnapshotLease,
-  unit: Pick<Unit, "occupancyStatus">,
+  unit: Pick<Unit, "serviceStatus">,
   now: Date,
   tz: string,
   { entries, charges, allocatedByCharge }: LeaseAccounting,
@@ -259,8 +259,20 @@ export function snapshotFromAccounting(
   const hasActiveLease =
     lease.status === "active" || lease.status === "month_to_month";
 
+  // Occupancy is DERIVED, never stored. An active lease ALWAYS means occupied
+  // (occupancy wins over serviceability — a leased unit pulled for repairs is
+  // still occupied); only when un-leased does serviceability classify it. (The
+  // status logic special-cases "vacant", so this keeps it correct.)
+  const occupancy = hasActiveLease
+    ? "occupied"
+    : unit.serviceStatus === "maintenance"
+      ? "maintenance"
+      : unit.serviceStatus === "unavailable"
+        ? "unavailable"
+        : "vacant";
+
   const status = deriveStatus({
-    occupancy: unit.occupancyStatus,
+    occupancy,
     hasActiveLease,
     currentPeriodOutstandingCents: currentOutstanding,
     currentPeriodPaidCents: currentPaid,

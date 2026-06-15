@@ -23,7 +23,7 @@ beforeAll(async () => {
     data: { id: propertyId, name: `${P} Property`, timezone: "America/Chicago" },
   });
   await prisma.unit.create({
-    data: { id: unitId, propertyId, unitNumber: "1", occupancyStatus: "occupied" },
+    data: { id: unitId, propertyId, unitNumber: "1", serviceStatus: "in_service" },
   });
   await prisma.tenant.create({
     data: { id: tenantId, firstName: "Test", lastName: P },

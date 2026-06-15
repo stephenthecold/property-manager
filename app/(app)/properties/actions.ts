@@ -9,7 +9,7 @@ import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type {
-  OccupancyStatus,
+  ServiceStatus,
   UnitType,
 } from "@/lib/generated/prisma/enums";
 import type { FormState } from "@/lib/forms";
@@ -178,7 +178,7 @@ export async function createUnit(
       bedrooms,
       bathrooms,
       defaultRentAmountCents,
-      occupancyStatus: (str(fd, "occupancyStatus") || "vacant") as OccupancyStatus,
+      serviceStatus: (str(fd, "serviceStatus") || "in_service") as ServiceStatus,
       internetEnabled: fd.get("internetEnabled") === "on",
       internetFeeCents,
     },

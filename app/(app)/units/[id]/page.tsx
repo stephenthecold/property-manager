@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const runtime = "nodejs";
 
 const UNIT_TYPES = ["apartment", "house", "duplex", "storage", "commercial", "other"];
-const OCC = ["vacant", "occupied", "maintenance", "unavailable"];
+const SERVICE = ["in_service", "maintenance", "unavailable"];
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -57,24 +57,48 @@ export default async function UnitDetail({
     : null;
   const currency = unit.property.currency;
 
+  const hasActiveLease = !!lease;
   const vacancy = computeVacancy(
     {
-      occupancyStatus: unit.occupancyStatus,
+      serviceStatus: unit.serviceStatus,
       availableFromDate: unit.availableFromDate,
       activeLeaseEndDate: lease?.endDate ?? null,
+      hasActiveLease,
     },
     new Date(),
   );
-  const availabilityLabel = vacancy.availableNow
-    ? "Available now"
-    : vacancy.availableOn
-      ? `Available ${vacancy.availableOn.toLocaleDateString("en-US", {
-          timeZone: unit.property.timezone,
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        })}`
-      : "Occupied";
+  const fmtAvail = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      timeZone: unit.property.timezone,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  const availabilityLabel =
+    vacancy.state === "occupied"
+      ? "Occupied"
+      : vacancy.state === "vacant"
+        ? "Available now"
+        : vacancy.state === "upcoming" && vacancy.availableOn
+          ? `Available ${fmtAvail(vacancy.availableOn)}`
+          : vacancy.state === "maintenance"
+            ? vacancy.availableOn
+              ? `Maintenance — until ${fmtAvail(vacancy.availableOn)}`
+              : "Maintenance"
+            : vacancy.state === "unavailable"
+              ? vacancy.availableOn
+                ? `Unavailable — until ${fmtAvail(vacancy.availableOn)}`
+                : "Unavailable"
+              : "—";
+  // Occupancy is lease-derived; serviceability is the manual field. Showing them
+  // separately means they can never contradict (the old "doubling").
+  const occupancyLabel = hasActiveLease ? "Occupied" : "Vacant";
+  const subtitleState =
+    vacancy.state === "maintenance"
+      ? "Maintenance"
+      : vacancy.state === "unavailable"
+        ? "Unavailable"
+        : occupancyLabel;
 
   const { modules } = await getAppSettings();
   const openJobs = modules.maintenance
@@ -92,7 +116,7 @@ export default async function UnitDetail({
         </h1>
         <p className="text-muted-foreground capitalize">
           {unit.building?.name ? `${unit.building.name} · ` : ""}
-          {unit.unitType} · {unit.occupancyStatus} ·{" "}
+          {unit.unitType} · {subtitleState} ·{" "}
           {formatCurrency(unit.defaultRentAmountCents, currency)} default rent
           {unit.internetEnabled
             ? ` · internet default +${formatCurrency(unit.internetFeeCents, currency)}/mo`
@@ -189,19 +213,22 @@ export default async function UnitDetail({
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="occupancyStatus">Occupancy</Label>
+                  <Label htmlFor="serviceStatus">Service status</Label>
                   <select
-                    id="occupancyStatus"
-                    name="occupancyStatus"
-                    defaultValue={unit.occupancyStatus}
+                    id="serviceStatus"
+                    name="serviceStatus"
+                    defaultValue={unit.serviceStatus}
                     className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                   >
-                    {OCC.map((t) => (
+                    {SERVICE.map((t) => (
                       <option key={t} value={t}>
-                        {t}
+                        {t.replace(/_/g, " ")}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-muted-foreground">
+                    Occupancy is set automatically from the active lease.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="availableFromDate">Available from</Label>
@@ -303,9 +330,10 @@ export default async function UnitDetail({
               label="Type"
               value={<span className="capitalize">{unit.unitType}</span>}
             />
+            <Field label="Occupancy" value={occupancyLabel} />
             <Field
-              label="Occupancy"
-              value={<span className="capitalize">{unit.occupancyStatus}</span>}
+              label="Service status"
+              value={<span className="capitalize">{unit.serviceStatus.replace(/_/g, " ")}</span>}
             />
             <Field label="Availability" value={availabilityLabel} />
             <Field label="Building" value={unit.building?.name ?? "—"} />
@@ -375,8 +403,8 @@ export default async function UnitDetail({
         <CardContent>
           {unit._count.leases > 0 ? (
             <p className="text-sm text-muted-foreground">
-              This unit has lease history and cannot be deleted. Set its occupancy to
-              &ldquo;unavailable&rdquo; instead.
+              This unit has lease history and cannot be deleted. Set its service
+              status to &ldquo;unavailable&rdquo; instead.
             </p>
           ) : (
             <form action={deleteUnit} className="flex items-center justify-between gap-4">

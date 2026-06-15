@@ -25,7 +25,7 @@ import { ChangeHistory } from "@/components/app/change-history";
 export const runtime = "nodejs";
 
 const UNIT_TYPES = ["apartment", "house", "duplex", "storage", "commercial", "other"];
-const OCC = ["vacant", "occupied", "maintenance", "unavailable"];
+const SERVICE = ["in_service", "maintenance", "unavailable"];
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -95,6 +95,15 @@ export default async function PropertyDetail({
 
   const unitRow = (u: (typeof property.units)[number]) => {
     const tenant = u.leases[0]?.tenant;
+    // Occupancy is lease-derived; serviceability comes from the manual field.
+    const occupancyLabel =
+      u.leases.length > 0
+        ? "occupied"
+        : u.serviceStatus === "maintenance"
+          ? "maintenance"
+          : u.serviceStatus === "unavailable"
+            ? "unavailable"
+            : "vacant";
     return (
       <TableRow key={u.id}>
         <TableCell className="pl-8">
@@ -104,7 +113,7 @@ export default async function PropertyDetail({
         </TableCell>
         <TableCell className="hidden capitalize sm:table-cell">{u.unitType}</TableCell>
         <TableCell>
-          <span className={occupancyClass(u.occupancyStatus)}>{u.occupancyStatus}</span>
+          <span className={occupancyClass(occupancyLabel)}>{occupancyLabel}</span>
         </TableCell>
         <TableCell>
           {tenant ? (
@@ -452,15 +461,15 @@ export default async function PropertyDetail({
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="occupancyStatus">Occupancy</Label>
+                    <Label htmlFor="serviceStatus">Service status</Label>
                     <select
-                      id="occupancyStatus"
-                      name="occupancyStatus"
+                      id="serviceStatus"
+                      name="serviceStatus"
                       className="h-9 w-full rounded-md border px-3 text-sm capitalize"
                     >
-                      {OCC.map((t) => (
+                      {SERVICE.map((t) => (
                         <option key={t} value={t}>
-                          {t}
+                          {t.replace(/_/g, " ")}
                         </option>
                       ))}
                     </select>

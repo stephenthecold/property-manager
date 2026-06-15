@@ -39,9 +39,10 @@ enum UnitType {
   other
 }
 
-enum OccupancyStatus {
-  vacant
-  occupied
+// Manual serviceability of a unit. Occupancy ("leased or not") is derived from
+// the active Lease, never stored — so a unit can't show two contradictory states.
+enum ServiceStatus {
+  in_service
   maintenance
   unavailable
 }
@@ -430,7 +431,11 @@ model Unit {
   bathrooms              Float?
   squareFeet             Int?
   defaultRentAmountCents BigInt          @default(0)
-  occupancyStatus        OccupancyStatus @default(vacant)
+  // Serviceability axis (MANUAL): is the unit intentionally out of service?
+  // Occupancy ("is it leased") is NOT stored here — it is DERIVED from whether
+  // the unit has an active/month_to_month Lease (the authoritative source). This
+  // split avoids the old occupancyStatus doubling. See lib/units/vacancy.ts.
+  serviceStatus          ServiceStatus   @default(in_service)
   // Expected date the unit becomes available (manual override). When unset,
   // upcoming vacancy is derived from the active lease's endDate. Drives the
   // dashboard vacancy outlook — see lib/units/vacancy.ts.
