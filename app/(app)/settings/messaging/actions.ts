@@ -115,16 +115,12 @@ export async function saveComplianceAction(
 
   const privacyPolicyUrl = str(fd, "privacyPolicyUrl");
   const termsUrl = str(fd, "termsUrl");
-  const sampleLink = str(fd, "smsSampleEmbeddedLink");
 
   if (privacyPolicyUrl && !isValidComplianceUrl(privacyPolicyUrl)) {
     return { error: "The privacy policy URL must be an http(s):// link." };
   }
   if (termsUrl && !isValidComplianceUrl(termsUrl)) {
     return { error: "The terms & conditions URL must be an http(s):// link." };
-  }
-  if (sampleLink && !isValidComplianceUrl(sampleLink)) {
-    return { error: "The sample embedded link must be an http(s):// link." };
   }
 
   try {
@@ -134,7 +130,6 @@ export async function saveComplianceAction(
         termsText: str(fd, "termsText"),
         privacyPolicyUrl,
         termsUrl,
-        smsSampleEmbeddedLink: sampleLink,
       },
       await auditActor(),
     );

@@ -5,7 +5,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { resolveComplianceLinks } from "@/lib/config/compliance";
+import {
+  resolveComplianceLinks,
+  sampleEmbeddedLink,
+} from "@/lib/config/compliance";
 import { saveComplianceAction, type MessagingState } from "./actions";
 
 export interface ComplianceInitial {
@@ -13,7 +16,6 @@ export interface ComplianceInitial {
   privacyPolicyUrl: string;
   termsText: string;
   termsUrl: string;
-  smsSampleEmbeddedLink: string;
   /** Absolute base URL (APP_URL) used to show the canonical hosted page URL. */
   baseUrl: string;
 }
@@ -63,13 +65,16 @@ export function ComplianceForm({ initial }: { initial: ComplianceInitial }) {
   const [termsText, setTermsText] = useState(initial.termsText);
   const [termsUrl, setTermsUrl] = useState(initial.termsUrl);
 
+  // Prefilled "dead" sample link for 10DLC registration — derived from APP_URL,
+  // never stored or edited (see lib/config/compliance.ts).
+  const sampleLink = sampleEmbeddedLink(initial.baseUrl);
+
   const resolved = resolveComplianceLinks(
     {
       privacyPolicyText: privacyText || null,
       privacyPolicyUrl: privacyUrl || null,
       termsText: termsText || null,
       termsUrl: termsUrl || null,
-      smsSampleEmbeddedLink: null,
     },
     initial.baseUrl,
   );
@@ -152,18 +157,21 @@ export function ComplianceForm({ initial }: { initial: ComplianceInitial }) {
         />
       </div>
 
-      {/* Sample embedded link */}
+      {/* Sample embedded link — prefilled, read-only "dead" sample for 10DLC */}
       <div className="space-y-2">
-        <Label htmlFor="smsSampleEmbeddedLink">Sample embedded link</Label>
-        <Input
-          id="smsSampleEmbeddedLink"
-          name="smsSampleEmbeddedLink"
-          defaultValue={initial.smsSampleEmbeddedLink}
-          placeholder="https://example.com/pay/sample"
-        />
+        <Label>Sample embedded link</Label>
+        <div
+          className="select-all rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm break-all"
+          data-testid="sample-embedded-link"
+        >
+          {sampleLink}
+        </div>
         <p className="text-xs text-muted-foreground">
-          A sample of a link that will appear in messages to subscribers, for the
-          campaign registration. Display-only — not sent anywhere.
+          A representative sample of an embedded link this site sends to tenants
+          (a portal login link), submitted with your A2P campaign registration.
+          It is generated from your site address — read-only, carries no real
+          token, and routes nowhere sensitive. Copy it into the campaign&apos;s
+          sample-link field.
         </p>
       </div>
 

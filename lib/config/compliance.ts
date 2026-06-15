@@ -13,7 +13,6 @@ export interface ComplianceLinkFields {
   privacyPolicyUrl: string | null;
   termsText: string | null;
   termsUrl: string | null;
-  smsSampleEmbeddedLink: string | null;
 }
 
 export interface ResolvedComplianceLink {
@@ -41,8 +40,6 @@ function resolveOne(
 export interface ResolvedComplianceLinks {
   privacy: ResolvedComplianceLink;
   terms: ResolvedComplianceLink;
-  /** Sample subscriber link submitted with the campaign (display-only). */
-  sampleEmbeddedLink: string | null;
 }
 
 export function resolveComplianceLinks(
@@ -62,8 +59,19 @@ export function resolveComplianceLinks(
       "/terms",
       baseUrl,
     ),
-    sampleEmbeddedLink: fields.smsSampleEmbeddedLink?.trim() || null,
   };
+}
+
+/**
+ * The 10DLC "sample embedded link" — a prefilled, non-functional ("dead")
+ * sample of the kind of link this site embeds in messages to tenants (a portal
+ * login link). It is derived from APP_URL, never operator-entered or stored, and
+ * is display-only: it exists so operators can copy a representative link into
+ * their A2P campaign registration. It carries no real token, so it never
+ * exposes a tenant session.
+ */
+export function sampleEmbeddedLink(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/portal/login`;
 }
 
 /** Validate an optional operator-entered URL. Empty/blank → ok (cleared). */

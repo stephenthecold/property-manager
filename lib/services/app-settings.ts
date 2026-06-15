@@ -107,12 +107,12 @@ export interface ResolvedAppSettings {
   /** Org Cash App cashtag ("$Example") for notices and the tenant portal. */
   cashAppCashtag: string | null;
   /** 10DLC / A2P compliance links. Privacy/terms render at /privacy & /terms
-   *  when the *Text is set, unless a *Url override points elsewhere. */
+   *  when the *Text is set, unless a *Url override points elsewhere. (The
+   *  sample embedded link is derived from APP_URL, not stored.) */
   privacyPolicyText: string | null;
   privacyPolicyUrl: string | null;
   termsText: string | null;
   termsUrl: string | null;
-  smsSampleEmbeddedLink: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -210,7 +210,6 @@ async function resolve(): Promise<ResolvedAppSettings> {
     privacyPolicyUrl: row?.privacyPolicyUrl ?? null,
     termsText: row?.termsText ?? null,
     termsUrl: row?.termsUrl ?? null,
-    smsSampleEmbeddedLink: row?.smsSampleEmbeddedLink ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     billing: {
@@ -822,8 +821,6 @@ export interface ComplianceLinksInput {
   /** External-page overrides (win over hosted text); null clears them. */
   privacyPolicyUrl: string | null;
   termsUrl: string | null;
-  /** Sample subscriber link submitted with the campaign; null clears it. */
-  smsSampleEmbeddedLink: string | null;
 }
 
 /** Persist the 10DLC / A2P compliance links (privacy, terms, sample link). */
@@ -848,7 +845,6 @@ export async function saveComplianceLinks(
         ? {
             privacyPolicyUrl: before.privacyPolicyUrl,
             termsUrl: before.termsUrl,
-            smsSampleEmbeddedLink: before.smsSampleEmbeddedLink,
             privacyPolicyHosted: !!before.privacyPolicyText,
             termsHosted: !!before.termsText,
           }
@@ -856,7 +852,6 @@ export async function saveComplianceLinks(
       after: {
         privacyPolicyUrl: input.privacyPolicyUrl,
         termsUrl: input.termsUrl,
-        smsSampleEmbeddedLink: input.smsSampleEmbeddedLink,
         privacyPolicyHosted: !!input.privacyPolicyText,
         termsHosted: !!input.termsText,
       },
