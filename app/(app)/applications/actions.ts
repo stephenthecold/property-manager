@@ -9,6 +9,10 @@ import {
   setApplicationStatus,
   updateApplicationFields,
 } from "@/lib/services/applications";
+import {
+  cancelBackgroundCheck,
+  requestBackgroundCheck,
+} from "@/lib/services/background-check";
 import { toCents } from "@/lib/money";
 import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
 
@@ -126,6 +130,25 @@ export async function editApplicationAction(
   revalidatePath(`/applications/${id}`);
   revalidatePath("/applications");
   return { ok: true, message: "Application saved." };
+}
+
+/** Request a tenant-screening background check for an application. */
+export async function requestBackgroundCheckAction(fd: FormData): Promise<void> {
+  await requireCapability("applications.manage");
+  const id = str(fd, "id");
+  if (!id) throw new Error("Missing application id.");
+  await requestBackgroundCheck(id, await auditActor());
+  revalidatePath(`/applications/${id}`);
+}
+
+/** Cancel a still-pending background check. */
+export async function cancelBackgroundCheckAction(fd: FormData): Promise<void> {
+  await requireCapability("applications.manage");
+  const id = str(fd, "id");
+  const checkId = str(fd, "checkId");
+  if (!id || !checkId) throw new Error("Missing application or check id.");
+  await cancelBackgroundCheck(checkId, await auditActor());
+  revalidatePath(`/applications/${id}`);
 }
 
 export async function sendLinkAction(

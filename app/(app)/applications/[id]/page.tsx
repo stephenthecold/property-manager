@@ -4,6 +4,7 @@ import { requireCapability, getDisplayRole } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability } from "@/lib/auth/permissions";
 import { getApplication } from "@/lib/services/applications";
+import { listBackgroundChecks } from "@/lib/services/background-check";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +13,14 @@ import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { FormDialog } from "@/components/app/form-dialog";
 import { StatusForm, SendLinkForm } from "../applications-forms";
-import { convertAction, declineAction, editApplicationAction } from "../actions";
+import {
+  cancelBackgroundCheckAction,
+  convertAction,
+  declineAction,
+  editApplicationAction,
+  requestBackgroundCheckAction,
+} from "../actions";
+import type { BackgroundCheckStatus } from "@/lib/generated/prisma/enums";
 
 export const runtime = "nodejs";
 
@@ -22,6 +30,43 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="font-medium">{value || "—"}</div>
     </div>
+  );
+}
+
+const BG_BADGE: Record<BackgroundCheckStatus, { label: string; className: string }> = {
+  pending: {
+    label: "Pending",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  },
+  clear: {
+    label: "Clear",
+    className:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+  },
+  consider: {
+    label: "Needs review",
+    className:
+      "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200",
+  },
+  failed: {
+    label: "Failed",
+    className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  },
+  canceled: {
+    label: "Canceled",
+    className: "bg-muted text-muted-foreground",
+  },
+};
+
+function BackgroundCheckBadge({ status }: { status: BackgroundCheckStatus }) {
+  const b = BG_BADGE[status];
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${b.className}`}
+    >
+      {b.label}
+    </span>
   );
 }
 
@@ -42,6 +87,8 @@ export default async function ApplicationDetail({
   if (!app) notFound();
 
   const canManage = hasCapability(actingRole, "applications.manage", settings.rolePermissions);
+  const checks = canManage ? await listBackgroundChecks(app.id) : [];
+  const hasPendingCheck = checks.some((c) => c.status === "pending");
 
   return (
     <div className="space-y-6">
@@ -219,6 +266,82 @@ export default async function ApplicationDetail({
               reviewerNotes={app.reviewerNotes ?? ""}
               canConvert={!app.convertedTenantId}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Background check</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tenant screening for this applicant. Run, then track the result here.
+              </p>
+            </div>
+            {!hasPendingCheck && (
+              <form action={requestBackgroundCheckAction}>
+                <input type="hidden" name="id" value={app.id} />
+                <ConfirmSubmitButton
+                  confirmMessage="Request a background check for this applicant?"
+                  variant="outline"
+                  size="sm"
+                >
+                  Request check
+                </ConfirmSubmitButton>
+              </form>
+            )}
+          </CardHeader>
+          <CardContent>
+            {checks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No background checks have been run yet.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {checks.map((c) => (
+                  <li key={c.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <BackgroundCheckBadge status={c.status} />
+                        <span className="text-xs text-muted-foreground">
+                          {c.provider} ·{" "}
+                          {c.requestedAt.toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                      {c.summary && <p className="text-sm">{c.summary}</p>}
+                      {c.reportUrl && (
+                        <a
+                          href={c.reportUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          View provider report
+                        </a>
+                      )}
+                    </div>
+                    {c.status === "pending" && (
+                      <form action={cancelBackgroundCheckAction}>
+                        <input type="hidden" name="id" value={app.id} />
+                        <input type="hidden" name="checkId" value={c.id} />
+                        <ConfirmSubmitButton
+                          confirmMessage="Cancel this pending background check?"
+                          variant="outline"
+                          size="sm"
+                        >
+                          Cancel
+                        </ConfirmSubmitButton>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       )}

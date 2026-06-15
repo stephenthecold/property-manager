@@ -78,6 +78,10 @@ const envSchema = z.object({
   OCR_ENABLED: boolish.default(false),
   OCR_PROVIDER: z.string().optional(),
 
+  // Background checks (tenant screening). Unset/"stub" = simulated decisions;
+  // a real FCRA provider slots in behind lib/providers/background-check.
+  BACKGROUND_CHECK_PROVIDER: z.string().optional(),
+
   // Defaults applied when creating new properties.
   DEFAULT_TIMEZONE: z.string().default("America/New_York"),
   DEFAULT_CURRENCY: z.string().default("USD"),
