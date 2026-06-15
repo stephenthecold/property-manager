@@ -7,7 +7,9 @@ import {
   convertApplicationToTenant,
   sendApplyLink,
   setApplicationStatus,
+  updateApplicationFields,
 } from "@/lib/services/applications";
+import { toCents } from "@/lib/money";
 import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
 
 export interface AppActionState {
@@ -59,6 +61,71 @@ export async function convertAction(fd: FormData): Promise<void> {
   const { tenantId } = await convertApplicationToTenant(id, await auditActor());
   revalidatePath("/applications");
   redirect(`/tenants/${tenantId}`);
+}
+
+/** One-click decline: set the application to "declined". */
+export async function declineAction(fd: FormData): Promise<void> {
+  await requireCapability("applications.manage");
+  const id = str(fd, "id");
+  if (!id) throw new Error("Missing application id.");
+  await setApplicationStatus(id, "declined", str(fd, "reviewerNotes") || null, await auditActor());
+  revalidatePath(`/applications/${id}`);
+  revalidatePath("/applications");
+}
+
+/** Staff edit of a submitted application's fields. */
+export async function editApplicationAction(
+  _prev: AppActionState,
+  fd: FormData,
+): Promise<AppActionState> {
+  await requireCapability("applications.manage");
+  const id = str(fd, "id");
+  const firstName = str(fd, "firstName");
+  const lastName = str(fd, "lastName");
+  if (!id || !firstName || !lastName) {
+    return { error: "First and last name are required." };
+  }
+
+  const moveRaw = str(fd, "desiredMoveInDate");
+  let desiredMoveInDate: Date | null = null;
+  if (moveRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(moveRaw)) {
+      return { error: "Enter a valid desired move-in date." };
+    }
+    desiredMoveInDate = new Date(`${moveRaw}T00:00:00Z`);
+  }
+  const incomeRaw = str(fd, "monthlyIncome");
+  let monthlyIncomeCents: bigint | null = null;
+  if (incomeRaw) {
+    try {
+      monthlyIncomeCents = toCents(incomeRaw);
+    } catch {
+      return { error: "Enter a valid monthly income amount." };
+    }
+  }
+
+  try {
+    await updateApplicationFields(
+      id,
+      {
+        firstName,
+        lastName,
+        email: str(fd, "email") || null,
+        phone: str(fd, "phone") || null,
+        currentAddress: str(fd, "currentAddress") || null,
+        desiredMoveInDate,
+        monthlyIncomeCents,
+        employer: str(fd, "employer") || null,
+        message: str(fd, "message") || null,
+      },
+      await auditActor(),
+    );
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to save application." };
+  }
+  revalidatePath(`/applications/${id}`);
+  revalidatePath("/applications");
+  return { ok: true, message: "Application saved." };
 }
 
 export async function sendLinkAction(

@@ -4,12 +4,15 @@ import { requireCapability, getDisplayRole } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability } from "@/lib/auth/permissions";
 import { getApplication } from "@/lib/services/applications";
-import { formatCurrency } from "@/lib/money";
+import { formatCurrency, fromCents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { FormDialog } from "@/components/app/form-dialog";
 import { StatusForm, SendLinkForm } from "../applications-forms";
-import { convertAction } from "../actions";
+import { convertAction, declineAction, editApplicationAction } from "../actions";
 
 export const runtime = "nodejs";
 
@@ -60,8 +63,80 @@ export default async function ApplicationDetail({
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">Applicant</CardTitle>
+          {canManage && (
+            <FormDialog
+              trigger="Edit applicant"
+              title="Edit applicant"
+              wide
+              action={editApplicationAction}
+              submitLabel="Save"
+            >
+              <input type="hidden" name="id" value={app.id} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First name</Label>
+                  <Input id="firstName" name="firstName" defaultValue={app.firstName} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last name</Label>
+                  <Input id="lastName" name="lastName" defaultValue={app.lastName} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" name="email" type="email" defaultValue={app.email ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input id="phone" name="phone" type="tel" defaultValue={app.phone ?? ""} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="desiredMoveInDate">Desired move-in</Label>
+                  <Input
+                    id="desiredMoveInDate"
+                    name="desiredMoveInDate"
+                    type="date"
+                    defaultValue={
+                      app.desiredMoveInDate
+                        ? app.desiredMoveInDate.toISOString().slice(0, 10)
+                        : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="monthlyIncome">Monthly income</Label>
+                  <Input
+                    id="monthlyIncome"
+                    name="monthlyIncome"
+                    inputMode="decimal"
+                    defaultValue={
+                      app.monthlyIncomeCents != null ? fromCents(app.monthlyIncomeCents) : ""
+                    }
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="currentAddress">Current address</Label>
+                  <Input id="currentAddress" name="currentAddress" defaultValue={app.currentAddress ?? ""} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="employer">Employer</Label>
+                  <Input id="employer" name="employer" defaultValue={app.employer ?? ""} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="message">Message / notes</Label>
+                <textarea
+                  id="message"
+                  name="message"
+                  defaultValue={app.message ?? ""}
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full rounded-md border p-2 text-sm"
+                />
+              </div>
+            </FormDialog>
+          )}
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
@@ -112,15 +187,29 @@ export default async function ApplicationDetail({
                 View tenant
               </Button>
             ) : (
-              <form action={convertAction}>
-                <input type="hidden" name="id" value={app.id} />
-                <ConfirmSubmitButton
-                  confirmMessage="Create a tenant record from this applicant?"
-                  size="sm"
-                >
-                  Convert to tenant
-                </ConfirmSubmitButton>
-              </form>
+              <div className="flex items-center gap-2">
+                <form action={convertAction}>
+                  <input type="hidden" name="id" value={app.id} />
+                  <ConfirmSubmitButton
+                    confirmMessage="Create a tenant record from this applicant?"
+                    size="sm"
+                  >
+                    Convert to tenant
+                  </ConfirmSubmitButton>
+                </form>
+                {app.status !== "declined" && (
+                  <form action={declineAction}>
+                    <input type="hidden" name="id" value={app.id} />
+                    <ConfirmSubmitButton
+                      confirmMessage="Deny this application?"
+                      variant="outline"
+                      size="sm"
+                    >
+                      Deny
+                    </ConfirmSubmitButton>
+                  </form>
+                )}
+              </div>
             )}
           </CardHeader>
           <CardContent>

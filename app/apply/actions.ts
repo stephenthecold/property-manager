@@ -1,6 +1,8 @@
 "use server";
 
 import { submitApplication } from "@/lib/services/applications";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { validateSubmission } from "@/lib/applications/form-config";
 import { toCents } from "@/lib/money";
 
 export interface ApplyState {
@@ -22,8 +24,26 @@ export async function submitApplicationAction(
   }
   const email = str(fd, "email") || null;
   const phone = str(fd, "phone") || null;
-  if (!email && !phone) {
-    return { error: "Please provide an email or phone number so we can reach you." };
+  const currentAddress = str(fd, "currentAddress") || null;
+  const employer = str(fd, "employer") || null;
+  const message = str(fd, "message") || null;
+  const moveRaw0 = str(fd, "desiredMoveInDate");
+  const incomeRaw0 = str(fd, "monthlyIncome");
+
+  // Enforce the operator's per-field required config (Settings → Applications),
+  // plus the always-on "at least one contact method" rule.
+  const { applicationFields } = await getAppSettings();
+  const missing = validateSubmission(applicationFields, {
+    email: !!email,
+    phone: !!phone,
+    currentAddress: !!currentAddress,
+    desiredMoveInDate: !!moveRaw0,
+    monthlyIncome: !!incomeRaw0,
+    employer: !!employer,
+    message: !!message,
+  });
+  if (missing.length > 0) {
+    return { error: `Please fill in: ${missing.join(", ")}.` };
   }
 
   const moveRaw = str(fd, "desiredMoveInDate");
@@ -51,11 +71,11 @@ export async function submitApplicationAction(
       lastName,
       email,
       phone,
-      currentAddress: str(fd, "currentAddress") || null,
+      currentAddress,
       desiredMoveInDate,
       monthlyIncomeCents,
-      employer: str(fd, "employer") || null,
-      message: str(fd, "message") || null,
+      employer,
+      message,
       unitId: str(fd, "unitId") || null,
     });
   } catch {

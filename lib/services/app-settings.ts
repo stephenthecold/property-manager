@@ -12,6 +12,10 @@ import { SmtpEmailProvider, type SmtpAuth } from "@/lib/providers/email/smtp";
 import type { EmailProvider } from "@/lib/providers/email/types";
 import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { PermissionMatrix } from "@/lib/auth/permissions";
+import {
+  resolveFormConfig,
+  type ApplicationFormConfig,
+} from "@/lib/applications/form-config";
 import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
 
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
@@ -124,6 +128,8 @@ export interface ResolvedAppSettings {
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
   modules: ModuleFlags;
+  /** Public application form: per-field hidden/optional/required config. */
+  applicationFields: ApplicationFormConfig;
   /** Org-wide charge defaults ("rates") — prefill new leases/units. */
   billing: {
     dueDay: number;
@@ -219,6 +225,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     termsUrl: row?.termsUrl ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
+    applicationFields: resolveFormConfig(row?.applicationFields),
     billing: {
       dueDay: row?.defaultDueDay ?? 1,
       graceDays: row?.defaultGraceDays ?? 5,
@@ -457,6 +464,32 @@ export async function assertModuleEnabled(name: keyof ModuleFlags): Promise<void
   if (!modules[name]) {
     throw new Error(`The ${name} module is disabled (Settings → Modules).`);
   }
+}
+
+/** Persist the public application-form field config (clamped to known fields). */
+export async function saveApplicationFields(
+  config: ApplicationFormConfig,
+  actor: AuditContext,
+): Promise<void> {
+  const clamped = resolveFormConfig(config);
+  const json = { ...clamped };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", applicationFields: json, updatedBy: actor.actorId ?? null },
+      update: { applicationFields: json, updatedBy: actor.actorId ?? null },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.application_fields.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: { applicationFields: resolveFormConfig(before?.applicationFields) },
+      after: { applicationFields: clamped },
+    });
+  });
+  invalidateAppSettingsCache();
 }
 
 /** Persist the module flags. Disabling hides UI only — data is retained. */

@@ -150,6 +150,53 @@ export async function setApplicationStatus(
   );
 }
 
+export interface ApplicationFieldsInput {
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  currentAddress: string | null;
+  desiredMoveInDate: Date | null;
+  monthlyIncomeCents: bigint | null;
+  employer: string | null;
+  message: string | null;
+}
+
+/** Staff edit of a submitted application's data fields (not status). Audited. */
+export async function updateApplicationFields(
+  id: string,
+  fields: ApplicationFieldsInput,
+  actor: AuditContext,
+): Promise<void> {
+  await assertModuleEnabled("applications");
+  const before = await prisma.rentalApplication.findUnique({ where: { id } });
+  if (!before) throw new Error("Application not found.");
+
+  await withAudit(
+    {
+      ...actor,
+      action: "application.edited",
+      entityType: "RentalApplication",
+      entityId: id,
+      before: {
+        firstName: before.firstName,
+        lastName: before.lastName,
+        email: before.email,
+        phone: before.phone,
+        currentAddress: before.currentAddress,
+        desiredMoveInDate: before.desiredMoveInDate,
+        monthlyIncomeCents: before.monthlyIncomeCents,
+        employer: before.employer,
+        message: before.message,
+      },
+    },
+    async (tx) => {
+      const updated = await tx.rentalApplication.update({ where: { id }, data: fields });
+      return { result: updated, after: { ...fields } };
+    },
+  );
+}
+
 /** Create a Tenant from an application and mark it approved+converted. Audited. */
 export async function convertApplicationToTenant(
   id: string,

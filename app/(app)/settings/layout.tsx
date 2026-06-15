@@ -12,13 +12,19 @@ const SETTINGS_LINKS: {
   href: string;
   label: string;
   cap: Capability | null;
-  module?: "tenantPortal";
+  module?: "tenantPortal" | "applications";
 }[] = [
   { href: "/settings/notifications", label: "Notifications", cap: null },
   { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
   { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
   { href: "/settings/leases", label: "Leases", cap: "organization.settings" },
   { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
+  {
+    href: "/settings/applications",
+    label: "Applications",
+    cap: "applications.manage",
+    module: "applications",
+  },
   { href: "/settings/auth", label: "Authentication", cap: "auth.settings" },
   { href: "/settings/users", label: "Users", cap: "users.manage" },
   { href: "/settings/permissions", label: "Permissions", cap: "users.manage" },
