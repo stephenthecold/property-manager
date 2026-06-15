@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  createTrialLinkAction,
+  impersonateTenantAction,
   invitePortalAccountAction,
   setPortalAccountActiveAction,
   type PortalInviteState,
@@ -30,9 +32,11 @@ export interface PortalAccountSummary {
 export function PortalAccessCard({
   tenantId,
   account,
+  canImpersonate,
 }: {
   tenantId: string;
   account: PortalAccountSummary;
+  canImpersonate: boolean;
 }) {
   const [inviteState, inviteAction, invitePending] = useActionState<
     PortalInviteState,
@@ -42,13 +46,20 @@ export function PortalAccessCard({
     PortalInviteState,
     FormData
   >(setPortalAccountActiveAction, {});
+  const [trialState, trialAction, trialPending] = useActionState<
+    PortalInviteState,
+    FormData
+  >(createTrialLinkAction, {});
 
-  const error = inviteState.error ?? activeState.error;
+  const error = inviteState.error ?? activeState.error ?? trialState.error;
   const message = inviteState.ok
     ? inviteState.message
     : activeState.ok
       ? activeState.message
-      : null;
+      : trialState.ok
+        ? trialState.message
+        : null;
+  const link = inviteState.link ?? trialState.link;
 
   const status = !account.exists
     ? { label: "No account", variant: "outline" as const }
@@ -77,9 +88,9 @@ export function PortalAccessCard({
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
-        {inviteState.link && (
+        {link && (
           <p className="break-all rounded-md border bg-muted/30 p-2 font-mono text-xs">
-            {inviteState.link}
+            {link}
           </p>
         )}
 
@@ -129,6 +140,33 @@ export function PortalAccessCard({
             </form>
           )}
         </div>
+
+        {canImpersonate && (
+          <div className="space-y-2 border-t pt-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Debugging &amp; smoke testing (admin)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <form action={impersonateTenantAction}>
+                <input type="hidden" name="tenantId" value={tenantId} />
+                <Button type="submit" variant="outline" size="sm">
+                  Open portal as tenant
+                </Button>
+              </form>
+              <form action={trialAction}>
+                <input type="hidden" name="tenantId" value={tenantId} />
+                <Button type="submit" variant="outline" size="sm" disabled={trialPending}>
+                  {trialPending ? "Creating…" : "Create trial login link"}
+                </Button>
+              </form>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Opens the portal as this tenant — a 1-hour, audited session with an
+              “impersonating” banner. The trial link is single-use and expires in
+              30 minutes.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

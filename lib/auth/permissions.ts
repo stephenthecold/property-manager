@@ -26,6 +26,7 @@ export const CAPABILITIES = [
   "maintenance.manage",
   "esign.manage",
   "portal.manage",
+  "portal.impersonate",
   "applications.view",
   "applications.manage",
   "billing.settings",
@@ -59,6 +60,8 @@ const MIN_ROLE: Record<Capability, Role> = {
   "esign.manage": "manager",
   // Tenant portal: invite/disable tenant logins, work the request queue.
   "portal.manage": "manager",
+  // Impersonation is powerful (you become the tenant) — admin-only by default.
+  "portal.impersonate": "admin",
   // Rental applications: review the queue; manage = act on / convert.
   "applications.view": "manager",
   "applications.manage": "manager",
@@ -87,6 +90,7 @@ export const CAPABILITY_META: Record<
   "maintenance.manage": { label: "Maintenance jobs & tasks", group: "Operations", description: "Track unit maintenance jobs and monthly recurring tasks." },
   "esign.manage": { label: "E-sign lease agreements", group: "Operations", description: "Send agreements for e-signature, apply the landlord signature, resend or cancel signing requests." },
   "portal.manage": { label: "Tenant portal & requests", group: "Operations", description: "Invite tenants to the portal, enable/disable their logins, and work the tenant request queue." },
+  "portal.impersonate": { label: "Impersonate a tenant (debug)", group: "Operations", description: "Open the tenant portal AS a tenant, and create trial login links, for debugging and smoke testing. Sessions are short-lived, audited, and banner-marked." },
   "applications.view": { label: "View rental applications", group: "Operations", description: "See the rental-application queue and submission details." },
   "applications.manage": { label: "Manage rental applications", group: "Operations", description: "Change application status, email/text the apply link, and convert an applicant into a tenant." },
   "billing.settings": { label: "Billing defaults", group: "Settings", description: "Edit org-wide charge/late-fee/internet rate defaults." },

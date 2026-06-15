@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
@@ -10,6 +11,9 @@ import {
   invitePortalAccount,
   setPortalAccountActive,
 } from "@/lib/services/portal-auth";
+import { createTrialToken, startImpersonation } from "@/lib/services/impersonation";
+import { clientIpFromXff } from "@/lib/http/client-ip";
+import { getEnv } from "@/lib/config/env";
 import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
@@ -173,4 +177,46 @@ export async function setPortalAccountActiveAction(
       ? "Portal login enabled."
       : "Portal login disabled — their sessions were signed out.",
   };
+}
+
+async function requestMeta(): Promise<{ ip: string | null; userAgent: string | null }> {
+  const h = await headers();
+  return {
+    ip: clientIpFromXff(h.get("x-forwarded-for")),
+    userAgent: h.get("user-agent"),
+  };
+}
+
+/** Open the portal AS this tenant in the current browser (portal.impersonate). */
+export async function impersonateTenantAction(fd: FormData): Promise<void> {
+  await requireCapability("portal.impersonate");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) throw new Error("Missing tenant.");
+  const actor = await auditActor();
+  const meta = await requestMeta();
+  await startImpersonation(tenantId, actor.actorId ?? null, meta.ip, meta.userAgent);
+  redirect("/portal");
+}
+
+/** Create a single-use trial-login link that opens the portal as this tenant. */
+export async function createTrialLinkAction(
+  _prev: PortalInviteState,
+  fd: FormData,
+): Promise<PortalInviteState> {
+  await requireCapability("portal.impersonate");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) return { error: "Missing tenant." };
+  try {
+    const actor = await auditActor();
+    const raw = await createTrialToken(tenantId, actor.actorId ?? null, actor);
+    const base = getEnv().APP_URL.replace(/\/+$/, "");
+    return {
+      ok: true,
+      message:
+        "Trial login link created — single use, expires in 30 minutes. Open it (incognito works best) or send it to a tester.",
+      link: `${base}/portal/trial/${raw}`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not create trial link." };
+  }
 }

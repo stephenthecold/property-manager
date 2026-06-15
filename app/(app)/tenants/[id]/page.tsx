@@ -191,13 +191,13 @@ export default async function TenantDetail({
   // client component and must not import lib/reminders). With no active lease,
   // fall back to the most recent lease's figures, else empty strings.
   const appSettings = await getAppSettings();
+  const { actingRole } = await getDisplayRole();
   const canManagePortal =
     appSettings.modules.tenantPortal &&
-    hasCapability(
-      (await getDisplayRole()).actingRole,
-      "portal.manage",
-      appSettings.rolePermissions,
-    );
+    hasCapability(actingRole, "portal.manage", appSettings.rolePermissions);
+  const canImpersonate =
+    canManagePortal &&
+    hasCapability(actingRole, "portal.impersonate", appSettings.rolePermissions);
   const portalAccount = canManagePortal
     ? await prisma.tenantPortalAccount.findUnique({
         where: { tenantId: tenant.id },
@@ -1200,6 +1200,7 @@ export default async function TenantDetail({
             email: portalAccount?.email ?? null,
             phone: portalAccount?.phone ?? null,
           }}
+          canImpersonate={canImpersonate}
         />
       )}
 

@@ -22,10 +22,14 @@ import type {
 
 export const PORTAL_COOKIE = "pm_portal_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+/** Impersonation sessions are deliberately short-lived. */
+export const IMPERSONATION_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface PortalIdentity {
   account: TenantPortalAccount;
   tenant: Tenant;
+  /** Staff user id when a staff member is impersonating; null for a real login. */
+  impersonatedByUserId: string | null;
 }
 
 /** Mint + persist a session for an account and set the cookie. */
@@ -33,9 +37,10 @@ export async function createPortalSession(
   accountId: string,
   ip: string | null,
   userAgent: string | null,
+  opts?: { impersonatedByUserId?: string | null; ttlMs?: number },
 ): Promise<void> {
   const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = new Date(Date.now() + (opts?.ttlMs ?? SESSION_TTL_MS));
   await prisma.tenantPortalSession.create({
     data: {
       accountId,
@@ -43,6 +48,7 @@ export async function createPortalSession(
       expiresAt,
       ip,
       userAgent: userAgent?.slice(0, 400) ?? null,
+      impersonatedByUserId: opts?.impersonatedByUserId ?? null,
     },
   });
   const store = await cookies();
@@ -75,8 +81,12 @@ export async function getPortalSession(): Promise<PortalIdentity | null> {
   });
   if (!session || session.expiresAt <= new Date()) return null;
   const { account } = session;
-  if (!account.isActive || !account.tenant.isActive) return null;
-  return { account, tenant: account.tenant };
+  // Impersonation sessions are staff-minted for debugging, so the account's
+  // own active flag (a tenant-login control) doesn't gate them — but the tenant
+  // must still be active and the module on (both checked here / above).
+  const impersonated = session.impersonatedByUserId;
+  if ((!account.isActive && !impersonated) || !account.tenant.isActive) return null;
+  return { account, tenant: account.tenant, impersonatedByUserId: impersonated };
 }
 
 /** Require a signed-in tenant; redirects to the portal login otherwise. */
