@@ -21,6 +21,7 @@ const PUBLIC_PREFIXES = [
   "/api/portal", // portal-scoped APIs (file downloads) — same portal session check
   "/privacy", // public compliance page (10DLC) — operator-authored, no data
   "/terms", // public compliance page (10DLC) — operator-authored, no data
+  "/apply", // public rental-application intake — module-gated at the service layer
 ];
 
 function isPublic(pathname: string): boolean {

@@ -31,6 +31,8 @@ export interface ModuleFlags {
   maintenance: boolean;
   /** Tenant self-service portal (/portal, local tenant logins). */
   tenantPortal: boolean;
+  /** Prospective-tenant rental applications (public /apply + staff /applications). */
+  applications: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -38,6 +40,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   financials: true,
   maintenance: false,
   tenantPortal: false,
+  applications: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -51,6 +54,10 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.tenantPortal === "boolean"
         ? obj.tenantPortal
         : MODULE_DEFAULTS.tenantPortal,
+    applications:
+      typeof obj.applications === "boolean"
+        ? obj.applications
+        : MODULE_DEFAULTS.applications,
   };
 }
 

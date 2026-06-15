@@ -26,6 +26,8 @@ export const CAPABILITIES = [
   "maintenance.manage",
   "esign.manage",
   "portal.manage",
+  "applications.view",
+  "applications.manage",
   "billing.settings",
   "messaging.settings",
   "organization.settings",
@@ -57,6 +59,9 @@ const MIN_ROLE: Record<Capability, Role> = {
   "esign.manage": "manager",
   // Tenant portal: invite/disable tenant logins, work the request queue.
   "portal.manage": "manager",
+  // Rental applications: review the queue; manage = act on / convert.
+  "applications.view": "manager",
+  "applications.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",
@@ -82,6 +87,8 @@ export const CAPABILITY_META: Record<
   "maintenance.manage": { label: "Maintenance jobs & tasks", group: "Operations", description: "Track unit maintenance jobs and monthly recurring tasks." },
   "esign.manage": { label: "E-sign lease agreements", group: "Operations", description: "Send agreements for e-signature, apply the landlord signature, resend or cancel signing requests." },
   "portal.manage": { label: "Tenant portal & requests", group: "Operations", description: "Invite tenants to the portal, enable/disable their logins, and work the tenant request queue." },
+  "applications.view": { label: "View rental applications", group: "Operations", description: "See the rental-application queue and submission details." },
+  "applications.manage": { label: "Manage rental applications", group: "Operations", description: "Change application status, email/text the apply link, and convert an applicant into a tenant." },
   "billing.settings": { label: "Billing defaults", group: "Settings", description: "Edit org-wide charge/late-fee/internet rate defaults." },
   "messaging.settings": { label: "Messaging settings", group: "Settings", description: "Configure the SMS provider and reminder templates." },
   "organization.settings": { label: "Organization settings", group: "Settings", description: "Edit business identity, branding, and storage configuration." },
