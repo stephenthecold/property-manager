@@ -5,6 +5,7 @@ import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 import { MessagingForm } from "./messaging-form";
 import { EmailForm } from "./email-form";
+import { ComplianceForm } from "./compliance-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
@@ -58,6 +59,24 @@ export default async function MessagingSettingsPage() {
                 value: overrides[type] ?? "",
                 defaultBody: DEFAULT_TEMPLATES[type],
               })),
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Compliance links (10DLC / A2P)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ComplianceForm
+            initial={{
+              privacyPolicyText: row?.privacyPolicyText ?? "",
+              privacyPolicyUrl: row?.privacyPolicyUrl ?? "",
+              termsText: row?.termsText ?? "",
+              termsUrl: row?.termsUrl ?? "",
+              smsSampleEmbeddedLink: row?.smsSampleEmbeddedLink ?? "",
+              baseUrl: env.APP_URL,
             }}
           />
         </CardContent>

@@ -8,9 +8,11 @@ import {
   getAppSettings,
   resolveEmailProvider,
   resolveSmsProvider,
+  saveComplianceLinks,
   saveEmailSettings,
   saveMessagingSettings,
 } from "@/lib/services/app-settings";
+import { isValidComplianceUrl } from "@/lib/config/compliance";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 
 export interface MessagingState {
@@ -103,6 +105,49 @@ export async function saveMessagingAction(
 
   revalidatePath("/settings/messaging");
   return { ok: true, message: "Messaging settings saved." };
+}
+
+export async function saveComplianceAction(
+  _prev: MessagingState,
+  fd: FormData,
+): Promise<MessagingState> {
+  await requireCapability("messaging.settings");
+
+  const privacyPolicyUrl = str(fd, "privacyPolicyUrl");
+  const termsUrl = str(fd, "termsUrl");
+  const sampleLink = str(fd, "smsSampleEmbeddedLink");
+
+  if (privacyPolicyUrl && !isValidComplianceUrl(privacyPolicyUrl)) {
+    return { error: "The privacy policy URL must be an http(s):// link." };
+  }
+  if (termsUrl && !isValidComplianceUrl(termsUrl)) {
+    return { error: "The terms & conditions URL must be an http(s):// link." };
+  }
+  if (sampleLink && !isValidComplianceUrl(sampleLink)) {
+    return { error: "The sample embedded link must be an http(s):// link." };
+  }
+
+  try {
+    await saveComplianceLinks(
+      {
+        privacyPolicyText: str(fd, "privacyPolicyText"),
+        termsText: str(fd, "termsText"),
+        privacyPolicyUrl,
+        termsUrl,
+        smsSampleEmbeddedLink: sampleLink,
+      },
+      await auditActor(),
+    );
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to save settings." };
+  }
+
+  // The hosted policy pages and the portal footer read these.
+  revalidatePath("/settings/messaging");
+  revalidatePath("/privacy");
+  revalidatePath("/terms");
+  revalidatePath("/portal");
+  return { ok: true, message: "Compliance links saved." };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
