@@ -7,58 +7,109 @@ const past = new Date("2026-01-01T00:00:00Z");
 
 function v(partial: Partial<VacancyInput>): VacancyInput {
   return {
-    occupancyStatus: "occupied",
+    serviceStatus: "in_service",
     availableFromDate: null,
     activeLeaseEndDate: null,
+    hasActiveLease: false,
     ...partial,
   };
 }
 
 describe("computeVacancy", () => {
-  it("vacant unit with no override is available now", () => {
-    const r = computeVacancy(v({ occupancyStatus: "vacant" }), now);
-    expect(r).toMatchObject({ state: "vacant", availableNow: true, availableOn: null, listed: true });
+  it("in service, no lease → available now (vacant)", () => {
+    expect(computeVacancy(v({}), now)).toMatchObject({
+      state: "vacant",
+      availableNow: true,
+      listed: true,
+    });
   });
 
-  it("occupied lease ending in the future is an upcoming vacancy (source: lease)", () => {
-    const r = computeVacancy(v({ activeLeaseEndDate: future }), now);
-    expect(r).toMatchObject({ state: "upcoming", availableNow: false, availableOn: future, source: "lease", listed: true });
+  it("in service, active lease, no end → occupied (not listed)", () => {
+    expect(computeVacancy(v({ hasActiveLease: true }), now)).toMatchObject({
+      state: "occupied",
+      availableNow: false,
+      listed: false,
+    });
   });
 
-  it("occupied with no end date is occupied (not listed)", () => {
-    const r = computeVacancy(v({}), now);
-    expect(r).toMatchObject({ state: "occupied", listed: false, availableOn: null });
+  it("active lease ending in the future → upcoming (source: lease)", () => {
+    expect(
+      computeVacancy(v({ hasActiveLease: true, activeLeaseEndDate: future }), now),
+    ).toMatchObject({ state: "upcoming", availableOn: future, source: "lease", listed: true });
   });
 
-  it("occupied with a past lease end is occupied (not listed)", () => {
-    const r = computeVacancy(v({ activeLeaseEndDate: past }), now);
-    expect(r.listed).toBe(false);
+  it("active lease ended in the PAST → occupied (stale end ignored)", () => {
+    expect(
+      computeVacancy(v({ hasActiveLease: true, activeLeaseEndDate: past }), now),
+    ).toMatchObject({ state: "occupied", listed: false });
+  });
+
+  it("occupancy WINS: active lease + maintenance → occupied, NOT listed", () => {
+    expect(
+      computeVacancy(v({ hasActiveLease: true, serviceStatus: "maintenance" }), now),
+    ).toMatchObject({ state: "occupied", availableNow: false, listed: false });
+  });
+
+  it("occupancy WINS: active lease + unavailable → occupied, NOT listed", () => {
+    expect(
+      computeVacancy(v({ hasActiveLease: true, serviceStatus: "unavailable" }), now),
+    ).toMatchObject({ state: "occupied", listed: false });
+  });
+
+  it("active lease ending + maintenance → upcoming (occupancy still wins the listing)", () => {
+    expect(
+      computeVacancy(
+        v({ hasActiveLease: true, serviceStatus: "maintenance", activeLeaseEndDate: future }),
+        now,
+      ),
+    ).toMatchObject({ state: "upcoming", availableOn: future, source: "lease" });
+  });
+
+  it("unavailable → 'unavailable', NEVER available now, NOT listed", () => {
+    expect(computeVacancy(v({ serviceStatus: "unavailable" }), now)).toMatchObject({
+      state: "unavailable",
+      availableNow: false,
+      listed: false,
+    });
+  });
+
+  it("maintenance → 'maintenance', not available now, but LISTED (trackable)", () => {
+    expect(computeVacancy(v({ serviceStatus: "maintenance" }), now)).toMatchObject({
+      state: "maintenance",
+      availableNow: false,
+      listed: true,
+    });
+  });
+
+  it("maintenance with a future ready date → maintenance + that date", () => {
+    expect(
+      computeVacancy(v({ serviceStatus: "maintenance", availableFromDate: future }), now),
+    ).toMatchObject({ state: "maintenance", availableOn: future, source: "manual", listed: true });
   });
 
   it("manual override wins over the lease end date", () => {
     const earlier = new Date("2026-07-01T00:00:00Z");
-    const r = computeVacancy(v({ availableFromDate: earlier, activeLeaseEndDate: future }), now);
-    expect(r).toMatchObject({ state: "upcoming", availableOn: earlier, source: "manual" });
+    expect(
+      computeVacancy(
+        v({ hasActiveLease: true, availableFromDate: earlier, activeLeaseEndDate: future }),
+        now,
+      ),
+    ).toMatchObject({ state: "upcoming", availableOn: earlier, source: "manual" });
   });
 
-  it("maintenance unit with a future override is upcoming (e.g. back in service then)", () => {
-    const r = computeVacancy(v({ occupancyStatus: "maintenance", availableFromDate: future }), now);
-    expect(r).toMatchObject({ state: "upcoming", availableOn: future, source: "manual", listed: true });
+  it("in service, no lease, future manual date → upcoming", () => {
+    expect(computeVacancy(v({ availableFromDate: future }), now)).toMatchObject({
+      state: "upcoming",
+      availableOn: future,
+      source: "manual",
+    });
   });
 
-  it("maintenance/unavailable with no override counts as available now", () => {
-    for (const s of ["maintenance", "unavailable"] as const) {
-      expect(computeVacancy(v({ occupancyStatus: s }), now)).toMatchObject({
-        state: "vacant",
-        availableNow: true,
-        listed: true,
-      });
-    }
-  });
-
-  it("a stale (past) manual override on an occupied unit does not list it", () => {
-    const r = computeVacancy(v({ availableFromDate: past }), now);
-    expect(r.listed).toBe(false);
+  it("a stale (past) manual date does not create a future hold", () => {
+    expect(computeVacancy(v({ availableFromDate: past }), now)).toMatchObject({
+      state: "vacant",
+      availableNow: true,
+    });
   });
 });
 
@@ -67,7 +118,6 @@ describe("compareVacancy", () => {
     const nowRow = { availableNow: true, availableOn: null };
     const soon = { availableNow: false, availableOn: new Date("2026-07-01T00:00:00Z") };
     const later = { availableNow: false, availableOn: future };
-    const sorted = [later, nowRow, soon].sort(compareVacancy);
-    expect(sorted).toEqual([nowRow, soon, later]);
+    expect([later, nowRow, soon].sort(compareVacancy)).toEqual([nowRow, soon, later]);
   });
 });

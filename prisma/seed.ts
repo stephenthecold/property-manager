@@ -60,7 +60,7 @@ async function main() {
             bedrooms: 2,
             bathrooms: 1,
             defaultRentAmountCents: RENT,
-            occupancyStatus: "vacant",
+            serviceStatus: "in_service",
           },
           update: {},
         });
@@ -124,10 +124,7 @@ async function main() {
       },
       update: { status, dueDay: s.dueDay },
     });
-    await prisma.unit.update({
-      where: { id: s.unitId },
-      data: { occupancyStatus: status === "active" ? "occupied" : "vacant" },
-    });
+    // Occupancy is derived from the active lease — no unit flag to set.
 
     if (status !== "active") continue;
 
@@ -139,7 +136,7 @@ async function main() {
   // Mark one vacant unit as under maintenance for variety.
   await prisma.unit.update({
     where: { id: "seed-prop-oak-bldg-A-unit-3" },
-    data: { occupancyStatus: "maintenance" },
+    data: { serviceStatus: "maintenance" },
   });
 
   // Phase 2: digital receipts. postPayment auto-creates them for NEW payments;

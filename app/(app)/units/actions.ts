@@ -8,7 +8,7 @@ import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type {
-  OccupancyStatus,
+  ServiceStatus,
   UnitType,
 } from "@/lib/generated/prisma/enums";
 import type { FormState } from "@/lib/forms";
@@ -97,7 +97,7 @@ export async function updateUnit(
     unitNumber,
     buildingId,
     unitType: (str(fd, "unitType") || "apartment") as UnitType,
-    occupancyStatus: (str(fd, "occupancyStatus") || "vacant") as OccupancyStatus,
+    serviceStatus: (str(fd, "serviceStatus") || "in_service") as ServiceStatus,
     availableFromDate,
     bedrooms,
     bathrooms,
@@ -118,7 +118,7 @@ export async function updateUnit(
         unitNumber: unit.unitNumber,
         buildingId: unit.buildingId,
         unitType: unit.unitType,
-        occupancyStatus: unit.occupancyStatus,
+        serviceStatus: unit.serviceStatus,
         availableFromDate: unit.availableFromDate,
         bedrooms: unit.bedrooms,
         bathrooms: unit.bathrooms,
@@ -137,7 +137,7 @@ export async function updateUnit(
           unitNumber: updated.unitNumber,
           buildingId: updated.buildingId,
           unitType: updated.unitType,
-          occupancyStatus: updated.occupancyStatus,
+          serviceStatus: updated.serviceStatus,
           availableFromDate: updated.availableFromDate,
           bedrooms: updated.bedrooms,
           bathrooms: updated.bathrooms,
@@ -168,7 +168,7 @@ export async function deleteUnit(fd: FormData): Promise<void> {
   if (!unit) throw new Error("Unit not found.");
   if (unit._count.leases > 0) {
     throw new Error(
-      "This unit has lease history and cannot be deleted. Set its occupancy to 'unavailable' instead.",
+      "This unit has lease history and cannot be deleted. Set its service status to 'unavailable' instead.",
     );
   }
 

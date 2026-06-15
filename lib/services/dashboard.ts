@@ -44,6 +44,8 @@ export interface VacancyRow {
   /** Property timezone, for date-only formatting of availableOn. */
   timezone: string;
   buildingName: string | null;
+  /** Display state (vacant | upcoming | maintenance | unavailable | occupied). */
+  state: "vacant" | "upcoming" | "occupied" | "maintenance" | "unavailable";
   /** Available right now (currently not occupied). */
   availableNow: boolean;
   /** Future availability date, or null when availableNow. */
@@ -81,9 +83,10 @@ export async function getVacancyOutlook(
       const lease = u.leases[0] ?? null;
       const vac = computeVacancy(
         {
-          occupancyStatus: u.occupancyStatus,
+          serviceStatus: u.serviceStatus,
           availableFromDate: u.availableFromDate,
           activeLeaseEndDate: lease?.endDate ?? null,
+          hasActiveLease: !!lease,
         },
         now,
       );
@@ -97,6 +100,7 @@ export async function getVacancyOutlook(
       propertyName: u.property.name,
       timezone: u.property.timezone,
       buildingName: u.building?.name ?? null,
+      state: vac.state,
       availableNow: vac.availableNow,
       availableOn: vac.availableOn,
       currentTenantName:
@@ -121,12 +125,8 @@ export async function getDashboard(
   propertyId?: string,
 ): Promise<DashboardData> {
   const unitWhere = propertyId ? { propertyId } : {};
-  const [units, leases, monthAgg, todayAgg, recent] = await Promise.all([
-    prisma.unit.groupBy({
-      by: ["occupancyStatus"],
-      where: unitWhere,
-      _count: true,
-    }),
+  const [totalUnits, leases, monthAgg, todayAgg, recent] = await Promise.all([
+    prisma.unit.count({ where: unitWhere }),
     prisma.lease.findMany({
       where: {
         status: { in: ["active", "month_to_month"] },
@@ -158,11 +158,9 @@ export async function getDashboard(
     }),
   ]);
 
-  const occupiedUnits =
-    units.find((u) => u.occupancyStatus === "occupied")?._count ?? 0;
-  const vacantUnits = units
-    .filter((u) => u.occupancyStatus !== "occupied")
-    .reduce((s, u) => s + (typeof u._count === "number" ? u._count : 0), 0);
+  // Occupancy is lease-derived: a unit is occupied iff it has an active lease.
+  const occupiedUnits = new Set(leases.map((l) => l.unitId)).size;
+  const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
 
   const snaps = await batchLeaseSnapshots(leases, now);
 

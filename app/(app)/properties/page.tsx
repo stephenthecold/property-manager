@@ -11,7 +11,17 @@ export default async function PropertiesPage() {
     orderBy: { name: "asc" },
     include: {
       _count: { select: { buildings: true, units: true } },
-      units: { select: { occupancyStatus: true, defaultRentAmountCents: true } },
+      units: {
+        select: {
+          defaultRentAmountCents: true,
+          // Occupancy is lease-derived: a unit is occupied iff it has an active lease.
+          leases: {
+            where: { status: { in: ["active", "month_to_month"] } },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
     },
   });
 
@@ -40,9 +50,7 @@ export default async function PropertiesPage() {
           { key: "status", label: "Status" },
         ]}
         rows={properties.map((p) => {
-          const occupied = p.units.filter(
-            (u) => u.occupancyStatus === "occupied",
-          ).length;
+          const occupied = p.units.filter((u) => u.leases.length > 0).length;
           return {
             key: p.id,
             sortValues: [

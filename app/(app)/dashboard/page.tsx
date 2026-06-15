@@ -297,7 +297,21 @@ export default async function DashboardPage() {
                   <span key="p" className="text-muted-foreground">
                     {r.propertyName}
                   </span>,
-                  r.availableNow ? (
+                  r.state === "maintenance" ? (
+                    <span key="a" className="inline-flex items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className="border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                      >
+                        Maintenance
+                      </Badge>
+                      {r.availableOn && (
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {dateLabel}
+                        </span>
+                      )}
+                    </span>
+                  ) : r.availableNow ? (
                     <Badge key="a">Now</Badge>
                   ) : (
                     <span key="a" className="tabular-nums">

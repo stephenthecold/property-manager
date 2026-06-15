@@ -339,10 +339,7 @@ export async function createLease(
   }
 
   if (status === "active" || status === "month_to_month") {
-    await prisma.unit.update({
-      where: { id: unitId },
-      data: { occupancyStatus: "occupied" },
-    });
+    // Occupancy is derived from the active lease now — no unit flag to sync.
     await generateChargesForLease(lease, tz, now);
   }
 
@@ -813,10 +810,8 @@ export async function terminateLease(fd: FormData): Promise<void> {
     where: { id: leaseId },
     data: { status: "ended", endDate: new Date() },
   });
-  await prisma.unit.update({
-    where: { id: lease.unitId },
-    data: { occupancyStatus: "vacant" },
-  });
+  // Occupancy is derived from the active lease — ending it vacates the unit
+  // automatically, and we no longer clobber a manual maintenance/unavailable flag.
   await writeAudit(prisma, {
     ...(await auditActor()),
     action: "lease.terminated",
