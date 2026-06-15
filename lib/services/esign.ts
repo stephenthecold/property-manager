@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
-import { getEnv } from "@/lib/config/env";
+import { publicBaseUrl } from "@/lib/http/base-url";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import {
   hashSigningToken,
@@ -54,10 +54,6 @@ function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function appBaseUrl(): string {
-  return getEnv().APP_URL.replace(/\/+$/, "");
-}
-
 function slugPart(value: string, fallback: string): string {
   const slug = value
     .toLowerCase()
@@ -100,7 +96,7 @@ interface SendLinkInput {
  */
 async function sendSignerLink(i: SendLinkInput): Promise<SignerSendStatus> {
   const app = await getAppSettings();
-  const link = `${appBaseUrl()}/sign/${i.token}`;
+  const link = `${await publicBaseUrl()}/sign/${i.token}`;
   const kindLabel = signingKindLabel(i.kind);
   const expires = DateTime.fromJSDate(i.expiresAt, { zone: i.timezone })
     .setLocale("en-US")

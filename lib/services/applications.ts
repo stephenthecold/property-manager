@@ -6,7 +6,7 @@ import {
   resolveEmailProvider,
   resolveSmsProvider,
 } from "@/lib/services/app-settings";
-import { getEnv } from "@/lib/config/env";
+import { publicBaseUrl } from "@/lib/http/base-url";
 import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
 
 /**
@@ -15,14 +15,11 @@ import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
  * never ledger entries, never linked to balances.
  */
 
-function appBaseUrl(): string {
-  return getEnv().APP_URL.replace(/\/+$/, "");
-}
-
-/** Public apply URL, optionally pinned to a specific unit (staff-shared link). */
-export function applyUrl(unitId?: string | null): string {
-  const base = `${appBaseUrl()}/apply`;
-  return unitId ? `${base}?unit=${encodeURIComponent(unitId)}` : base;
+/** Public apply URL (request-host aware), optionally pinned to a unit. */
+export async function applyUrl(unitId?: string | null): Promise<string> {
+  const base = await publicBaseUrl();
+  const apply = `${base}/apply`;
+  return unitId ? `${apply}?unit=${encodeURIComponent(unitId)}` : apply;
 }
 
 export interface SubmitApplicationInput {
@@ -220,7 +217,7 @@ export async function sendApplyLink(
 ): Promise<SendApplyLinkResult> {
   await assertModuleEnabled("applications");
   const settings = await getAppSettings();
-  const url = applyUrl(input.unitId);
+  const url = await applyUrl(input.unitId);
   const result: SendApplyLinkResult = { emailed: false, texted: false, errors: [] };
 
   if (input.email) {

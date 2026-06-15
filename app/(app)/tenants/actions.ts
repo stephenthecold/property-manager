@@ -13,7 +13,7 @@ import {
 } from "@/lib/services/portal-auth";
 import { createTrialToken, startImpersonation } from "@/lib/services/impersonation";
 import { clientIpFromXff } from "@/lib/http/client-ip";
-import { getEnv } from "@/lib/config/env";
+import { publicBaseUrl } from "@/lib/http/base-url";
 import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
@@ -209,7 +209,7 @@ export async function createTrialLinkAction(
   try {
     const actor = await auditActor();
     const raw = await createTrialToken(tenantId, actor.actorId ?? null, actor);
-    const base = getEnv().APP_URL.replace(/\/+$/, "");
+    const base = await publicBaseUrl();
     return {
       ok: true,
       message:
