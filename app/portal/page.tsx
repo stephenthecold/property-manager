@@ -7,6 +7,7 @@ import {
   snapshotFromAccounting,
 } from "@/lib/services/accounting";
 import { cashAppLink } from "@/lib/payments/cash-app";
+import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { formatCurrency } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   CashPickupForm,
   MaintenanceRequestForm,
   PaymentPreferenceForm,
+  SmsConsentForm,
 } from "./portal-forms";
 
 export const runtime = "nodejs";
@@ -39,6 +41,7 @@ export default async function PortalHomePage() {
   const { tenant } = await requirePortalSession();
   const settings = await getAppSettings();
   const now = new Date();
+  const compliance = resolveComplianceLinks(settings);
 
   const leases = await prisma.lease.findMany({
     where: {
@@ -207,6 +210,53 @@ export default async function PortalHomePage() {
           <PaymentPreferenceForm current={tenant.preferredPaymentMethod} />
           <div className="border-t pt-4">
             <CashPickupForm leaseId={activeLease?.id ?? null} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Text messages & help */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Text messages</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p className="text-muted-foreground">
+            {tenant.smsConsent
+              ? "You're opted in to account text messages."
+              : "You're opted out of text messages."}
+          </p>
+          <SmsConsentForm current={tenant.smsConsent} />
+          <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Messaging help</p>
+            <p>
+              {settings.businessName} sends account messages — rent reminders and
+              payment receipts. Message frequency varies. Message &amp; data rates
+              may apply.
+            </p>
+            <p>
+              Reply <span className="font-mono">STOP</span> to unsubscribe or{" "}
+              <span className="font-mono">HELP</span> for help at any time.
+            </p>
+            {(compliance.privacy.href || compliance.terms.href) && (
+              <p className="flex flex-wrap gap-x-3">
+                {compliance.privacy.href && (
+                  <a
+                    href={compliance.privacy.href}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Privacy Policy
+                  </a>
+                )}
+                {compliance.terms.href && (
+                  <a
+                    href={compliance.terms.href}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Terms &amp; Conditions
+                  </a>
+                )}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
