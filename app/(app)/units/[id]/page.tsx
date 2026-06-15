@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
+import { computeVacancy } from "@/lib/units/vacancy";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { Badge } from "@/components/ui/badge";
 import { updateUnit, deleteUnit } from "../actions";
@@ -55,6 +56,25 @@ export default async function UnitDetail({
     ? await leaseSnapshot(lease, unit, new Date(), unit.property.timezone)
     : null;
   const currency = unit.property.currency;
+
+  const vacancy = computeVacancy(
+    {
+      occupancyStatus: unit.occupancyStatus,
+      availableFromDate: unit.availableFromDate,
+      activeLeaseEndDate: lease?.endDate ?? null,
+    },
+    new Date(),
+  );
+  const availabilityLabel = vacancy.availableNow
+    ? "Available now"
+    : vacancy.availableOn
+      ? `Available ${vacancy.availableOn.toLocaleDateString("en-US", {
+          timeZone: unit.property.timezone,
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })}`
+      : "Occupied";
 
   const { modules } = await getAppSettings();
   const openJobs = modules.maintenance
@@ -184,6 +204,25 @@ export default async function UnitDetail({
                   </select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="availableFromDate">Available from</Label>
+                  <Input
+                    id="availableFromDate"
+                    name="availableFromDate"
+                    type="date"
+                    defaultValue={
+                      unit.availableFromDate
+                        ? unit.availableFromDate.toLocaleDateString("en-CA", {
+                            timeZone: unit.property.timezone,
+                          })
+                        : ""
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Overrides the active lease&apos;s end date in the
+                    dashboard vacancy outlook.
+                  </p>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="bedrooms">Bedrooms</Label>
                   <Input
                     id="bedrooms"
@@ -268,6 +307,7 @@ export default async function UnitDetail({
               label="Occupancy"
               value={<span className="capitalize">{unit.occupancyStatus}</span>}
             />
+            <Field label="Availability" value={availabilityLabel} />
             <Field label="Building" value={unit.building?.name ?? "—"} />
             <Field
               label="Default rent"

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
+import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type {
   OccupancyStatus,
   UnitType,
@@ -40,8 +41,19 @@ export async function updateUnit(
   const unitNumber = str(fd, "unitNumber");
   if (!unitId || !unitNumber) return { error: "Unit number is required." };
 
-  const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+  const unit = await prisma.unit.findUnique({
+    where: { id: unitId },
+    include: { property: { select: { timezone: true } } },
+  });
   if (!unit) return { error: "Unit not found." };
+
+  const availableRaw = str(fd, "availableFromDate");
+  const availableFromDate = availableRaw
+    ? parseDateOnlyInZone(availableRaw, unit.property.timezone)
+    : null;
+  if (availableRaw && !availableFromDate) {
+    return { error: "Available-from date must be a valid date." };
+  }
 
   const buildingId = str(fd, "buildingId") || null;
   if (buildingId) {
@@ -86,6 +98,7 @@ export async function updateUnit(
     buildingId,
     unitType: (str(fd, "unitType") || "apartment") as UnitType,
     occupancyStatus: (str(fd, "occupancyStatus") || "vacant") as OccupancyStatus,
+    availableFromDate,
     bedrooms,
     bathrooms,
     squareFeet,
@@ -106,6 +119,7 @@ export async function updateUnit(
         buildingId: unit.buildingId,
         unitType: unit.unitType,
         occupancyStatus: unit.occupancyStatus,
+        availableFromDate: unit.availableFromDate,
         bedrooms: unit.bedrooms,
         bathrooms: unit.bathrooms,
         squareFeet: unit.squareFeet,
@@ -124,6 +138,7 @@ export async function updateUnit(
           buildingId: updated.buildingId,
           unitType: updated.unitType,
           occupancyStatus: updated.occupancyStatus,
+          availableFromDate: updated.availableFromDate,
           bedrooms: updated.bedrooms,
           bathrooms: updated.bathrooms,
           squareFeet: updated.squareFeet,
