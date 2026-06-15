@@ -270,6 +270,37 @@ export async function resolveSmsProvider(): Promise<SmsProvider> {
 }
 
 /**
+ * The effective Twilio auth token for verifying inbound/status webhooks —
+ * DB-configured (decrypted) when AppSettings selects Twilio, else the env token
+ * when the env provider is Twilio. null when Twilio is not the effective
+ * provider (so webhook routes can fail closed: no legitimate caller).
+ */
+export async function getEffectiveTwilioAuthToken(): Promise<string | null> {
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  if (
+    row?.smsProvider === "twilio" &&
+    row.smsAuthTokenCiphertext &&
+    row.smsAuthTokenNonce &&
+    row.smsAuthTokenTag
+  ) {
+    return decryptSecret(
+      {
+        ciphertext: row.smsAuthTokenCiphertext,
+        nonce: row.smsAuthTokenNonce,
+        tag: row.smsAuthTokenTag,
+      },
+      SMS_TOKEN_AAD,
+    );
+  }
+  // env fallback (when SMS isn't DB-configured). Mirrors resolveSmsProvider.
+  const env = getEnv();
+  if (env.SMS_PROVIDER === "twilio" && env.SMS_AUTH_TOKEN) {
+    return env.SMS_AUTH_TOKEN;
+  }
+  return null;
+}
+
+/**
  * Effective email provider, from DB config only (email has no env fallback).
  * Throws with an operator-actionable message when unconfigured/incomplete —
  * callers surface it as a returned error, mirroring SMS sends.
