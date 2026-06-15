@@ -157,16 +157,17 @@ export async function leaseSnapshot(
 }
 
 /**
- * Snapshots for many leases in a fixed number of queries (two total, regardless
- * of lease count) instead of two per lease. Pure compute is shared with the
- * single-lease path so balance math stays identical.
+ * Load accounting (entries + charges + allocations) for many leases in a fixed
+ * number of queries (two total, regardless of lease count) instead of two per
+ * lease. Returns a `Map<leaseId, LeaseAccounting>`; leases with no rows are
+ * present with empty data. Shares the exact pure compute with the single-lease
+ * `loadLeaseAccounting`, so balance math is identical either way.
  */
-export async function batchLeaseSnapshots<
-  L extends SnapshotLease & { unit: Pick<Unit, "serviceStatus"> & { property: { timezone: string } } },
->(leases: L[], now: Date): Promise<Map<string, LeaseSnapshot>> {
-  const result = new Map<string, LeaseSnapshot>();
-  if (leases.length === 0) return result;
-  const leaseIds = leases.map((l) => l.id);
+export async function batchLeaseAccounting(
+  leaseIds: string[],
+): Promise<Map<string, LeaseAccounting>> {
+  const result = new Map<string, LeaseAccounting>();
+  if (leaseIds.length === 0) return result;
 
   const [rows, allocs] = await Promise.all([
     prisma.ledgerEntry.findMany({
@@ -204,9 +205,9 @@ export async function batchLeaseSnapshots<
     (allocsByLease.get(lid) ?? allocsByLease.set(lid, []).get(lid)!).push(a);
   }
 
-  for (const lease of leases) {
-    const leaseRows = rowsByLease.get(lease.id) ?? [];
-    const accounting: LeaseAccounting = {
+  for (const leaseId of leaseIds) {
+    const leaseRows = rowsByLease.get(leaseId) ?? [];
+    result.set(leaseId, {
       entries: leaseRows.map((r) => ({
         id: r.id,
         entryType: r.entryType,
@@ -218,7 +219,30 @@ export async function batchLeaseSnapshots<
         chargesFromEntries(leaseRows),
         chargeReversalsFromEntries(leaseRows),
       ),
-      allocatedByCharge: allocatedByChargeFrom(allocsByLease.get(lease.id) ?? []),
+      allocatedByCharge: allocatedByChargeFrom(allocsByLease.get(leaseId) ?? []),
+    });
+  }
+  return result;
+}
+
+/**
+ * Snapshots for many leases in a fixed number of queries (two total, regardless
+ * of lease count) instead of two per lease. Pure compute is shared with the
+ * single-lease path so balance math stays identical.
+ */
+export async function batchLeaseSnapshots<
+  L extends SnapshotLease & { unit: Pick<Unit, "serviceStatus"> & { property: { timezone: string } } },
+>(leases: L[], now: Date): Promise<Map<string, LeaseSnapshot>> {
+  const result = new Map<string, LeaseSnapshot>();
+  if (leases.length === 0) return result;
+
+  const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
+
+  for (const lease of leases) {
+    const accounting = accountingByLease.get(lease.id) ?? {
+      entries: [],
+      charges: [],
+      allocatedByCharge: {},
     };
     result.set(
       lease.id,

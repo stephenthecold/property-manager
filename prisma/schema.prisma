@@ -741,7 +741,9 @@ model Reminder {
   sentAt            DateTime?
   createdAt         DateTime       @default(now())
 
-  @@index([tenantId])
+  // Composite covers the plain tenantId lookup (leading-column prefix) AND the
+  // tenant reminder timeline ordered by createdAt.
+  @@index([tenantId, createdAt])
   @@index([leaseId])
   @@index([providerMessageId])
 }
