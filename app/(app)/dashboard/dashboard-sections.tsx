@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { saveDashboardLayout } from "./actions";
 import type { DashboardLayout } from "@/lib/dashboard/layout";
 
 export interface DashboardSection {
@@ -21,7 +20,7 @@ export interface DashboardSection {
  * Client shell that lets a user reorder (drag handle or ▲/▼) and collapse the
  * dashboard sections, persisting per-user. The server passes sections already
  * in the saved order (no flash); this component owns the live state and
- * best-effort-persists every change via saveDashboardLayout (no revalidate).
+ * best-effort-persists every change to the /api/dashboard/layout route.
  */
 export function DashboardSections({
   sections,
@@ -44,16 +43,17 @@ export function DashboardSections({
     useState<Record<string, boolean>>(initialCollapsed);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
 
   function persist(next: DashboardLayout) {
-    startTransition(async () => {
-      try {
-        await saveDashboardLayout(next);
-      } catch {
-        /* best-effort: a failed save just means it isn't remembered next load */
-      }
-    });
+    // Fire-and-forget to an API route — NOT a Server Action (which would
+    // invalidate the router cache and refetch the whole dashboard on every
+    // toggle). Best-effort: a failed save just isn't remembered next load.
+    void fetch("/api/dashboard/layout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(next),
+      keepalive: true,
+    }).catch(() => {});
   }
 
   function reorder(from: string, to: string) {
