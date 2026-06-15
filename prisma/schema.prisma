@@ -152,6 +152,10 @@ model User {
   notifyOverdueDigest     Boolean @default(true)
   notifyMaintenanceDigest Boolean @default(true)
   notifyCashPickup        Boolean @default(true)
+  // Personal dashboard layout: { order: string[], collapsed: {id:true} }.
+  // Per-user UI preference only — resolved/clamped to known sections in
+  // lib/dashboard/layout.ts; never security-relevant.
+  dashboardLayout Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -1,9 +1,18 @@
 import Link from "next/link";
+import { prisma } from "@/lib/db";
 import { getDashboard, getVacancyOutlook } from "@/lib/services/dashboard";
 import { getProfitSnapshot } from "@/lib/services/financials";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getDisplayRole } from "@/lib/auth/session";
+import { getDisplayRole, getSessionUser } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
+import {
+  DASHBOARD_SECTION_IDS,
+  resolveLayout,
+} from "@/lib/dashboard/layout";
+import {
+  DashboardSections,
+  type DashboardSection,
+} from "./dashboard-sections";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -103,11 +112,23 @@ export default async function DashboardPage() {
     ? d.monthCollectedCents - fixedCostsMonthlyCents - profit.expensesMonthCents
     : 0n;
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+  const sessionUser = await getSessionUser();
+  const savedLayout = sessionUser?.id
+    ? ((
+        await prisma.user.findUnique({
+          where: { id: sessionUser.id },
+          select: { dashboardLayout: true },
+        })
+      )?.dashboardLayout ?? null)
+    : null;
+  const layout = resolveLayout(savedLayout, DASHBOARD_SECTION_IDS);
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+  const sectionMap: Record<string, DashboardSection> = {
+    stats: {
+      id: "stats",
+      title: "Key figures",
+      content: (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
         {canFinance && (
           <>
             <Stat
@@ -170,20 +191,22 @@ export default async function DashboardPage() {
             />
           </>
         )}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Vacancy outlook
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-              {vacancies.length}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            emptyMessage="No vacant or upcoming-vacant units."
+        </div>
+      ),
+    },
+    vacancy: {
+      id: "vacancy",
+      title: (
+        <span className="flex items-center gap-2">
+          Vacancy outlook
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+            {vacancies.length}
+          </span>
+        </span>
+      ),
+      content: (
+        <DataTable
+          emptyMessage="No vacant or upcoming-vacant units."
             columns={[
               { key: "unit", label: "Unit" },
               { key: "property", label: "Property", className: "hidden md:table-cell" },
@@ -246,17 +269,15 @@ export default async function DashboardPage() {
                 ],
               };
             })}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            emptyMessage="No active leases yet."
+        />
+      ),
+    },
+    tenants: {
+      id: "tenants",
+      title: "Tenant status",
+      content: (
+        <DataTable
+          emptyMessage="No active leases yet."
             columns={[
               { key: "tenant", label: "Tenant" },
               { key: "unit", label: "Unit" },
@@ -324,17 +345,15 @@ export default async function DashboardPage() {
                   : []),
               ],
             }))}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent payments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            emptyMessage="No payments recorded yet."
+        />
+      ),
+    },
+    payments: {
+      id: "payments",
+      title: "Recent payments",
+      content: (
+        <DataTable
+          emptyMessage="No payments recorded yet."
             columns={[
               { key: "tenant", label: "Tenant" },
               { key: "date", label: "Date" },
@@ -360,9 +379,23 @@ export default async function DashboardPage() {
                 </span>,
               ],
             }))}
-          />
-        </CardContent>
-      </Card>
+        />
+      ),
+    },
+  };
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <DashboardSections
+        sections={
+          layout.order
+            .map((id) => sectionMap[id])
+            .filter(Boolean) as DashboardSection[]
+        }
+        initialOrder={layout.order}
+        initialCollapsed={layout.collapsed}
+      />
     </div>
   );
 }
