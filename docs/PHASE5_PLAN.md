@@ -90,11 +90,80 @@ These are safe, isolated follow-ups to the 4.5 batching work:
 - Consider per-resource ownership checks once multi-tenant data isolation (org_id) is on the
   table.
 
+## H. Deeper settings-driven customization
+
+A pass to push hard-coded look-and-feel and behavioural constants into the Settings hub, so an
+operator can re-skin and re-tune the deployment without a code change. Each item already has a
+single static source of truth; the work is to add a (non-secret) `AppSettings` field, thread a
+resolved value through, and expose it in the relevant Settings page — reusing the established
+patterns (DB-over-env, `withAudit` mutations, capability-gated pages, defaults living in a pure
+module). Items are independent and individually shippable. **Invariants are untouched:** money
+still flows through `lib/money.ts`, the ledger stays the source of truth, and any value feeding
+the accounting core stays in a clock-injected, unit-tested pure module.
+
+### H1. Branding & theme (Settings → Organization)
+- **Brand / accent colour.** The two palettes are fixed `oklch(...)` literals in
+  [`app/globals.css`](../app/globals.css) (`--primary`, `--accent`, `--ring`, …). Let the org
+  pick a brand colour (or derive it from the logo) and emit it as a CSS-variable override on the
+  app shell. Must keep both light/dark contrast and the **print-forces-light** rule intact, and
+  carry `dark:` variants for any tinted surface.
+- **Letter-tile fallback colour** for the favicon/avatar in [`app/icon.tsx`](../app/icon.tsx)
+  (today derived/static) — fold into the same brand colour.
+
+### H2. Display & locale (Settings → Organization)
+- **Currency / number / date locale.** [`lib/money.ts`](../lib/money.ts) `formatCurrency` defaults
+  `locale = "en-US"` and dates render with a fixed format; surface an org locale so `Intl`
+  formatting follows it. **Display only** — never the cents math.
+- **Default table page size.** [`components/app/data-table.tsx`](../components/app/data-table.tsx)
+  hard-codes `PAGE_SIZE_OPTIONS = [10, 20, 50]` and `defaultPageSize = 10`. Make the default (and
+  optionally the options) an org preference threaded into the `DataTable` server pages.
+
+### H3. Documents & numbering
+- **Receipt number format.** [`lib/services/receipts.ts`](../lib/services/receipts.ts) hard-codes
+  the `RCT-YYYYMMDD-NNNN` prefix. Let the org set the prefix (e.g. its initials) while keeping the
+  per-tz-day sequence + `receiptNumber` UNIQUE idempotency.
+- **Report/receipt header text** beyond the existing `receiptFooter` (e.g. a report subtitle or
+  "remit to" block), same free-text + audit pattern as the footer.
+
+### H4. Notifications content & timing (Settings → Messaging / Notifications)
+- **Email templates + subjects.** Only `smsTemplates` is DB-overridable today; the email
+  receipt/reminder bodies and **subjects** are static. Add an `emailTemplates` JSON mirroring the
+  SMS override pattern, reusing the existing template renderer
+  ([`lib/reminders/templates.ts`](../lib/reminders/templates.ts)). (Lands naturally alongside
+  workstream **C**.)
+- **Reminder/digest send time.** The schedules are env-only — `REMINDER_CRON` (`0 9 * * *`) and
+  `STAFF_DIGEST_CRON` in [`worker/index.ts`](../worker/index.ts). Surface a send-hour/day setting
+  that the worker reads from the DB (DB-over-env), like the other messaging config.
+
+### H5. Tenant-facing copy (Settings → Organization, portal section)
+- **Portal welcome / "how to pay" text** ([`app/portal/page.tsx`](../app/portal/page.tsx)) and the
+  **public `/apply` intro + confirmation** copy are static strings. Make them editable free-text
+  (branded, `whitespace-pre-wrap`), the same shape as the hosted privacy/terms text.
+
+### H6. Status & terminology labels (stretch)
+- **Status badge labels** (and optionally colours) and a few domain nouns ("Rent", "Tenant") are
+  hard-coded. A small label-override map would let an operator match their own vocabulary. Keep the
+  underlying enum values fixed — override the *display* only.
+
+### H7. Configurable aging buckets (careful — touches the accounting core)
+- The aging report thresholds (current / 1–30 / 31–60 / 61–90 / 90+) are fixed in
+  `agingFromOpenCharges` ([`lib/accounting/`](../lib/accounting/)). These *could* be operator-tuned,
+  but because they live in the pure, unit-tested accounting core, the bucket bounds must be passed
+  **in** as injected config (never read from the DB inside the pure module) and covered by new
+  tests. Lowest priority; flagged here so it's a deliberate decision, not an accidental one.
+
+**Acceptance (per item):** the setting changes the rendered/behavioural value live (no redeploy),
+the change is audited, non-secret values only, and the shipped default is unchanged when the field
+is empty. Anything feeding accounting/period/money logic is threaded as injected config into the
+pure modules with unit tests — the DB layer never re-implements it.
+
 ---
 
 ### Suggested order
 
 A and B are the high-value foundation (and B's ledger integration is low-risk because it reuses
 the payment service). C and D layer on once A exists. E, F, G are independent and can slot in
-between as smaller PRs. Keep each workstream to its own PR with tests + a Playwright check, the
-way 4.5 was shipped.
+between as smaller PRs. **H** is a backlog of small, independent customization PRs — most are
+low-risk free-text/preference fields that can be picked up any time (H4's email templates pair
+with C; H7 is last because it touches the accounting core). Keep each workstream to its own PR
+with tests + a Playwright check, the way 4.5 was shipped.
