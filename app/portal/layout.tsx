@@ -2,6 +2,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { getPortalSession } from "@/lib/portal/session";
 import { signOutPortalAction } from "./actions";
+import { exitImpersonationAction } from "./impersonation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -43,6 +44,19 @@ export default async function PortalLayout({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
+      {identity?.impersonatedByUserId && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
+          <span>
+            Impersonating {identity.tenant.firstName} {identity.tenant.lastName} —
+            staff debug session.
+          </span>
+          <form action={exitImpersonationAction}>
+            <button type="submit" className="underline underline-offset-2">
+              Exit impersonation
+            </button>
+          </form>
+        </div>
+      )}
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
           <div className="text-lg font-semibold">{settings.businessName}</div>

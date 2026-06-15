@@ -474,6 +474,7 @@ model Tenant {
   coLeases      LeaseTenant[]
   portalAccount TenantPortalAccount?
   requests      TenantRequest[]
+  trialTokens   TenantPortalTrialToken[]
 
   @@index([lastName, firstName])
 }
@@ -945,10 +946,31 @@ model TenantPortalSession {
   expiresAt DateTime
   ip        String?
   userAgent String?
+  // Set when a STAFF user is impersonating this tenant (debug/smoke-test).
+  // null = a real tenant login. Impersonation sessions show a banner, bypass the
+  // account-active check, and are short-lived.
+  impersonatedByUserId String?
   createdAt DateTime            @default(now())
 
   @@index([accountId])
   @@index([expiresAt])
+}
+
+// Single-use, short-lived "trial login" link a staff user (portal.impersonate)
+// generates to open the portal AS a tenant — for debugging/smoke testing. The
+// raw token lives only in the link; we store its sha-256. Consuming it mints an
+// impersonation TenantPortalSession.
+model TenantPortalTrialToken {
+  id              String    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tokenHash       String    @unique
+  createdByUserId String?
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([tenantId])
 }
 
 enum TenantRequestType {
