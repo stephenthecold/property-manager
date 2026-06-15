@@ -300,6 +300,12 @@ model AppSettings {
   // Disabling a module hides its UI but never deletes its data.
   modules Json @default("{}")
 
+  // Public rental-application form config: which fields show + are required,
+  // e.g. { "monthlyIncome": "required", "employer": "hidden" }. Missing keys use
+  // the defaults in lib/applications/form-config.ts. Editable at Settings →
+  // Applications. Name is always required; email/phone can't both be hidden.
+  applicationFields Json @default("{}")
+
   // Built-in lease-agreement clause text ({{placeholder}} template) rendered
   // on the printable agreement page; null -> the shipped default.
   leaseAgreementText String?

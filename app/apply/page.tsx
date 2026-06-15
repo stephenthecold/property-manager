@@ -66,7 +66,11 @@ export default async function ApplyPage({
       </div>
       <Card>
         <CardContent className="py-6">
-          <ApplyForm unitId={unitId} businessName={settings.businessName} />
+          <ApplyForm
+            unitId={unitId}
+            businessName={settings.businessName}
+            config={settings.applicationFields}
+          />
         </CardContent>
       </Card>
     </div>
