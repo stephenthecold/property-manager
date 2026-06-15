@@ -152,6 +152,10 @@ model User {
   notifyOverdueDigest     Boolean @default(true)
   notifyMaintenanceDigest Boolean @default(true)
   notifyCashPickup        Boolean @default(true)
+  // Personal dashboard layout: { order: string[], collapsed: {id:true} }.
+  // Per-user UI preference only — resolved/clamped to known sections in
+  // lib/dashboard/layout.ts; never security-relevant.
+  dashboardLayout Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -396,6 +400,7 @@ model Property {
   expenses        PropertyExpense[]
   maintenanceJobs MaintenanceJob[]
   recurringTasks  RecurringTask[]
+  rentalApplications RentalApplication[]
 }
 
 model Building {
@@ -443,6 +448,7 @@ model Unit {
   leases   Lease[]
   expenses        PropertyExpense[]
   maintenanceJobs MaintenanceJob[]
+  rentalApplications RentalApplication[]
 
   @@index([propertyId])
   @@index([buildingId])
@@ -1008,4 +1014,47 @@ model TenantRequest {
 
   @@index([status, createdAt])
   @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Rental applications (module "applications") — prospective-tenant intake.
+// Submitted from the PUBLIC /apply form (no auth); staff review and optionally
+// convert to a Tenant. An operating record only — never a ledger entry, never
+// linked to balances. Optional property/unit interest (SetNull so deleting
+// inventory keeps the application).
+// ---------------------------------------------------------------------------
+enum RentalApplicationStatus {
+  submitted
+  reviewing
+  approved
+  declined
+  withdrawn
+}
+
+model RentalApplication {
+  id                 String                  @id @default(cuid())
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String?
+  currentAddress     String?
+  propertyId         String?
+  unitId             String?
+  desiredMoveInDate  DateTime?
+  monthlyIncomeCents BigInt?
+  employer           String?
+  message            String? // applicant's free-text note
+  status             RentalApplicationStatus @default(submitted)
+  reviewerNotes      String? // staff-only review notes
+  convertedTenantId  String? // set when converted to a Tenant
+  handledBy          String? // staff user id who last acted
+  handledAt          DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([unitId])
 }

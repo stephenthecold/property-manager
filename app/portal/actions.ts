@@ -8,6 +8,7 @@ import { PaymentMethod } from "@/lib/generated/prisma/enums";
 import { destroyPortalSession, requirePortalSession } from "@/lib/portal/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { createTenantRequest } from "@/lib/services/tenant-requests";
+import { setTenantSmsConsent } from "@/lib/services/sms-consent";
 
 /**
  * Tenant-side portal actions. EVERY mutation re-verifies the portal session
@@ -56,6 +57,26 @@ export async function savePaymentPreferenceAction(
     message: method
       ? `Preference saved: ${method.replace(/_/g, " ")}.`
       : "Preference cleared.",
+  };
+}
+
+/** Self-service SMS opt-in/out on the tenant's own record. */
+export async function setSmsConsentAction(
+  _prev: PortalActionState,
+  fd: FormData,
+): Promise<PortalActionState> {
+  const { tenant } = await requirePortalSession();
+  const consent = fd.get("smsConsent") === "on";
+  await setTenantSmsConsent(tenant.id, consent, {
+    actorType: "system",
+    actorEmail: "portal (tenant)",
+  });
+  revalidatePath("/portal");
+  return {
+    ok: true,
+    message: consent
+      ? "You're opted in — we may text you account messages."
+      : "You're opted out — we won't text you.",
   };
 }
 

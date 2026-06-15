@@ -31,6 +31,8 @@ export interface ModuleFlags {
   maintenance: boolean;
   /** Tenant self-service portal (/portal, local tenant logins). */
   tenantPortal: boolean;
+  /** Prospective-tenant rental applications (public /apply + staff /applications). */
+  applications: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -38,6 +40,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   financials: true,
   maintenance: false,
   tenantPortal: false,
+  applications: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -51,6 +54,10 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.tenantPortal === "boolean"
         ? obj.tenantPortal
         : MODULE_DEFAULTS.tenantPortal,
+    applications:
+      typeof obj.applications === "boolean"
+        ? obj.applications
+        : MODULE_DEFAULTS.applications,
   };
 }
 
@@ -267,6 +274,37 @@ export async function resolveSmsProvider(): Promise<SmsProvider> {
   }
 
   return getSmsProvider();
+}
+
+/**
+ * The effective Twilio auth token for verifying inbound/status webhooks —
+ * DB-configured (decrypted) when AppSettings selects Twilio, else the env token
+ * when the env provider is Twilio. null when Twilio is not the effective
+ * provider (so webhook routes can fail closed: no legitimate caller).
+ */
+export async function getEffectiveTwilioAuthToken(): Promise<string | null> {
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  if (
+    row?.smsProvider === "twilio" &&
+    row.smsAuthTokenCiphertext &&
+    row.smsAuthTokenNonce &&
+    row.smsAuthTokenTag
+  ) {
+    return decryptSecret(
+      {
+        ciphertext: row.smsAuthTokenCiphertext,
+        nonce: row.smsAuthTokenNonce,
+        tag: row.smsAuthTokenTag,
+      },
+      SMS_TOKEN_AAD,
+    );
+  }
+  // env fallback (when SMS isn't DB-configured). Mirrors resolveSmsProvider.
+  const env = getEnv();
+  if (env.SMS_PROVIDER === "twilio" && env.SMS_AUTH_TOKEN) {
+    return env.SMS_AUTH_TOKEN;
+  }
+  return null;
 }
 
 /**

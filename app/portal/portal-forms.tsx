@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   requestCashPickupAction,
   savePaymentPreferenceAction,
+  setSmsConsentAction,
   submitMaintenanceRequestAction,
   type PortalActionState,
 } from "./actions";
@@ -69,6 +70,34 @@ export function PaymentPreferenceForm({ current }: { current: string | null }) {
           {pending ? "Saving…" : "Save"}
         </Button>
       </div>
+    </form>
+  );
+}
+
+export function SmsConsentForm({ current }: { current: boolean }) {
+  const [state, formAction, pending] = useActionState<PortalActionState, FormData>(
+    setSmsConsentAction,
+    {},
+  );
+  return (
+    <form action={formAction} className="space-y-3">
+      <StateAlerts state={state} />
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="smsConsent"
+          defaultChecked={current}
+          className="mt-0.5 size-4 accent-primary"
+        />
+        <span>
+          Text me account messages (rent reminders &amp; receipts). You can opt
+          out anytime here or by replying <span className="font-mono">STOP</span>{" "}
+          to any message.
+        </span>
+      </label>
+      <Button type="submit" size="sm" variant="outline" disabled={pending}>
+        {pending ? "Saving…" : "Save preference"}
+      </Button>
     </form>
   );
 }

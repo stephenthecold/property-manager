@@ -15,12 +15,14 @@ const PUBLIC_PREFIXES = [
   "/setup",
   "/api/auth",
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
+  "/api/sms/inbound", // inbound STOP/START/HELP webhook — HMAC-verified, not session
   "/api/health", // container healthcheck — returns only {ok}, no data
   "/sign", // tenant e-sign pages — gated by a single-use token hash, not a session
   "/portal", // tenant portal — its own local session (lib/portal/session.ts), never staff auth
   "/api/portal", // portal-scoped APIs (file downloads) — same portal session check
   "/privacy", // public compliance page (10DLC) — operator-authored, no data
   "/terms", // public compliance page (10DLC) — operator-authored, no data
+  "/apply", // public rental-application intake — module-gated at the service layer
 ];
 
 function isPublic(pathname: string): boolean {
