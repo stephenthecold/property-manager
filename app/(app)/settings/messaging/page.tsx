@@ -75,7 +75,6 @@ export default async function MessagingSettingsPage() {
               privacyPolicyUrl: row?.privacyPolicyUrl ?? "",
               termsText: row?.termsText ?? "",
               termsUrl: row?.termsUrl ?? "",
-              smsSampleEmbeddedLink: row?.smsSampleEmbeddedLink ?? "",
               baseUrl: env.APP_URL,
             }}
           />

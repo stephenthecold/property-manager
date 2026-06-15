@@ -250,14 +250,13 @@ model AppSettings {
   // 10DLC / A2P messaging compliance. Privacy policy and terms can be hosted
   // in-app — the *Text fields render at the public /privacy and /terms routes
   // (whitespace-pre-wrap, branded) — or pointed at an externally-hosted page
-  // via the *Url override, which wins when set. smsSampleEmbeddedLink is a
-  // sample of a link that appears in outgoing messages, submitted with the
-  // campaign registration. None of these touch the ledger or tenant data.
-  privacyPolicyText     String?
-  privacyPolicyUrl      String?
-  termsText             String?
-  termsUrl              String?
-  smsSampleEmbeddedLink String?
+  // via the *Url override, which wins when set. (The 10DLC "sample embedded
+  // link" is not stored — it is a prefilled dead link derived from APP_URL;
+  // see lib/config/compliance.ts.) None of these touch the ledger or tenant data.
+  privacyPolicyText String?
+  privacyPolicyUrl  String?
+  termsText         String?
+  termsUrl          String?
 
   // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
   // not configured; "stub" logs only; "smtp" sends. Auth is either a password
