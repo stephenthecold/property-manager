@@ -106,6 +106,13 @@ export interface ResolvedAppSettings {
   landlordInitialsImageKey: string | null;
   /** Org Cash App cashtag ("$Example") for notices and the tenant portal. */
   cashAppCashtag: string | null;
+  /** 10DLC / A2P compliance links. Privacy/terms render at /privacy & /terms
+   *  when the *Text is set, unless a *Url override points elsewhere. */
+  privacyPolicyText: string | null;
+  privacyPolicyUrl: string | null;
+  termsText: string | null;
+  termsUrl: string | null;
+  smsSampleEmbeddedLink: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -199,6 +206,11 @@ async function resolve(): Promise<ResolvedAppSettings> {
     landlordSignatureImageKey: row?.landlordSignatureImageKey ?? null,
     landlordInitialsImageKey: row?.landlordInitialsImageKey ?? null,
     cashAppCashtag: row?.cashAppCashtag ?? null,
+    privacyPolicyText: row?.privacyPolicyText ?? null,
+    privacyPolicyUrl: row?.privacyPolicyUrl ?? null,
+    termsText: row?.termsText ?? null,
+    termsUrl: row?.termsUrl ?? null,
+    smsSampleEmbeddedLink: row?.smsSampleEmbeddedLink ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     billing: {
@@ -798,6 +810,56 @@ export async function saveCashAppCashtag(
       entityId: "singleton",
       before: before ? { cashAppCashtag: before.cashAppCashtag } : undefined,
       after: { cashAppCashtag: cashtag },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface ComplianceLinksInput {
+  /** Hosted policy text (rendered at /privacy & /terms); null clears it. */
+  privacyPolicyText: string | null;
+  termsText: string | null;
+  /** External-page overrides (win over hosted text); null clears them. */
+  privacyPolicyUrl: string | null;
+  termsUrl: string | null;
+  /** Sample subscriber link submitted with the campaign; null clears it. */
+  smsSampleEmbeddedLink: string | null;
+}
+
+/** Persist the 10DLC / A2P compliance links (privacy, terms, sample link). */
+export async function saveComplianceLinks(
+  input: ComplianceLinksInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { ...input, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.compliance.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? {
+            privacyPolicyUrl: before.privacyPolicyUrl,
+            termsUrl: before.termsUrl,
+            smsSampleEmbeddedLink: before.smsSampleEmbeddedLink,
+            privacyPolicyHosted: !!before.privacyPolicyText,
+            termsHosted: !!before.termsText,
+          }
+        : undefined,
+      after: {
+        privacyPolicyUrl: input.privacyPolicyUrl,
+        termsUrl: input.termsUrl,
+        smsSampleEmbeddedLink: input.smsSampleEmbeddedLink,
+        privacyPolicyHosted: !!input.privacyPolicyText,
+        termsHosted: !!input.termsText,
+      },
     });
   });
   invalidateAppSettingsCache();

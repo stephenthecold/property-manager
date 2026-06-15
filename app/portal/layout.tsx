@@ -1,4 +1,5 @@
 import { getAppSettings } from "@/lib/services/app-settings";
+import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { getPortalSession } from "@/lib/portal/session";
 import { signOutPortalAction } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default async function PortalLayout({
   }
 
   const identity = await getPortalSession();
+  const { privacy, terms } = resolveComplianceLinks(settings);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
@@ -62,6 +64,20 @@ export default async function PortalLayout({
         )}
       </header>
       {children}
+      {(privacy.href || terms.href) && (
+        <footer className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t pt-4 text-xs text-muted-foreground">
+          {privacy.href && (
+            <a href={privacy.href} className="underline underline-offset-2 hover:text-foreground">
+              Privacy Policy
+            </a>
+          )}
+          {terms.href && (
+            <a href={terms.href} className="underline underline-offset-2 hover:text-foreground">
+              Terms &amp; Conditions
+            </a>
+          )}
+        </footer>
+      )}
     </div>
   );
 }

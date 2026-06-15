@@ -247,6 +247,18 @@ model AppSettings {
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
 
+  // 10DLC / A2P messaging compliance. Privacy policy and terms can be hosted
+  // in-app — the *Text fields render at the public /privacy and /terms routes
+  // (whitespace-pre-wrap, branded) — or pointed at an externally-hosted page
+  // via the *Url override, which wins when set. smsSampleEmbeddedLink is a
+  // sample of a link that appears in outgoing messages, submitted with the
+  // campaign registration. None of these touch the ledger or tenant data.
+  privacyPolicyText     String?
+  privacyPolicyUrl      String?
+  termsText             String?
+  termsUrl              String?
+  smsSampleEmbeddedLink String?
+
   // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
   // not configured; "stub" logs only; "smtp" sends. Auth is either a password
   // or OAuth2 (XOAUTH2: Gmail / Microsoft 365); all three secrets are
