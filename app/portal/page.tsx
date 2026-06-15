@@ -229,9 +229,9 @@ export default async function PortalHomePage() {
           <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
             <p className="font-medium text-foreground">Messaging help</p>
             <p>
-              {settings.businessName} sends account messages — rent reminders and
-              payment receipts. Message frequency varies. Message &amp; data rates
-              may apply.
+              {settings.businessName}{" "}
+              sends account messages — rent reminders and payment receipts.
+              Message frequency varies. Message &amp; data rates may apply.
             </p>
             <p>
               Reply <span className="font-mono">STOP</span> to unsubscribe or{" "}
