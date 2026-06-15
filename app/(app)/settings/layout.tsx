@@ -7,7 +7,13 @@ import { SettingsNav } from "@/components/app/settings-nav";
 export const runtime = "nodejs";
 
 // cap: null = self-service section, visible to every signed-in staff member.
-const SETTINGS_LINKS: { href: string; label: string; cap: Capability | null }[] = [
+// module: gate the link on an optional feature module being enabled.
+const SETTINGS_LINKS: {
+  href: string;
+  label: string;
+  cap: Capability | null;
+  module?: "tenantPortal";
+}[] = [
   { href: "/settings/notifications", label: "Notifications", cap: null },
   { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
   { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
@@ -17,6 +23,12 @@ const SETTINGS_LINKS: { href: string; label: string; cap: Capability | null }[] 
   { href: "/settings/users", label: "Users", cap: "users.manage" },
   { href: "/settings/permissions", label: "Permissions", cap: "users.manage" },
   { href: "/settings/modules", label: "Modules", cap: "organization.settings" },
+  {
+    href: "/settings/impersonate",
+    label: "Impersonate",
+    cap: "portal.impersonate",
+    module: "tenantPortal",
+  },
 ];
 
 export default async function SettingsLayout({
@@ -25,11 +37,14 @@ export default async function SettingsLayout({
   children: React.ReactNode;
 }) {
   const { actingRole } = await getDisplayRole();
-  const { rolePermissions } = await getAppSettings();
+  const { rolePermissions, modules } = await getAppSettings();
 
-  // Show only the sections this role can edit; each page re-checks its own gate.
+  // Show only the sections this role can edit (and whose module is on); each
+  // page re-checks its own gate.
   const links = SETTINGS_LINKS.filter(
-    (l) => l.cap === null || hasCapability(actingRole, l.cap, rolePermissions),
+    (l) =>
+      (!l.module || modules[l.module]) &&
+      (l.cap === null || hasCapability(actingRole, l.cap, rolePermissions)),
   );
   if (links.length === 0) redirect("/dashboard");
 
