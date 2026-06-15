@@ -25,6 +25,12 @@ const MODULE_INFO = [
     description:
       "Self-service portal at /portal where invited tenants sign in (email + password or SMS code — local accounts, never your staff SSO) to see their lease, balance, payment history, receipts and documents, submit maintenance requests, and set how they pay. Turning it off blocks tenant logins immediately; accounts and requests are kept.",
   },
+  {
+    key: "applications" as const,
+    label: "Rental applications",
+    description:
+      "Public application form at /apply that prospective tenants submit (no login). Staff review submissions at Applications, change status, email/text the apply link to a prospect, and convert an approved applicant into a tenant. Turning it off hides the form and the staff page; submissions are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

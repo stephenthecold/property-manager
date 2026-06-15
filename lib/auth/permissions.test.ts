@@ -31,6 +31,10 @@ const LEGACY_MIN: Record<Capability, Role> = {
   // portal.manage is new (no legacy gate); manager mirrors tenants.manage —
   // the staff who manage tenants also manage their portal access/requests.
   "portal.manage": "manager",
+  // applications.* are new (no legacy gate); manager mirrors tenants.manage —
+  // the staff who manage tenants also review/convert applicants.
+  "applications.view": "manager",
+  "applications.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",
