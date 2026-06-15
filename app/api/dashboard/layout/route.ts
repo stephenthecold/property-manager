@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth/session";
-import { DASHBOARD_SECTION_IDS, sanitizeLayout } from "@/lib/dashboard/layout";
+import { sanitizeLayout } from "@/lib/dashboard/layout";
 
 export const runtime = "nodejs";
 
@@ -23,11 +23,18 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
 
-  const layout = sanitizeLayout(body, DASHBOARD_SECTION_IDS);
+  const layout = sanitizeLayout(body);
   try {
     await prisma.user.update({
       where: { id: user.id },
-      data: { dashboardLayout: { order: layout.order, collapsed: layout.collapsed } },
+      data: {
+        dashboardLayout: {
+          bubbleOrder: layout.bubbleOrder,
+          sectionOrder: layout.sectionOrder,
+          collapsed: layout.collapsed,
+          hidden: layout.hidden,
+        },
+      },
     });
     return NextResponse.json({ ok: true });
   } catch {
