@@ -5,14 +5,12 @@ import { getProfitSnapshot } from "@/lib/services/financials";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole, getSessionUser } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
+import { resolveLayout } from "@/lib/dashboard/layout";
 import {
-  DASHBOARD_SECTION_IDS,
-  resolveLayout,
-} from "@/lib/dashboard/layout";
-import {
-  DashboardSections,
+  DashboardCustomizer,
+  type DashboardBubble,
   type DashboardSection,
-} from "./dashboard-sections";
+} from "./dashboard-customizer";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -121,28 +119,39 @@ export default async function DashboardPage() {
         })
       )?.dashboardLayout ?? null)
     : null;
-  const layout = resolveLayout(savedLayout, DASHBOARD_SECTION_IDS);
+  const layout = resolveLayout(savedLayout);
 
-  const sectionMap: Record<string, DashboardSection> = {
-    stats: {
-      id: "stats",
-      title: "Key figures",
-      content: (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-        {canFinance && (
-          <>
-            <Stat
-              label="Expected this month"
-              value={formatCurrency(d.monthExpectedCents)}
-              tone="sky"
-            />
-            <Stat
-              label="Collected this month"
-              value={formatCurrency(d.monthCollectedCents)}
-              tone="emerald"
-            />
-          </>
-        )}
+  const bubbles: DashboardBubble[] = [
+    ...(canFinance
+      ? [
+          {
+            id: "expected_month",
+            label: "Expected this month",
+            node: (
+              <Stat
+                label="Expected this month"
+                value={formatCurrency(d.monthExpectedCents)}
+                tone="sky"
+              />
+            ),
+          },
+          {
+            id: "collected_month",
+            label: "Collected this month",
+            node: (
+              <Stat
+                label="Collected this month"
+                value={formatCurrency(d.monthCollectedCents)}
+                tone="emerald"
+              />
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "overdue",
+      label: "Overdue balance",
+      node: (
         <Stat
           label="Overdue balance"
           value={formatCurrency(d.overdueBalanceCents)}
@@ -152,50 +161,85 @@ export default async function DashboardPage() {
             d.overdueBalanceCents > 0n ? "text-red-600 dark:text-red-400" : undefined
           }
         />
-        {canFinance && (
-          <Stat
-            label="Collected today"
-            value={formatCurrency(d.todayCollectedCents)}
-            tone="violet"
-          />
-        )}
-        <Stat label="Occupied units" value={String(d.occupiedUnits)} tone="indigo" />
-        <Stat
-          label="Vacant / other units"
-          value={String(d.vacantUnits)}
-          tone="amber"
-        />
-        {profit && (
-          <>
-            <Stat
-              label="Expenses this month"
-              value={formatCurrency(profit.expensesMonthCents)}
-              tone="amber"
-            />
-            <Stat
-              label="Fixed costs / month"
-              value={formatCurrency(fixedCostsMonthlyCents)}
-              hint={`mortgage ${formatCurrency(profit.mortgageMonthlyCents)} · insurance ${formatCurrency(profit.insuranceMonthlyCents)} · taxes ${formatCurrency(profit.taxesMonthlyCents)}`}
-              tone="indigo"
-            />
-            <Stat
-              label="Net this month"
-              value={formatCurrency(netMonthCents)}
-              hint="collected − fixed costs − expenses"
-              tone="emerald"
-              valueClassName={
-                netMonthCents < 0n
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-emerald-700 dark:text-emerald-400"
-              }
-            />
-          </>
-        )}
-        </div>
       ),
     },
-    vacancy: {
+    ...(canFinance
+      ? [
+          {
+            id: "collected_today",
+            label: "Collected today",
+            node: (
+              <Stat
+                label="Collected today"
+                value={formatCurrency(d.todayCollectedCents)}
+                tone="violet"
+              />
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "occupied_units",
+      label: "Occupied units",
+      node: <Stat label="Occupied units" value={String(d.occupiedUnits)} tone="indigo" />,
+    },
+    {
+      id: "vacant_units",
+      label: "Vacant / other units",
+      node: (
+        <Stat label="Vacant / other units" value={String(d.vacantUnits)} tone="amber" />
+      ),
+    },
+    ...(profit
+      ? [
+          {
+            id: "expenses_month",
+            label: "Expenses this month",
+            node: (
+              <Stat
+                label="Expenses this month"
+                value={formatCurrency(profit.expensesMonthCents)}
+                tone="amber"
+              />
+            ),
+          },
+          {
+            id: "fixed_costs",
+            label: "Fixed costs / month",
+            node: (
+              <Stat
+                label="Fixed costs / month"
+                value={formatCurrency(fixedCostsMonthlyCents)}
+                hint={`mortgage ${formatCurrency(profit.mortgageMonthlyCents)} · insurance ${formatCurrency(profit.insuranceMonthlyCents)} · taxes ${formatCurrency(profit.taxesMonthlyCents)}`}
+                tone="indigo"
+              />
+            ),
+          },
+          {
+            id: "net_month",
+            label: "Net this month",
+            node: (
+              <Stat
+                label="Net this month"
+                value={formatCurrency(netMonthCents)}
+                hint="collected − fixed costs − expenses"
+                tone="emerald"
+                valueClassName={
+                  netMonthCents < 0n
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-emerald-700 dark:text-emerald-400"
+                }
+              />
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  const sections: DashboardSection[] = [
+    {
       id: "vacancy",
+      label: "Vacancy outlook",
       title: (
         <span className="flex items-center gap-2">
           Vacancy outlook
@@ -272,8 +316,9 @@ export default async function DashboardPage() {
         />
       ),
     },
-    tenants: {
+    {
       id: "tenants",
+      label: "Tenant status",
       title: "Tenant status",
       content: (
         <DataTable
@@ -348,8 +393,9 @@ export default async function DashboardPage() {
         />
       ),
     },
-    payments: {
+    {
       id: "payments",
+      label: "Recent payments",
       title: "Recent payments",
       content: (
         <DataTable
@@ -382,20 +428,12 @@ export default async function DashboardPage() {
         />
       ),
     },
-  };
+  ];
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <DashboardSections
-        sections={
-          layout.order
-            .map((id) => sectionMap[id])
-            .filter(Boolean) as DashboardSection[]
-        }
-        initialOrder={layout.order}
-        initialCollapsed={layout.collapsed}
-      />
+      <DashboardCustomizer bubbles={bubbles} sections={sections} initial={layout} />
     </div>
   );
 }

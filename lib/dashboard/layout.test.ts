@@ -1,46 +1,72 @@
 import { describe, expect, it } from "vitest";
-import { resolveLayout, sanitizeLayout, DASHBOARD_SECTION_IDS } from "./layout";
-
-const KNOWN = ["stats", "vacancy", "tenants", "payments"];
+import {
+  resolveLayout,
+  sanitizeLayout,
+  DASHBOARD_BUBBLE_IDS,
+  DASHBOARD_SECTION_IDS,
+} from "./layout";
 
 describe("resolveLayout", () => {
-  it("defaults to the canonical order, nothing collapsed", () => {
-    expect(resolveLayout(null)).toEqual({ order: [...DASHBOARD_SECTION_IDS], collapsed: {} });
+  it("defaults to canonical order, nothing collapsed/hidden", () => {
+    expect(resolveLayout(null)).toEqual({
+      bubbleOrder: [...DASHBOARD_BUBBLE_IDS],
+      sectionOrder: [...DASHBOARD_SECTION_IDS],
+      collapsed: {},
+      hidden: {},
+    });
   });
 
-  it("honors a saved order and collapsed flags", () => {
-    const r = resolveLayout({ order: ["payments", "stats"], collapsed: { vacancy: true } });
-    // saved-known first (payments, stats), then remaining known ids appended
-    expect(r.order).toEqual(["payments", "stats", "vacancy", "tenants"]);
+  it("honors saved bubble/section order, collapsed, and hidden", () => {
+    const r = resolveLayout({
+      bubbleOrder: ["overdue", "net_month"],
+      sectionOrder: ["payments", "vacancy"],
+      collapsed: { tenants: true },
+      hidden: { collected_today: true, tenants: true },
+    });
+    expect(r.bubbleOrder.slice(0, 2)).toEqual(["overdue", "net_month"]);
+    expect(r.bubbleOrder).toHaveLength(DASHBOARD_BUBBLE_IDS.length);
+    expect(r.sectionOrder).toEqual(["payments", "vacancy", "tenants"]);
+    expect(r.collapsed).toEqual({ tenants: true });
+    expect(r.hidden).toEqual({ collected_today: true, tenants: true });
+  });
+
+  it("migrates the legacy { order } (with a dropped 'stats') into sectionOrder", () => {
+    const r = resolveLayout({ order: ["stats", "payments", "vacancy", "tenants"], collapsed: { vacancy: true } });
+    expect(r.sectionOrder).toEqual(["payments", "vacancy", "tenants"]);
     expect(r.collapsed).toEqual({ vacancy: true });
+    expect(r.bubbleOrder).toEqual([...DASHBOARD_BUBBLE_IDS]); // bubbles default on
+    expect(r.hidden).toEqual({});
   });
 
-  it("drops unknown ids and de-dupes", () => {
-    const r = resolveLayout({ order: ["bogus", "tenants", "tenants", "vacancy"] }, KNOWN);
-    expect(r.order).toEqual(["tenants", "vacancy", "stats", "payments"]);
-  });
-
-  it("ignores non-true / unknown collapsed values", () => {
-    const r = resolveLayout({ collapsed: { stats: "yes", bogus: true, payments: false } });
+  it("drops unknown ids, de-dupes, ignores non-true flags", () => {
+    const r = resolveLayout({
+      bubbleOrder: ["bogus", "overdue", "overdue"],
+      hidden: { overdue: true, bogus: true, vacancy: "yes" },
+      collapsed: { payments: false, nope: true },
+    });
+    expect(r.bubbleOrder[0]).toBe("overdue");
+    expect(r.bubbleOrder.filter((b) => b === "overdue")).toHaveLength(1);
+    expect(r.hidden).toEqual({ overdue: true });
     expect(r.collapsed).toEqual({});
   });
 
-  it("a newly-added known section appears expanded at the end", () => {
-    // saved layout from before "payments" existed
-    const r = resolveLayout({ order: ["stats", "vacancy", "tenants"] }, KNOWN);
-    expect(r.order).toEqual(["stats", "vacancy", "tenants", "payments"]);
-    expect(r.collapsed.payments).toBeUndefined();
+  it("a newly-added bubble/section appears at the end, visible", () => {
+    const r = resolveLayout(
+      { bubbleOrder: ["overdue"], sectionOrder: ["vacancy"] },
+      { bubbleIds: ["overdue", "occupied_units"], sectionIds: ["vacancy", "payments"] },
+    );
+    expect(r.bubbleOrder).toEqual(["overdue", "occupied_units"]);
+    expect(r.sectionOrder).toEqual(["vacancy", "payments"]);
   });
 
-  it("tolerates garbage input", () => {
-    expect(resolveLayout("nope").order).toEqual([...DASHBOARD_SECTION_IDS]);
-    expect(resolveLayout({ order: 5, collapsed: 7 }).order).toEqual([...DASHBOARD_SECTION_IDS]);
+  it("tolerates garbage", () => {
+    expect(resolveLayout("nope").sectionOrder).toEqual([...DASHBOARD_SECTION_IDS]);
+    expect(resolveLayout({ bubbleOrder: 5, hidden: 7 }).hidden).toEqual({});
   });
 
   it("sanitizeLayout clamps a client payload identically", () => {
-    expect(sanitizeLayout({ order: ["payments"], collapsed: { payments: true } })).toEqual({
-      order: ["payments", "stats", "vacancy", "tenants"],
-      collapsed: { payments: true },
-    });
+    expect(
+      sanitizeLayout({ bubbleOrder: ["overdue"], hidden: { overdue: true } }).hidden,
+    ).toEqual({ overdue: true });
   });
 });
