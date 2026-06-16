@@ -22,6 +22,7 @@ export interface CreateDocumentInput {
   leaseId?: string | null;
   paymentId?: string | null;
   receiptId?: string | null;
+  maintenanceJobId?: string | null;
   notes?: string | null;
   actor: AuditContext;
 }
@@ -64,6 +65,7 @@ export async function createUploadedDocument(
           leaseId: input.leaseId ?? null,
           paymentId: input.paymentId ?? null,
           receiptId: input.receiptId ?? null,
+          maintenanceJobId: input.maintenanceJobId ?? null,
           notes: input.notes ?? null,
           createdBy: input.actor.actorId ?? null,
         },
@@ -113,6 +115,7 @@ export async function listDocuments(
     tenantId?: string;
     paymentId?: string;
     receiptId?: string;
+    maintenanceJobId?: string;
     uploadType?: UploadType;
   } = {},
 ): Promise<UploadedDocument[]> {
@@ -121,6 +124,7 @@ export async function listDocuments(
       ...(filter.tenantId ? { tenantId: filter.tenantId } : {}),
       ...(filter.paymentId ? { paymentId: filter.paymentId } : {}),
       ...(filter.receiptId ? { receiptId: filter.receiptId } : {}),
+      ...(filter.maintenanceJobId ? { maintenanceJobId: filter.maintenanceJobId } : {}),
       ...(filter.uploadType ? { uploadType: filter.uploadType } : {}),
     },
     orderBy: { createdAt: "desc" },

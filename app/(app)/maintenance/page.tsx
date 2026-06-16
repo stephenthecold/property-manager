@@ -7,6 +7,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import {
+  addJobAttachmentAction,
   addJobUpdateAction,
   completeJobAction,
   createJobAction,
@@ -18,6 +19,7 @@ import {
   reopenJobAction,
   setJobPriorityAction,
 } from "./actions";
+import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import {
   MAINTENANCE_PRIORITIES,
   priorityLabel,
@@ -98,6 +100,32 @@ export default async function MaintenancePage({
       select: { id: true, unitNumber: true, property: { select: { name: true } } },
     }),
   ]);
+
+  // Attachments (loose ref) for the visible jobs, with signed download URLs.
+  const jobIds = jobs.map((j) => j.id);
+  const attachmentDocs = jobIds.length
+    ? await prisma.uploadedDocument.findMany({
+        where: { maintenanceJobId: { in: jobIds } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, fileName: true, maintenanceJobId: true },
+      })
+    : [];
+  const attachmentsByJob = new Map<
+    string,
+    { id: string; fileName: string; url: string | null }[]
+  >();
+  for (const d of attachmentDocs) {
+    if (!d.maintenanceJobId) continue;
+    let url: string | null = null;
+    try {
+      url = (await getDocumentDownloadUrl(d.id))?.url ?? null;
+    } catch {
+      url = null; // storage not configured — list the name without a link
+    }
+    const arr = attachmentsByJob.get(d.maintenanceJobId) ?? [];
+    arr.push({ id: d.id, fileName: d.fileName ?? "file", url });
+    attachmentsByJob.set(d.maintenanceJobId, arr);
+  }
 
   const now = new Date();
   const doneThisMonth = (t: (typeof tasks)[number]) =>
@@ -268,6 +296,7 @@ export default async function MaintenancePage({
               { key: "due", label: "Due" },
               { key: "status", label: "Status" },
               { key: "notes", label: "Notes", align: "right", sortable: false, className: "hidden sm:table-cell" },
+              { key: "files", label: "Files", align: "right", sortable: false, className: "hidden md:table-cell" },
               { key: "cost", label: "Cost", align: "right", numeric: true, className: "hidden lg:table-cell" },
               { key: "actions", label: "", align: "right", sortable: false },
             ]}
@@ -285,6 +314,7 @@ export default async function MaintenancePage({
                   j.dueDate?.toISOString() ?? null,
                   j.status,
                   j.updates.length,
+                  (attachmentsByJob.get(j.id) ?? []).length,
                   j.costCents != null ? String(j.costCents) : null,
                   null,
                 ],
@@ -389,6 +419,55 @@ export default async function MaintenancePage({
                       />
                     </div>
                   </FormDialog>,
+                  (() => {
+                    const files = attachmentsByJob.get(j.id) ?? [];
+                    return (
+                      <FormDialog
+                        key="files"
+                        trigger={`Files (${files.length})`}
+                        triggerVariant="ghost"
+                        triggerSize="xs"
+                        title="Job attachments"
+                        description={j.title}
+                        action={addJobAttachmentAction}
+                        submitLabel="Upload attachment"
+                      >
+                        <input type="hidden" name="jobId" value={j.id} />
+                        {files.length > 0 && (
+                          <ul className="space-y-1 text-sm">
+                            {files.map((f) => (
+                              <li key={f.id}>
+                                {f.url ? (
+                                  <a
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-primary underline underline-offset-2"
+                                  >
+                                    {f.fileName}
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">{f.fileName}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor={`file-${j.id}`}>
+                            Add a photo or PDF (max 10 MB)
+                          </Label>
+                          <input
+                            id={`file-${j.id}`}
+                            name="file"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/heic,application/pdf"
+                            className="block w-full text-sm"
+                          />
+                        </div>
+                      </FormDialog>
+                    );
+                  })(),
                   <span key="c" className="tabular-nums">
                     {j.costCents != null ? formatCurrency(j.costCents, j.property.currency) : "—"}
                   </span>,
