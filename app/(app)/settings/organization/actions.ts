@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { saveOrganizationSettings } from "@/lib/services/app-settings";
+import { sanitizeReceiptPrefix } from "@/lib/accounting/receipts";
 import { createUploadedDocument } from "@/lib/services/documents";
 
 export interface OrganizationState {
@@ -83,6 +84,14 @@ export async function saveOrganizationAction(
         businessEmail: email,
         logoDocumentId,
         receiptFooter: str(fd, "receiptFooter"),
+        // Stored raw-ish; sanitized to A-Z/0-9 (max 8) at use, but normalize
+        // here too so the saved value reflects what will actually print.
+        receiptPrefix: (() => {
+          const raw = str(fd, "receiptPrefix");
+          return raw ? sanitizeReceiptPrefix(raw) : null;
+        })(),
+        portalWelcomeText: str(fd, "portalWelcomeText"),
+        applyIntroText: str(fd, "applyIntroText"),
         defaultTimezone: timezone,
         defaultCurrency: str(fd, "defaultCurrency")?.toUpperCase() ?? null,
       },

@@ -74,6 +74,11 @@ export interface ResolvedAppSettings {
   businessEmail: string | null;
   logoDocumentId: string | null;
   receiptFooter: string | null;
+  /** Receipt-number prefix; null/blank -> "RCT" (sanitized at use). */
+  receiptPrefix: string | null;
+  /** Tenant-facing copy; null -> the shipped default text. */
+  portalWelcomeText: string | null;
+  applyIntroText: string | null;
   defaultTimezone: string;
   defaultCurrency: string;
   /** Master switch for ALL SMS sends (manual, bulk, scheduled). */
@@ -181,6 +186,9 @@ async function resolve(): Promise<ResolvedAppSettings> {
     businessEmail: row?.businessEmail ?? null,
     logoDocumentId: row?.logoDocumentId ?? null,
     receiptFooter: row?.receiptFooter ?? null,
+    receiptPrefix: row?.receiptPrefix ?? null,
+    portalWelcomeText: row?.portalWelcomeText ?? null,
+    applyIntroText: row?.applyIntroText ?? null,
     defaultTimezone: row?.defaultTimezone || env.DEFAULT_TIMEZONE,
     defaultCurrency: row?.defaultCurrency || env.DEFAULT_CURRENCY,
     smsEnabled: row?.smsEnabled ?? true,
@@ -635,6 +643,9 @@ export interface OrganizationSettingsInput {
   businessEmail: string | null;
   logoDocumentId?: string | null; // undefined = leave unchanged
   receiptFooter: string | null;
+  receiptPrefix: string | null;
+  portalWelcomeText: string | null;
+  applyIntroText: string | null;
   defaultTimezone: string | null;
   defaultCurrency: string | null;
 }
@@ -653,6 +664,9 @@ export async function saveOrganizationSettings(
       ? { logoDocumentId: input.logoDocumentId }
       : {}),
     receiptFooter: input.receiptFooter,
+    receiptPrefix: input.receiptPrefix,
+    portalWelcomeText: input.portalWelcomeText,
+    applyIntroText: input.applyIntroText,
     defaultTimezone: input.defaultTimezone,
     defaultCurrency: input.defaultCurrency,
     updatedBy: actor.actorId ?? null,

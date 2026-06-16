@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  DEFAULT_RECEIPT_PREFIX,
   formatReceiptNumber,
   nextSequenceFromNumbers,
   receiptDateKey,
+  sanitizeReceiptPrefix,
 } from "@/lib/accounting/receipts";
 
 describe("receiptDateKey", () => {
@@ -92,5 +94,50 @@ describe("nextSequenceFromNumbers", () => {
     expect(seq).toBe(10000);
     numbers.push(formatReceiptNumber("20260609", seq));
     expect(nextSequenceFromNumbers("20260609", numbers)).toBe(10001);
+  });
+});
+
+describe("sanitizeReceiptPrefix", () => {
+  it("uppercases and strips non-alphanumerics", () => {
+    expect(sanitizeReceiptPrefix("rct")).toBe("RCT");
+    expect(sanitizeReceiptPrefix("New Edge!")).toBe("NEWEDGE");
+    expect(sanitizeReceiptPrefix("a-b_c.1")).toBe("ABC1");
+  });
+
+  it("clamps to 8 characters", () => {
+    expect(sanitizeReceiptPrefix("ABCDEFGHIJ")).toBe("ABCDEFGH");
+  });
+
+  it("falls back to the default for blank/garbage", () => {
+    expect(sanitizeReceiptPrefix(null)).toBe(DEFAULT_RECEIPT_PREFIX);
+    expect(sanitizeReceiptPrefix(undefined)).toBe(DEFAULT_RECEIPT_PREFIX);
+    expect(sanitizeReceiptPrefix("   ")).toBe(DEFAULT_RECEIPT_PREFIX);
+    expect(sanitizeReceiptPrefix("!!!")).toBe(DEFAULT_RECEIPT_PREFIX);
+  });
+});
+
+describe("formatReceiptNumber with a custom prefix", () => {
+  it("uses the sanitized prefix", () => {
+    expect(formatReceiptNumber("20260609", 1, "NER")).toBe("NER-20260609-0001");
+    expect(formatReceiptNumber("20260609", 7, "new edge")).toBe(
+      "NEWEDGE-20260609-0007",
+    );
+  });
+
+  it("defaults to RCT when no prefix is given", () => {
+    expect(formatReceiptNumber("20260609", 1)).toBe("RCT-20260609-0001");
+  });
+});
+
+describe("nextSequenceFromNumbers with a custom prefix", () => {
+  it("only counts numbers under the same prefix", () => {
+    const existing = [
+      "NER-20260609-0005",
+      "RCT-20260609-0009", // different prefix — ignored
+      "NER-20260609-0002",
+    ];
+    expect(nextSequenceFromNumbers("20260609", existing, "NER")).toBe(6);
+    // Switching the prefix restarts that prefix's day sequence at 1.
+    expect(nextSequenceFromNumbers("20260609", existing, "ACME")).toBe(1);
   });
 });

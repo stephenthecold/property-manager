@@ -106,6 +106,13 @@ export default async function PortalHomePage() {
 
   return (
     <div className="space-y-6">
+      {settings.portalWelcomeText && (
+        <Card>
+          <CardContent className="py-4 text-sm whitespace-pre-wrap text-muted-foreground">
+            {settings.portalWelcomeText}
+          </CardContent>
+        </Card>
+      )}
       {/* Lease + balance */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
