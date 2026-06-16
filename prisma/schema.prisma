@@ -272,6 +272,9 @@ model AppSettings {
   overdueRemindersEnabled Boolean @default(true)
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
+  // Per-type EMAIL subject-line overrides (the email channel; bodies reuse the
+  // shared templates). { "rent_overdue": "subject...", ... }; blank -> default.
+  emailSubjects Json @default("{}")
 
   // 10DLC / A2P messaging compliance. Privacy policy and terms can be hosted
   // in-app — the *Text fields render at the public /privacy and /terms routes

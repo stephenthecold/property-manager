@@ -16,11 +16,7 @@ import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { batchLeaseAccounting, leaseSnapshot } from "@/lib/services/accounting";
-import {
-  buildReminderVars,
-  DEFAULT_EMAIL_SUBJECTS,
-  renderTemplate,
-} from "@/lib/reminders/templates";
+import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
 
 /**
@@ -116,7 +112,7 @@ async function renderDefaultBody(
       ? snapshot.currentPeriodOutstandingCents
       : expectedMonthlyChargeCents(lease);
 
-  const { templates, cashAppCashtag } = await getAppSettings();
+  const { templates, emailSubjects, cashAppCashtag } = await getAppSettings();
   const vars = buildReminderVars({
     tenantFirstName: tenant.firstName,
     tenantLastName: tenant.lastName,
@@ -129,7 +125,7 @@ async function renderDefaultBody(
   });
   return {
     body: renderTemplate(templates[reminderType], vars),
-    subject: renderTemplate(DEFAULT_EMAIL_SUBJECTS[reminderType], vars),
+    subject: renderTemplate(emailSubjects[reminderType], vars),
   };
 }
 
@@ -189,7 +185,7 @@ export async function sendReminder(
   const { channel, destination } = delivery;
 
   let body: string;
-  let subject = renderTemplate(DEFAULT_EMAIL_SUBJECTS[i.reminderType], {
+  let subject = renderTemplate(settings.emailSubjects[i.reminderType], {
     property: settings.businessName,
   });
   if (i.messageBody && i.messageBody.trim() !== "") {
@@ -345,7 +341,7 @@ async function retryExistingSlot(
   const { channel, destination } = delivery;
 
   // The stored subject isn't persisted; re-derive a generic one for email retries.
-  const subject = renderTemplate(DEFAULT_EMAIL_SUBJECTS[reminderType], {
+  const subject = renderTemplate(settings.emailSubjects[reminderType], {
     property: settings.businessName,
   });
   const result = await deliver(channel, destination, subject, row.messageBody);

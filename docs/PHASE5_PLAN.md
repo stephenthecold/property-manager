@@ -159,11 +159,13 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   subtitle or "remit to" block), same free-text + audit pattern as the footer.
 
 ### H4. Notifications content & timing (Settings → Messaging / Notifications)
-- **Email templates + subjects.** Only `smsTemplates` is DB-overridable today; the email
-  receipt/reminder bodies and **subjects** are static. Add an `emailTemplates` JSON mirroring the
-  SMS override pattern, reusing the existing template renderer
-  ([`lib/reminders/templates.ts`](../lib/reminders/templates.ts)). (Lands naturally alongside
-  workstream **C**.)
+- ✅ **Done — email subjects.** Per-type email **subject** overrides
+  (`AppSettings.emailSubjects`, merged over `DEFAULT_EMAIL_SUBJECTS`) editable at Settings →
+  Messaging → Email, consumed by the email reminder path. Bodies reuse the existing (overridable)
+  `smsTemplates`, so the email channel from workstream **C** is now fully operator-customizable
+  without a separate body store.
+- Still pending (small): a separate email **body** store distinct from the SMS template (today
+  both channels share the body text).
 - **Reminder/digest send time.** The schedules are env-only — `REMINDER_CRON` (`0 9 * * *`) and
   `STAFF_DIGEST_CRON` in [`worker/index.ts`](../worker/index.ts). Surface a send-hour/day setting
   that the worker reads from the DB (DB-over-env), like the other messaging config.
