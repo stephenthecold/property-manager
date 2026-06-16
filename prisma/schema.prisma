@@ -760,6 +760,32 @@ model UploadedDocument {
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.
+/// Append-only audit log of SMS consent events (opt-in / opt-out). One row per
+/// event with the exact consent text + version, source, and request metadata —
+/// the compliance record proving when/how consent was captured. The effective
+/// state stays on Tenant.smsConsent; this is the history behind it.
+model SmsConsentRecord {
+  id            String   @id @default(cuid())
+  phone         String   // normalized last-10-digit key for matching
+  phoneRaw      String?  // as entered
+  fullName      String?
+  email         String?
+  tenantId      String?  // matched tenant, when known
+  applicationId String?  // source rental application, when applicable
+  propertyUnit  String?  // optional free-text property/unit the person gave
+  consent       Boolean  // true = opted in, false = opted out
+  source        String   // public_sms_opt_in_form | rental_application | portal | inbound_sms_keyword | staff
+  consentText   String?  // exact language shown at capture
+  consentVersion String?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([tenantId])
+  @@index([consent])
+}
+
 model Reminder {
   id                String         @id @default(cuid())
   tenantId          String
@@ -1129,6 +1155,9 @@ model RentalApplication {
   // Display-ready snapshot of answers to operator-defined custom questions:
   // [{ label, value }] captured at submit time (history-proof vs config edits).
   customAnswers      Json?
+  // Optional SMS consent captured at intake (never required to apply). Carried
+  // to Tenant.smsConsent on conversion; each opt-in also writes an SmsConsentRecord.
+  smsConsent         Boolean                 @default(false)
   status             RentalApplicationStatus @default(submitted)
   reviewerNotes      String? // staff-only review notes
   convertedTenantId  String? // set when converted to a Tenant

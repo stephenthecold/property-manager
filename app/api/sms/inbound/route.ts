@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/config/env";
 import { verifyTwilioSignature } from "@/lib/reminders/twilio-signature";
-import {
-  getAppSettings,
-  getEffectiveTwilioAuthToken,
-} from "@/lib/services/app-settings";
+import { getEffectiveTwilioAuthToken } from "@/lib/services/app-settings";
 import { setSmsConsentByPhone } from "@/lib/services/sms-consent";
 import { classifyKeyword } from "@/lib/sms/keywords";
+import {
+  SMS_HELP_REPLY,
+  SMS_START_REPLY,
+  SMS_STOP_REPLY,
+} from "@/lib/sms/consent-text";
 
 export const runtime = "nodejs";
 
@@ -62,27 +64,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     const keyword = classifyKeyword(params["Body"] ?? "");
     if (keyword === "none") return twiml(null);
 
-    const settings = await getAppSettings();
-    const biz = settings.businessName;
     const actor = { actorType: "system" as const, actorEmail: "inbound SMS (opt-out)" };
 
     if (keyword === "stop") {
       await setSmsConsentByPhone(from, false, actor);
-      return twiml(
-        `You're unsubscribed from ${biz} texts. No more messages will be sent. Reply START to resubscribe.`,
-      );
+      return twiml(SMS_STOP_REPLY);
     }
     if (keyword === "start") {
+      // Re-subscription is recorded with source inbound_sms_keyword.
       await setSmsConsentByPhone(from, true, actor);
-      return twiml(
-        `You're resubscribed to ${biz} texts. Reply HELP for help, STOP to unsubscribe.`,
-      );
+      return twiml(SMS_START_REPLY);
     }
     // help
-    const contact = settings.businessPhone ? ` Contact: ${settings.businessPhone}.` : "";
-    return twiml(
-      `${biz}: account texts (rent reminders & receipts). Msg frequency varies. Msg & data rates may apply. Reply STOP to unsubscribe.${contact}`,
-    );
+    return twiml(SMS_HELP_REPLY);
   } catch (e) {
     console.error(
       "[sms:inbound] webhook processing failed:",

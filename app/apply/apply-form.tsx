@@ -14,6 +14,7 @@ import {
   questionInputName,
   type CustomSection,
 } from "@/lib/applications/custom-questions";
+import { SmsConsentText } from "@/components/app/sms-consent-text";
 import { submitApplicationAction, type ApplyState } from "./actions";
 
 export function ApplyForm({
@@ -230,6 +231,18 @@ export function ApplyForm({
           })}
         </div>
       ))}
+
+      {/* Optional SMS consent — separate, not pre-checked, never required to apply. */}
+      <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+        <input
+          type="checkbox"
+          name="smsConsent"
+          className="mt-0.5 size-4 shrink-0 accent-primary"
+        />
+        <span>
+          <SmsConsentText />
+        </span>
+      </label>
 
       <Button type="submit" disabled={pending}>
         {pending ? "Submitting…" : "Submit application"}

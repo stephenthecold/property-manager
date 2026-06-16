@@ -149,6 +149,13 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   **sections** on the public `/apply` form (short text / paragraph / yes-no / single choice /
   checkbox list), e.g. a "Pets" section; answers are validated, snapshotted on the application,
   and shown to staff.
+- **Compliant SMS opt-in workflow** — a public no-login opt-in page (`/sms-opt-in`) with the full,
+  separate, un-prechecked consent language; an optional opt-in checkbox on the rental application;
+  an append-only `SmsConsentRecord` audit log (phone, status, timestamp, source, exact consent
+  text/version, IP, user agent); an admin SMS-consent view filterable by status (opted in / not
+  opted in / opted out / missing mobile); email + printable-letter opt-in invitations (never SMS);
+  exact STOP/HELP inbound replies; and a shipped default privacy policy with the required
+  mobile/SMS data-sharing restriction. Outbound SMS stays gated on `smsConsent` + a valid number.
 - **Online-payment gateway seam** (workstream B) — a `PaymentGateway` interface + deterministic
   stub + signature-verified `POST /api/payments/webhook` that posts a verified event through the
   existing payment service (idempotent; no new balance math). A real adapter (+ portal "Pay now")

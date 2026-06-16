@@ -10,6 +10,7 @@ import { publicBaseUrl } from "@/lib/http/base-url";
 import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
 import type { InputJsonValue } from "@/lib/generated/prisma/internal/prismaNamespace";
 import type { AnswerSnapshotItem } from "@/lib/applications/custom-questions";
+import { recordSmsConsent } from "@/lib/services/sms-consent";
 
 /**
  * Rental applications (module "applications"). Prospective-tenant intake from
@@ -38,6 +39,8 @@ export interface SubmitApplicationInput {
   unitId: string | null;
   /** Display snapshot of custom-question answers: [{ label, value }]. */
   customAnswers?: AnswerSnapshotItem[];
+  /** Optional SMS opt-in captured at intake (never required). */
+  smsConsent?: boolean;
 }
 
 /** Public submission. Resolves the unit/property from a shared link if valid. */
@@ -82,6 +85,7 @@ export async function submitApplication(
             input.customAnswers && input.customAnswers.length > 0
               ? (input.customAnswers as unknown as InputJsonValue)
               : undefined,
+          smsConsent: input.smsConsent ?? false,
           unitId,
           propertyId,
         },
@@ -98,6 +102,27 @@ export async function submitApplication(
       };
     },
   );
+
+  // Record the SMS opt-in event (compliance log) when the applicant ticked the
+  // optional box and gave a phone. No tenant exists yet, so this just logs.
+  if (input.smsConsent && input.phone) {
+    try {
+      await recordSmsConsent(
+        input.phone,
+        true,
+        "rental_application",
+        { actorType: "system", actorEmail: "public /apply form" },
+        {
+          applicationId: created.id,
+          fullName: `${input.firstName} ${input.lastName}`.trim(),
+          email: input.email,
+        },
+      );
+    } catch (e) {
+      // Never fail the application over the consent-log write.
+      console.error("[applications] consent record failed:", e);
+    }
+  }
   return { id: created.id };
 }
 
@@ -233,6 +258,8 @@ export async function convertApplicationToTenant(
           email: app.email,
           phone: app.phone,
           mailingAddress: app.currentAddress,
+          // Carry the applicant's SMS opt-in onto the new tenant record.
+          smsConsent: app.smsConsent,
         },
       });
       await writeAudit(tx, {
