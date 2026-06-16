@@ -35,6 +35,7 @@ export default async function AppLayout({
     { href: "/payments", label: "Payments" },
     ...(can("documents.manage") ? [{ href: "/documents", label: "Documents" }] : []),
     { href: "/reminders", label: "Reminders" },
+    ...(can("tenants.manage") ? [{ href: "/sms-consents", label: "SMS consent" }] : []),
     ...(can("reports.view") ? [{ href: "/reports", label: "Reports" }] : []),
     ...(app.modules.financials && can("financials.view")
       ? [{ href: "/financials", label: "Financials" }]

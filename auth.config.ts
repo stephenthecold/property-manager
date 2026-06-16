@@ -24,6 +24,7 @@ const PUBLIC_PREFIXES = [
   "/privacy", // public compliance page (10DLC) — operator-authored, no data
   "/terms", // public compliance page (10DLC) — operator-authored, no data
   "/apply", // public rental-application intake — module-gated at the service layer
+  "/sms-opt-in", // public SMS opt-in form — records consent only, no session
 ];
 
 function isPublic(pathname: string): boolean {

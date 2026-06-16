@@ -106,6 +106,7 @@ export async function submitApplicationAction(
       message,
       unitId: str(fd, "unitId") || null,
       customAnswers: answerSnapshot,
+      smsConsent: fd.get("smsConsent") === "on",
     });
   } catch {
     // Generic message — never leak module/DB internals to a public visitor.

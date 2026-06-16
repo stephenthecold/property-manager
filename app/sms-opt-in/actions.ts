@@ -1,0 +1,74 @@
+"use server";
+
+import { headers } from "next/headers";
+import { recordSmsConsent } from "@/lib/services/sms-consent";
+import { clientIpFromXff } from "@/lib/http/client-ip";
+import { phoneKey } from "@/lib/portal/identity";
+import {
+  SMS_CONSENT_TEXT,
+  SMS_CONSENT_VERSION,
+} from "@/lib/sms/consent-text";
+
+export interface OptInState {
+  ok?: boolean;
+  error?: string;
+}
+
+const str = (fd: FormData, key: string): string =>
+  String(fd.get(key) ?? "").trim();
+
+/**
+ * Public SMS opt-in submission (no session). Records consent ONLY when the
+ * separate, un-prechecked consent box is ticked; the record stores the exact
+ * consent text/version plus request metadata (IP, user agent) for compliance.
+ */
+export async function submitSmsOptInAction(
+  _prev: OptInState,
+  fd: FormData,
+): Promise<OptInState> {
+  const fullName = str(fd, "fullName");
+  const phoneRaw = str(fd, "phone");
+  const email = str(fd, "email") || null;
+  const propertyUnit = str(fd, "propertyUnit") || null;
+  const consent = fd.get("smsConsent") === "on";
+
+  if (!fullName) return { error: "Please enter your full name." };
+  if (!phoneKey(phoneRaw)) {
+    return { error: "Please enter a valid mobile phone number." };
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "Please enter a valid email address." };
+  }
+  // Consent is optional in spirit, but this form's purpose is to opt in: if the
+  // box is unticked we do NOT mark anyone opted in.
+  if (!consent) {
+    return {
+      error:
+        "To opt in, please check the SMS consent box. If you don't want SMS, you can simply close this page.",
+    };
+  }
+
+  const h = await headers();
+  try {
+    await recordSmsConsent(
+      phoneRaw,
+      true,
+      "public_sms_opt_in_form",
+      { actorType: "system", actorEmail: "public SMS opt-in form" },
+      {
+        fullName,
+        email,
+        propertyUnit,
+        consentText: SMS_CONSENT_TEXT,
+        consentVersion: SMS_CONSENT_VERSION,
+        ipAddress: clientIpFromXff(h.get("x-forwarded-for")),
+        userAgent: h.get("user-agent"),
+      },
+    );
+  } catch {
+    return {
+      error: "Sorry, we couldn't record your opt-in right now. Please try again later.",
+    };
+  }
+  return { ok: true };
+}
