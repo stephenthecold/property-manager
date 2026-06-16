@@ -61,6 +61,22 @@ export default async function NewTenantPage() {
               <input type="checkbox" name="smsConsent" className="size-4" />
               Tenant consents to SMS reminders
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="emailConsent" className="size-4" />
+              Tenant consents to email reminders
+            </label>
+            <div className="space-y-2">
+              <Label htmlFor="reminderChannel">Preferred reminder channel</Label>
+              <select
+                id="reminderChannel"
+                name="reminderChannel"
+                defaultValue="sms"
+                className="w-full rounded-md border p-2 text-sm"
+              >
+                <option value="sms">SMS</option>
+                <option value="email">Email</option>
+              </select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" />

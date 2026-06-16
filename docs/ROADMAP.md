@@ -140,12 +140,16 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   mode + hidden tray); **vacancy outlook**; unit **occupancy/serviceability** reconcile.
 - **Outbound email** (SMTP, receipt-by-email), **Cash App** payment tag, void-from-Payments,
   waive rent/late-fees, request links from the request host, weekly staff overdue digest.
+- **Email reminder channel** (workstream C) — reminders now send by SMS *or* email per a
+  per-tenant channel preference, with absolute per-channel consent (reuses the SMTP provider +
+  template renderer).
+- **Maintenance tickets** (workstream D, core) — job **priority** + a threaded, audited
+  **update/progress log**.
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 
-**Still pending:** online payments gateway (B), the generalized email reminder/notification
-channel (C), richer maintenance tickets — priority + threaded updates (D), DB-overridable storage
-config (E), the remaining F/H items, and the rest of the security backlog (G).
+**Still pending:** online payments gateway (B), DB-overridable storage config (E), maintenance
+**attachments** (D follow-up), the remaining F/H items, and the rest of the security backlog (G).
 
 ## Known simplifications (documented defaults)
 
