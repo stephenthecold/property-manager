@@ -740,6 +740,7 @@ model UploadedDocument {
   leaseId       String? // loose ref like tenantId: lease agreements, filled templates
   paymentId     String?
   receiptId     String?
+  maintenanceJobId String? // loose ref: photos / invoices attached to a maintenance job
   fileUrl       String
   fileName      String?
   fileType      String?
@@ -755,6 +756,7 @@ model UploadedDocument {
   @@index([leaseId])
   @@index([paymentId])
   @@index([receiptId])
+  @@index([maintenanceJobId])
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.

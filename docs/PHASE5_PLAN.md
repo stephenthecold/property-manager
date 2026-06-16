@@ -79,9 +79,12 @@ payment from the portal still depends on **B**.
   maintenance page; pure `lib/maintenance/priority.ts` (parse/label/sort) is unit-tested. Gated by
   the existing `maintenance.manage` capability. Tenant-portal submission already exists via
   `TenantRequest` (→ convert to a job).
-- Still pending: **attachments on updates** (needs a `maintenanceJobId`/`maintenanceUpdateId`
-  source on `UploadedDocument` + wiring the upload path) and recording a status transition on an
-  update.
+- ✅ **Done — attachments:** a loose `UploadedDocument.maintenanceJobId` ref lets staff attach
+  photos/invoices (image or PDF, ≤10 MB) to a job via a "Files" dialog on the maintenance page,
+  reusing the existing upload/serve infrastructure (`createUploadedDocument` + signed
+  `/api/files` URLs); audited, gated by `maintenance.manage`.
+- Still pending (small): recording a status transition on an update; attaching files to a
+  specific update rather than the job.
 
 ## E. Settings: DB-overridable storage & branding ✅ built
 

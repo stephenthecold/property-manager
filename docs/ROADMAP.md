@@ -159,8 +159,9 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 
-**Still pending:** a real payment adapter + portal "Pay now" (B production step), maintenance
-**attachments** (D follow-up), the remaining F/H items, and the rest of the security backlog (G).
+**Still pending:** a real payment adapter + portal "Pay now" (B production step), the remaining
+F/H niceties (default page size/locale, status-label overrides, configurable aging buckets,
+report query `select`-narrowing), and the `org_id` multi-tenant isolation (G).
 
 ## Known simplifications (documented defaults)
 

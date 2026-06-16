@@ -7,9 +7,19 @@ import { toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { createUploadedDocument } from "@/lib/services/documents";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
 import type { FormState } from "@/lib/forms";
+
+const ATTACH_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ATTACH_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "application/pdf",
+]);
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -315,6 +325,51 @@ export async function setJobPriorityAction(
       return { result: updated, after: { priority } };
     },
   );
+  revalidate(job.unitId);
+  return { ok: true };
+}
+
+/** Attach a photo/invoice (image or PDF) to a maintenance job. */
+export async function addJobAttachmentAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const jobId = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+
+  const file = fd.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a file to attach." };
+  }
+  if (!ATTACH_TYPES.has(file.type)) {
+    return { error: "Attachments must be an image (PNG/JPEG/WebP/HEIC) or a PDF." };
+  }
+  if (file.size > ATTACH_MAX_BYTES) {
+    return { error: "Attachment too large (max 10 MB)." };
+  }
+
+  try {
+    await createUploadedDocument({
+      body: Buffer.from(await file.arrayBuffer()),
+      fileName: file.name || "attachment",
+      contentType: file.type,
+      uploadType: "other",
+      maintenanceJobId: job.id,
+      notes: `Maintenance attachment: ${job.title}`,
+      actor: await auditActor(),
+    });
+  } catch (e) {
+    console.error("[maintenance] attachment upload failed:", e);
+    return {
+      error:
+        e instanceof Error && /storage is not configured/i.test(e.message)
+          ? "File storage is not configured — attachments are unavailable."
+          : "Upload failed — check the server log (storage permissions are the usual suspect).",
+    };
+  }
   revalidate(job.unitId);
   return { ok: true };
 }
