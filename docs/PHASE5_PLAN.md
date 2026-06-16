@@ -1,8 +1,10 @@
 # Phase 5 — Next large phase (plan)
 
-Phases 1–4.5 are built (see [ROADMAP.md](./ROADMAP.md)). This is the actionable plan for the
-next phase. Everything here attaches to existing seams so the schema and core invariants don't
-get reshaped:
+Phases 1–4.7 are built (see [ROADMAP.md](./ROADMAP.md)), and several Phase 5 workstreams have
+since shipped — **A (tenant portal)** is built, and the **F/G** backlog and parts of **H** have
+landed (see the per-section status notes below). This is the actionable plan for the rest of the
+phase. Everything here attaches to existing seams so the schema and core invariants don't get
+reshaped:
 
 - **Money** stays integer cents through `lib/money.ts`; the **ledger is the source of truth**
   (corrections are reversals, never edits — see [accounting.md](./accounting.md)).
@@ -18,9 +20,13 @@ The workstreams are independent and can ship one PR at a time.
 
 ---
 
-## A. Tenant portal (foundational)
+## A. Tenant portal (foundational) ✅ built
 
-A separate, low-privilege surface for tenants to see their balance/ledger and pay.
+A separate, low-privilege surface for tenants to see their balance/ledger and pay. **Shipped**:
+a local auth lane (`/portal` + `/api/portal`, opaque hashed cookie tokens in
+`lib/portal/session.ts`), tenant-scoped balance/ledger/receipts/documents views, invite links +
+SMS-code sign-in (`lib/services/portal-auth.ts`), and staff impersonation/trial-login. Online
+payment from the portal still depends on **B**.
 
 - **Identity**: a `Tenant`↔login link distinct from staff `User`s (own auth, no role in the
   staff hierarchy). Magic-link or OTP email/SMS sign-in reusing the SMS provider; portal
@@ -71,22 +77,24 @@ A separate, low-privilege surface for tenants to see their balance/ledger and pa
 - **Acceptance**: switching bucket/endpoint from the UI takes effect without redeploy; secrets
   are never written to or read from the DB.
 
-## F. Performance backlog (from the audit, not yet done)
+## F. Performance backlog (from the audit)
 
 These are safe, isolated follow-ups to the 4.5 batching work:
 
-- Batch `loadLeaseAccounting` in the **reminder worker** sweeps (`lib/services/reminders.ts`
-  bulk-overdue and scheduled loops) and parallelize sends within provider rate limits.
-- `select` down the heavy report/income queries (`getTenantLedger`, `getIncomeSummary`) to the
-  columns actually used.
-- Composite index `Reminder(leaseId, reminderType, periodKey)` for the idempotency lookup and
-  `Reminder(tenantId, createdAt)` for the tenant timeline.
-- Single-pass dashboard unit-occupancy aggregation; `select` names-only on recent payments.
+- ✅ **Done** — `batchLeaseAccounting()` (2 queries for N leases) now backs the **reminder worker**
+  sweeps (`lib/services/reminders.ts` bulk-overdue + scheduled loops), removing the per-lease N+1;
+  `batchLeaseSnapshots` shares the same helper.
+- ✅ **Done** — composite `Reminder(tenantId, createdAt)` index (the prefix still serves the plain
+  `tenantId` lookup; idempotency is already a raw-SQL partial unique on
+  `(leaseId, tenantId, reminderType, periodKey)`).
+- Still pending: `select` down the heavy report/income queries (`getTenantLedger`,
+  `getIncomeSummary`); parallelize reminder sends within provider rate limits; single-pass
+  dashboard unit-occupancy aggregation; `select` names-only on recent payments.
 
 ## G. Security backlog
 
 - Re-run `/security-review` on each portal/payment PR (new external surfaces).
-- Bump break-glass passphrase entropy to 256 bits (`randomToken(32)`).
+- ✅ **Done** — break-glass passphrase entropy bumped to 256 bits (`randomToken(32)`).
 - Consider per-resource ownership checks once multi-tenant data isolation (org_id) is on the
   table.
 
@@ -119,11 +127,12 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   optionally the options) an org preference threaded into the `DataTable` server pages.
 
 ### H3. Documents & numbering
-- **Receipt number format.** [`lib/services/receipts.ts`](../lib/services/receipts.ts) hard-codes
-  the `RCT-YYYYMMDD-NNNN` prefix. Let the org set the prefix (e.g. its initials) while keeping the
-  per-tz-day sequence + `receiptNumber` UNIQUE idempotency.
-- **Report/receipt header text** beyond the existing `receiptFooter` (e.g. a report subtitle or
-  "remit to" block), same free-text + audit pattern as the footer.
+- ✅ **Done — receipt number prefix.** `AppSettings.receiptPrefix` (Settings → Organization) drives
+  the `<PREFIX>-YYYYMMDD-NNNN` number; the pure `lib/accounting/receipts.ts` takes a prefix +
+  `sanitizeReceiptPrefix` (A–Z/0–9, max 8), sequence parsing is prefix-scoped, and existing
+  receipt numbers are never disturbed.
+- Still pending: **report/receipt header text** beyond the existing `receiptFooter` (e.g. a report
+  subtitle or "remit to" block), same free-text + audit pattern as the footer.
 
 ### H4. Notifications content & timing (Settings → Messaging / Notifications)
 - **Email templates + subjects.** Only `smsTemplates` is DB-overridable today; the email
@@ -135,10 +144,12 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   `STAFF_DIGEST_CRON` in [`worker/index.ts`](../worker/index.ts). Surface a send-hour/day setting
   that the worker reads from the DB (DB-over-env), like the other messaging config.
 
-### H5. Tenant-facing copy (Settings → Organization, portal section)
-- **Portal welcome / "how to pay" text** ([`app/portal/page.tsx`](../app/portal/page.tsx)) and the
-  **public `/apply` intro + confirmation** copy are static strings. Make them editable free-text
-  (branded, `whitespace-pre-wrap`), the same shape as the hosted privacy/terms text.
+### H5. Tenant-facing copy (Settings → Organization)
+- ✅ **Done** — `AppSettings.portalWelcomeText` (tenant portal home) and `AppSettings.applyIntroText`
+  (public `/apply` form) are editable branded free-text (`whitespace-pre-wrap`), blank → shipped
+  default, same shape as the hosted privacy/terms text.
+- Still pending: a portal "how to pay" blurb and the `/apply` **confirmation** copy could follow
+  the same pattern.
 
 ### H6. Status & terminology labels (stretch)
 - **Status badge labels** (and optionally colours) and a few domain nouns ("Rent", "Tenant") are
