@@ -819,6 +819,14 @@ enum MaintenanceJobStatus {
   completed
 }
 
+/// Triage priority for maintenance jobs (display/sort only — never gates work).
+enum MaintenancePriority {
+  low
+  normal
+  high
+  urgent
+}
+
 model MaintenanceJob {
   id          String               @id @default(cuid())
   propertyId  String
@@ -826,6 +834,7 @@ model MaintenanceJob {
   title       String
   details     String?
   status      MaintenanceJobStatus @default(pending)
+  priority    MaintenancePriority  @default(normal)
   dueDate     DateTime?
   // Text consenting tenants (unit's lease, or whole property when unitId is
   // null) notifyDaysBefore days ahead of dueDate. Requires a dueDate.
@@ -837,11 +846,28 @@ model MaintenanceJob {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  property Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?               @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  updates  MaintenanceUpdate[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
+}
+
+/// Threaded progress notes on a maintenance job (the "ticket" timeline). An
+/// append-only log; a note may optionally record a status transition it
+/// accompanied. Audited like every other mutation.
+model MaintenanceUpdate {
+  id        String                @id @default(cuid())
+  jobId     String
+  note      String
+  newStatus MaintenanceJobStatus? // set when the update also changed status
+  createdBy String?
+  createdAt DateTime              @default(now())
+
+  job MaintenanceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
 }
 
 /// Recurring monthly upkeep (mowing, spraying, …). "Done this month" derives

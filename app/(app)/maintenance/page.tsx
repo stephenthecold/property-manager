@@ -7,6 +7,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import {
+  addJobUpdateAction,
   completeJobAction,
   createJobAction,
   createTaskAction,
@@ -15,7 +16,13 @@ import {
   markTaskDoneAction,
   removeTaskAction,
   reopenJobAction,
+  setJobPriorityAction,
 } from "./actions";
+import {
+  MAINTENANCE_PRIORITIES,
+  priorityLabel,
+} from "@/lib/maintenance/priority";
+import type { MaintenancePriority } from "@/lib/generated/prisma/enums";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -28,6 +35,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export const runtime = "nodejs";
+
+/** Themed badge tints per priority (every tint carries a dark: variant). */
+const PRIORITY_BADGE: Record<MaintenancePriority, string> = {
+  urgent:
+    "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
+  high: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+  normal:
+    "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
+  low: "border-muted bg-muted text-muted-foreground",
+};
 
 /** 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd" … */
 function ordinal(n: number): string {
@@ -67,6 +84,7 @@ export default async function MaintenancePage({
       include: {
         property: { select: { name: true, timezone: true, currency: true } },
         unit: { select: { unitNumber: true } },
+        updates: { orderBy: { createdAt: "desc" } },
       },
     }),
     prisma.recurringTask.findMany({
@@ -169,6 +187,21 @@ export default async function MaintenancePage({
               job starting that many days ahead.
             </p>
             <div className="space-y-2">
+              <Label htmlFor="mjPriority">Priority</Label>
+              <select
+                id="mjPriority"
+                name="priority"
+                defaultValue="normal"
+                className="h-9 w-40 rounded-md border px-3 text-sm capitalize"
+              >
+                {MAINTENANCE_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {priorityLabel(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="mjDetails">Details</Label>
               <Textarea id="mjDetails" name="details" />
             </div>
@@ -231,8 +264,10 @@ export default async function MaintenancePage({
               { key: "property", label: "Property", className: "hidden sm:table-cell" },
               { key: "unit", label: "Unit" },
               { key: "title", label: "Job" },
+              { key: "priority", label: "Priority" },
               { key: "due", label: "Due" },
               { key: "status", label: "Status" },
+              { key: "notes", label: "Notes", align: "right", sortable: false, className: "hidden sm:table-cell" },
               { key: "cost", label: "Cost", align: "right", numeric: true, className: "hidden lg:table-cell" },
               { key: "actions", label: "", align: "right", sortable: false },
             ]}
@@ -246,8 +281,10 @@ export default async function MaintenancePage({
                   j.property.name,
                   j.unit?.unitNumber ?? null,
                   j.title,
+                  j.priority,
                   j.dueDate?.toISOString() ?? null,
                   j.status,
+                  j.updates.length,
                   j.costCents != null ? String(j.costCents) : null,
                   null,
                 ],
@@ -257,6 +294,40 @@ export default async function MaintenancePage({
                   j.unit?.unitNumber ?? "—",
                   <span key="t" title={j.details ?? undefined} className="font-medium">
                     {j.title}
+                  </span>,
+                  <span key="pri" className="inline-flex items-center gap-1">
+                    <Badge
+                      variant="outline"
+                      className={`font-medium capitalize ${PRIORITY_BADGE[j.priority]}`}
+                    >
+                      {priorityLabel(j.priority)}
+                    </Badge>
+                    <FormDialog
+                      trigger="Edit"
+                      triggerVariant="ghost"
+                      triggerSize="xs"
+                      title="Change priority"
+                      description={j.title}
+                      action={setJobPriorityAction}
+                      submitLabel="Save priority"
+                    >
+                      <input type="hidden" name="jobId" value={j.id} />
+                      <div className="space-y-2">
+                        <Label htmlFor={`pri-${j.id}`}>Priority</Label>
+                        <select
+                          id={`pri-${j.id}`}
+                          name="priority"
+                          defaultValue={j.priority}
+                          className="h-9 w-full rounded-md border px-3 text-sm capitalize"
+                        >
+                          {MAINTENANCE_PRIORITIES.map((p) => (
+                            <option key={p} value={p}>
+                              {priorityLabel(p)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </FormDialog>
                   </span>,
                   j.dueDate ? (
                     <span
@@ -285,6 +356,39 @@ export default async function MaintenancePage({
                       Pending
                     </Badge>
                   ),
+                  <FormDialog
+                    key="notes"
+                    trigger={`Notes (${j.updates.length})`}
+                    triggerVariant="ghost"
+                    triggerSize="xs"
+                    title="Job updates"
+                    description={j.title}
+                    action={addJobUpdateAction}
+                    submitLabel="Post update"
+                  >
+                    <input type="hidden" name="jobId" value={j.id} />
+                    {j.updates.length > 0 && (
+                      <ul className="max-h-56 space-y-2 overflow-y-auto text-sm">
+                        {j.updates.map((u) => (
+                          <li key={u.id} className="rounded-md border p-2">
+                            <div className="whitespace-pre-wrap">{u.note}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {u.createdAt.toLocaleString()}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor={`note-${j.id}`}>Add an update</Label>
+                      <Textarea
+                        id={`note-${j.id}`}
+                        name="note"
+                        rows={3}
+                        placeholder="Progress, parts ordered, vendor scheduled…"
+                      />
+                    </div>
+                  </FormDialog>,
                   <span key="c" className="tabular-nums">
                     {j.costCents != null ? formatCurrency(j.costCents, j.property.currency) : "—"}
                   </span>,

@@ -52,20 +52,31 @@ payment from the portal still depends on **B**.
 - **Acceptance**: a stubbed gateway round-trip creates exactly one posted payment + receipt;
   replaying the webhook is a no-op.
 
-## C. Email channel
+## C. Email channel ✅ built
 
-- Generalize reminders/receipts to a `NotificationChannel` ("sms" | "email"); add an
-  `EmailProvider` interface (`stub` default, SMTP/provider adapter). Reuse the template renderer
-  and the consent/idempotency rules already proven for SMS.
-- **Acceptance**: a receipt and an overdue reminder can be sent by email behind a per-tenant
-  channel preference; consent is still absolute.
+- ✅ **Done** — reminders generalized to a `NotificationChannel` (sms | email) with a per-tenant
+  preference (`Tenant.reminderChannel`) and `Tenant.emailConsent`. The pure
+  `lib/reminders/channel.ts` (`resolveReminderDelivery`) keeps **consent absolute and
+  per-channel** and never cross-sends; `sendReminder`/`retryExistingSlot` route through the
+  resolved channel and reuse the existing SMTP `EmailProvider` + template renderer
+  (`DEFAULT_EMAIL_SUBJECTS` adds subjects). Receipt-by-email already shipped in 4.75.
+- A tenant has one preferred channel, so the existing
+  `(leaseId, tenantId, reminderType, periodKey)` idempotency slot is unchanged — `channel` is an
+  attribute of the one row (no index change).
+- Still pending (small): portal self-service for the email-consent toggle / channel preference
+  (staff can set both today); the email *receipt/partial-balance* auto-sends as scheduled types.
 
-## D. Maintenance tickets
+## D. Maintenance tickets ✅ built (core)
 
-- New `MaintenanceTicket` (unit/tenant ref, status, priority, audit) + a thread of updates and
-  attachments (reuse `UploadedDocument` via `sourceType`). A capability `maintenance.manage`.
-- Optional tenant-portal submission (depends on A).
-- **Acceptance**: staff CRUD with full audit; documents attach via the existing upload path.
+- ✅ **Done** — `MaintenanceJob` gains a triage **`priority`** (`MaintenancePriority`:
+  low/normal/high/urgent) and a threaded **`MaintenanceUpdate`** progress log (append-only,
+  audited). Staff set priority on create, change it (audited), and post updates from the
+  maintenance page; pure `lib/maintenance/priority.ts` (parse/label/sort) is unit-tested. Gated by
+  the existing `maintenance.manage` capability. Tenant-portal submission already exists via
+  `TenantRequest` (→ convert to a job).
+- Still pending: **attachments on updates** (needs a `maintenanceJobId`/`maintenanceUpdateId`
+  source on `UploadedDocument` + wiring the upload path) and recording a status transition on an
+  update.
 
 ## E. Settings: DB-overridable storage & branding
 

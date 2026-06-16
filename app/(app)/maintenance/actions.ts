@@ -8,6 +8,7 @@ import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
+import { parseMaintenancePriority } from "@/lib/maintenance/priority";
 import type { FormState } from "@/lib/forms";
 
 function str(fd: FormData, key: string): string {
@@ -109,6 +110,7 @@ export async function createJobAction(fd: FormData): Promise<void> {
           unitId,
           title,
           details: str(fd, "details") || null,
+          priority: parseMaintenancePriority(str(fd, "priority")),
           dueDate,
           notifyTenants,
           notifyDaysBefore,
@@ -118,7 +120,14 @@ export async function createJobAction(fd: FormData): Promise<void> {
       return {
         result: created,
         entityId: created.id,
-        after: { title, unitId, dueDate, notifyTenants, notifyDaysBefore },
+        after: {
+          title,
+          unitId,
+          priority: created.priority,
+          dueDate,
+          notifyTenants,
+          notifyDaysBefore,
+        },
       };
     },
   );
@@ -239,6 +248,75 @@ export async function deleteJobAction(fd: FormData): Promise<void> {
     },
   );
   revalidate(job.unitId);
+}
+
+/** Post a threaded progress note on a job (the ticket timeline). Append-only. */
+export async function addJobUpdateAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  const { dbUser } = await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const jobId = str(fd, "jobId");
+  const note = str(fd, "note");
+  if (!note) return { error: "An update note is required." };
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.update_added",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+    },
+    async (tx) => {
+      const update = await tx.maintenanceUpdate.create({
+        data: { jobId: job.id, note, createdBy: dbUser.id },
+      });
+      // Touch the job so its updatedAt reflects the latest activity.
+      await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { updatedAt: new Date() },
+      });
+      return { result: update, after: { jobId: job.id } };
+    },
+  );
+  revalidate(job.unitId);
+  return { ok: true };
+}
+
+/** Change a job's triage priority (audited). No-op when unchanged. */
+export async function setJobPriorityAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const jobId = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+  const priority = parseMaintenancePriority(str(fd, "priority"));
+  if (priority === job.priority) return { ok: true }; // no-op resubmit
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.priority_changed",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+      before: { priority: job.priority },
+    },
+    async (tx) => {
+      const updated = await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { priority },
+      });
+      return { result: updated, after: { priority } };
+    },
+  );
+  revalidate(job.unitId);
+  return { ok: true };
 }
 
 export async function createTaskAction(fd: FormData): Promise<void> {
