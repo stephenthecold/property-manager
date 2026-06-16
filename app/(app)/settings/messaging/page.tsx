@@ -24,6 +24,8 @@ export default async function MessagingSettingsPage() {
   const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
   const overrides =
     (row?.smsTemplates as Partial<Record<ReminderType, string>>) ?? {};
+  const subjectOverrides =
+    (row?.emailSubjects as Partial<Record<ReminderType, string>>) ?? {};
 
   return (
     <div className="w-full max-w-2xl space-y-4">
@@ -103,6 +105,11 @@ export default async function MessagingSettingsPage() {
               hasPassword: !!row?.emailPasswordCiphertext,
               hasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
               hasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
+              subjects: TEMPLATE_LABELS.map(({ type, label }) => ({
+                type,
+                label,
+                value: subjectOverrides[type] ?? "",
+              })),
             }}
           />
         </CardContent>

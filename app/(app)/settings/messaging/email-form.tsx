@@ -28,6 +28,8 @@ export interface EmailInitial {
   hasPassword: boolean;
   hasOauthClientSecret: boolean;
   hasOauthRefreshToken: boolean;
+  /** Per-type email subject overrides ({ label, type, value }), blank = default. */
+  subjects: Array<{ type: string; label: string; value: string }>;
 }
 
 const SECRET_HINT = "Stored encrypted (AES-256-GCM) and never shown again.";
@@ -248,6 +250,29 @@ export function EmailForm({ initial }: { initial: EmailInitial }) {
             )}
           </>
         )}
+
+        <div className="space-y-2 border-t pt-4">
+          <p className="text-sm font-medium">Email subject lines</p>
+          <p className="text-xs text-muted-foreground">
+            Override the subject for each reminder type sent by email. Leave blank
+            to use the built-in default. The body reuses the message templates.
+            Supports the same {"{{variables}}"} (e.g. {"{{property}}"},{" "}
+            {"{{due_date}}"}).
+          </p>
+          {initial.subjects.map((s) => (
+            <div key={s.type} className="space-y-1">
+              <Label htmlFor={`emailSubject_${s.type}`} className="text-xs">
+                {s.label}
+              </Label>
+              <Input
+                id={`emailSubject_${s.type}`}
+                name={`emailSubject_${s.type}`}
+                defaultValue={s.value}
+                placeholder="(default subject)"
+              />
+            </div>
+          ))}
+        </div>
 
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save email settings"}

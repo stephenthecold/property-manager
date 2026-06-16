@@ -10,7 +10,7 @@ import type { SmsProvider } from "@/lib/providers/sms/types";
 import { StubEmailProvider } from "@/lib/providers/email/stub";
 import { SmtpEmailProvider, type SmtpAuth } from "@/lib/providers/email/smtp";
 import type { EmailProvider } from "@/lib/providers/email/types";
-import { DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
+import { DEFAULT_EMAIL_SUBJECTS, DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import type { PermissionMatrix } from "@/lib/auth/permissions";
 import {
   resolveFormConfig,
@@ -121,6 +121,8 @@ export interface ResolvedAppSettings {
   emailHasOauthRefreshToken: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
+  /** DEFAULT_EMAIL_SUBJECTS merged with per-type DB overrides (email channel). */
+  emailSubjects: Record<ReminderType, string>;
   /** Custom lease-agreement clause text; null = the shipped default
    *  (DEFAULT_LEASE_AGREEMENT_TEXT in lib/config/lease-agreement.ts). */
   leaseAgreementText: string | null;
@@ -186,6 +188,14 @@ async function resolve(): Promise<ResolvedAppSettings> {
     }
   }
 
+  const subjectOverrides = (row?.emailSubjects as Partial<Record<ReminderType, string>>) ?? {};
+  const emailSubjects = { ...DEFAULT_EMAIL_SUBJECTS };
+  for (const [key, subject] of Object.entries(subjectOverrides)) {
+    if (key in emailSubjects && typeof subject === "string" && subject.trim() !== "") {
+      emailSubjects[key as ReminderType] = subject;
+    }
+  }
+
   const dbSms =
     row?.smsProvider === "twilio" ||
     row?.smsProvider === "telnyx" ||
@@ -240,6 +250,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     emailHasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
     emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
     templates,
+    emailSubjects,
     leaseAgreementText: row?.leaseAgreementText ?? null,
     landlordSignatureName: row?.landlordSignatureName ?? null,
     landlordSignatureImageKey: row?.landlordSignatureImageKey ?? null,
@@ -880,6 +891,8 @@ export interface EmailSettingsInput {
   emailPassword?: string;
   emailOauthClientSecret?: string;
   emailOauthRefreshToken?: string;
+  /** Per-type email subject overrides; empty/missing fall back to defaults. */
+  emailSubjects: Partial<Record<ReminderType, string>>;
 }
 
 /** Ciphertext/nonce/tag column updates for one optional encrypted secret. */
@@ -904,11 +917,19 @@ export async function saveEmailSettings(
   input: EmailSettingsInput,
   actor: AuditContext,
 ): Promise<void> {
+  // Keep only non-empty, known-type subject overrides (defaults fill the rest).
+  const cleanSubjects: Partial<Record<ReminderType, string>> = {};
+  for (const [key, subject] of Object.entries(input.emailSubjects)) {
+    if (key in DEFAULT_EMAIL_SUBJECTS && typeof subject === "string" && subject.trim() !== "") {
+      cleanSubjects[key as ReminderType] = subject.trim();
+    }
+  }
   const data = {
     emailEnabled: input.emailEnabled,
     emailProvider: input.emailProvider,
     emailFromAddress: input.emailFromAddress,
     emailFromName: input.emailFromName,
+    emailSubjects: cleanSubjects as unknown as InputJsonValue,
     emailSmtpHost: input.emailSmtpHost,
     emailSmtpPort: input.emailSmtpPort,
     emailSmtpSecure: input.emailSmtpSecure,

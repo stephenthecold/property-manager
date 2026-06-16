@@ -225,6 +225,9 @@ export async function saveEmailAction(
         emailPassword: password === "" ? undefined : password,
         emailOauthClientSecret: clientSecret === "" ? undefined : clientSecret,
         emailOauthRefreshToken: refreshToken === "" ? undefined : refreshToken,
+        emailSubjects: Object.fromEntries(
+          TEMPLATE_TYPES.map((t) => [t, str(fd, `emailSubject_${t}`)]),
+        ) as Partial<Record<ReminderType, string>>,
       },
       await auditActor(),
     );
