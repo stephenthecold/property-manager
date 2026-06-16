@@ -7,14 +7,20 @@ import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import { formatCurrency } from "@/lib/money";
 import {
   getAppSettings,
+  resolveEmailProvider,
   resolveSmsProvider,
 } from "@/lib/services/app-settings";
-import type { SendSmsResult } from "@/lib/providers/sms/types";
+import type { NotificationChannel } from "@/lib/generated/prisma/enums";
+import { resolveReminderDelivery } from "@/lib/reminders/channel";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { batchLeaseAccounting, leaseSnapshot } from "@/lib/services/accounting";
-import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
+import {
+  buildReminderVars,
+  DEFAULT_EMAIL_SUBJECTS,
+  renderTemplate,
+} from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
 
 /**
@@ -37,7 +43,48 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Render the default template for a reminder type from the lease's financials. */
+/** Normalized result shape shared by the SMS and email providers. */
+interface DeliveryResult {
+  provider: string;
+  status: "sent" | "failed" | string;
+  providerMessageId?: string;
+  error?: string;
+}
+
+/** Redact a destination for the audit log (never store full phone/email). */
+function redactDestination(channel: NotificationChannel, dest: string): string {
+  if (channel === "email") {
+    const [user, domain] = dest.split("@");
+    return domain ? `${user.slice(0, 1)}***@${domain}` : "***";
+  }
+  return dest.slice(-4);
+}
+
+/** Send on the resolved channel, normalizing both providers' results. */
+async function deliver(
+  channel: NotificationChannel,
+  destination: string,
+  subject: string,
+  body: string,
+): Promise<DeliveryResult> {
+  try {
+    if (channel === "email") {
+      return await (await resolveEmailProvider()).send({
+        to: destination,
+        subject,
+        text: body,
+      });
+    }
+    return await (await resolveSmsProvider()).send({ to: destination, body });
+  } catch (e) {
+    return { provider: "unknown", status: "failed", error: errorMessage(e) };
+  }
+}
+
+/**
+ * Render the default body + email subject for a reminder type from the lease's
+ * financials. The subject is only used by the email channel; SMS ignores it.
+ */
 async function renderDefaultBody(
   reminderType: ReminderType,
   tenant: Pick<Tenant, "firstName" | "lastName">,
@@ -45,7 +92,7 @@ async function renderDefaultBody(
   periodKey: string | null,
   now: Date,
   dueDate?: Date | null,
-): Promise<string> {
+): Promise<{ body: string; subject: string }> {
   const property = lease.unit.property;
   const tz = property.timezone;
   const currency = property.currency;
@@ -70,19 +117,20 @@ async function renderDefaultBody(
       : expectedMonthlyChargeCents(lease);
 
   const { templates, cashAppCashtag } = await getAppSettings();
-  return renderTemplate(
-    templates[reminderType],
-    buildReminderVars({
-      tenantFirstName: tenant.firstName,
-      tenantLastName: tenant.lastName,
-      propertyName: property.name,
-      unitLabel: lease.unit.unitNumber,
-      amountDueFormatted: formatCurrency(amountDueCents, currency),
-      dueDateFormatted,
-      balanceFormatted: formatCurrency(snapshot.netBalanceCents, currency),
-      cashAppTag: cashAppCashtag,
-    }),
-  );
+  const vars = buildReminderVars({
+    tenantFirstName: tenant.firstName,
+    tenantLastName: tenant.lastName,
+    propertyName: property.name,
+    unitLabel: lease.unit.unitNumber,
+    amountDueFormatted: formatCurrency(amountDueCents, currency),
+    dueDateFormatted,
+    balanceFormatted: formatCurrency(snapshot.netBalanceCents, currency),
+    cashAppTag: cashAppCashtag,
+  });
+  return {
+    body: renderTemplate(templates[reminderType], vars),
+    subject: renderTemplate(DEFAULT_EMAIL_SUBJECTS[reminderType], vars),
+  };
 }
 
 export interface SendReminderInput {
@@ -108,29 +156,42 @@ export async function sendReminder(
   i: SendReminderInput,
 ): Promise<SendReminderResult> {
   const now = i.now ?? new Date();
-
-  if (!(await getAppSettings()).smsEnabled) {
-    return {
-      reminderId: null,
-      status: "skipped",
-      error: "SMS sending is disabled in Settings → Messaging",
-    };
-  }
+  const settings = await getAppSettings();
 
   const tenant = await prisma.tenant.findUnique({ where: { id: i.tenantId } });
   if (!tenant) {
     return { reminderId: null, status: "skipped", error: "tenant not found" };
   }
-  // Consent is absolute: no consent or no phone -> no row, no send.
-  if (!tenant.smsConsent) {
-    return { reminderId: null, status: "skipped", error: "no SMS consent" };
+
+  // Resolve the channel + destination up front. Consent is absolute and
+  // per-channel: only the tenant's preferred channel is attempted, and only
+  // with that channel's consent + contact info. Never cross-send.
+  const delivery = resolveReminderDelivery({
+    preferredChannel: tenant.reminderChannel,
+    smsConsent: tenant.smsConsent,
+    phone: tenant.phone,
+    emailConsent: tenant.emailConsent,
+    email: tenant.email,
+    smsEnabled: settings.smsEnabled,
+    emailEnabled: settings.emailEnabled,
+  });
+  if (!delivery.ok) {
+    const error =
+      delivery.reason === "channel disabled"
+        ? `${tenant.reminderChannel} sending is disabled in Settings → Messaging`
+        : delivery.reason === "no consent"
+          ? `no ${tenant.reminderChannel} consent`
+          : tenant.reminderChannel === "email"
+            ? "no email address"
+            : "no phone number";
+    return { reminderId: null, status: "skipped", error };
   }
-  const phone = tenant.phone?.trim();
-  if (!phone) {
-    return { reminderId: null, status: "skipped", error: "no phone number" };
-  }
+  const { channel, destination } = delivery;
 
   let body: string;
+  let subject = renderTemplate(DEFAULT_EMAIL_SUBJECTS[i.reminderType], {
+    property: settings.businessName,
+  });
   if (i.messageBody && i.messageBody.trim() !== "") {
     body = i.messageBody;
   } else {
@@ -148,7 +209,7 @@ export async function sendReminder(
     if (!lease) {
       return { reminderId: null, status: "skipped", error: "lease not found" };
     }
-    body = await renderDefaultBody(
+    const rendered = await renderDefaultBody(
       i.reminderType,
       tenant,
       lease,
@@ -156,11 +217,14 @@ export async function sendReminder(
       now,
       i.dueDate,
     );
+    body = rendered.body;
+    subject = rendered.subject;
   }
 
   // Create the row first (status queued): the partial unique on
   // (leaseId, tenantId, reminderType, periodKey) makes scheduled sends
-  // idempotent per recipient (co-tenants each own their slot).
+  // idempotent per recipient (co-tenants each own their slot) — independent of
+  // channel, since a tenant has one preferred channel.
   let reminderId: string;
   try {
     const reminder = await prisma.reminder.create({
@@ -169,7 +233,9 @@ export async function sendReminder(
         leaseId: i.leaseId ?? null,
         reminderType: i.reminderType,
         periodKey: i.periodKey ?? null,
-        destinationPhone: phone,
+        channel,
+        destinationPhone: channel === "sms" ? destination : null,
+        destinationEmail: channel === "email" ? destination : null,
         messageBody: body,
         status: "queued",
         sentBy: i.actor.actorId ?? null,
@@ -196,12 +262,7 @@ export async function sendReminder(
     throw e;
   }
 
-  let result: SendSmsResult;
-  try {
-    result = await (await resolveSmsProvider()).send({ to: phone, body });
-  } catch (e) {
-    result = { provider: "unknown", status: "failed", error: errorMessage(e) };
-  }
+  const result = await deliver(channel, destination, subject, body);
   const ok = result.status !== "failed";
   const status: ReminderStatus = ok ? "sent" : "failed";
 
@@ -220,8 +281,12 @@ export async function sendReminder(
       action: ok ? "reminder.sent" : "reminder.failed",
       entityType: "Reminder",
       entityId: reminderId,
-      // Never audit the full phone number or the message body.
-      after: { reminderType: i.reminderType, toLast4: phone.slice(-4) },
+      // Never audit the full phone number/email or the message body.
+      after: {
+        reminderType: i.reminderType,
+        channel,
+        to: redactDestination(channel, destination),
+      },
     });
   });
 
@@ -259,21 +324,31 @@ async function retryExistingSlot(
     return { reminderId: null, status: "skipped", error: "duplicate" };
   }
 
+  // Re-resolve on the SAME channel the row was created for (consent may have
+  // been revoked, the master switch flipped, or the contact removed since).
   const tenant = await prisma.tenant.findUnique({ where: { id: row.tenantId } });
-  const phone = tenant?.smsConsent ? (tenant.phone?.trim() ?? "") : "";
-  if (!phone) {
-    return { reminderId: null, status: "skipped", error: "no SMS consent" };
+  const settings = await getAppSettings();
+  const delivery = tenant
+    ? resolveReminderDelivery({
+        preferredChannel: row.channel,
+        smsConsent: tenant.smsConsent,
+        phone: tenant.phone,
+        emailConsent: tenant.emailConsent,
+        email: tenant.email,
+        smsEnabled: settings.smsEnabled,
+        emailEnabled: settings.emailEnabled,
+      })
+    : ({ ok: false, reason: "no consent" } as const);
+  if (!delivery.ok) {
+    return { reminderId: null, status: "skipped", error: `no ${row.channel} consent` };
   }
+  const { channel, destination } = delivery;
 
-  let result: SendSmsResult;
-  try {
-    result = await (await resolveSmsProvider()).send({
-      to: phone,
-      body: row.messageBody,
-    });
-  } catch (e) {
-    result = { provider: "unknown", status: "failed", error: errorMessage(e) };
-  }
+  // The stored subject isn't persisted; re-derive a generic one for email retries.
+  const subject = renderTemplate(DEFAULT_EMAIL_SUBJECTS[reminderType], {
+    property: settings.businessName,
+  });
+  const result = await deliver(channel, destination, subject, row.messageBody);
   const ok = result.status !== "failed";
 
   await prisma.$transaction(async (tx) => {
@@ -283,7 +358,8 @@ async function retryExistingSlot(
         status: ok ? "sent" : "failed",
         provider: result.provider,
         providerMessageId: result.providerMessageId ?? row.providerMessageId,
-        destinationPhone: phone,
+        destinationPhone: channel === "sms" ? destination : row.destinationPhone,
+        destinationEmail: channel === "email" ? destination : row.destinationEmail,
         sentAt: ok ? now : row.sentAt,
       },
     });
@@ -292,7 +368,12 @@ async function retryExistingSlot(
       action: ok ? "reminder.sent" : "reminder.failed",
       entityType: "Reminder",
       entityId: row.id,
-      after: { reminderType, toLast4: phone.slice(-4), retry: true },
+      after: {
+        reminderType,
+        channel,
+        to: redactDestination(channel, destination),
+        retry: true,
+      },
     });
   });
 

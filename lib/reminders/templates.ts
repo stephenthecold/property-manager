@@ -72,3 +72,17 @@ export const DEFAULT_TEMPLATES: Record<ReminderType, string> = {
   maintenance:
     "Hi {{first_name}}, scheduled maintenance at {{property}} {{unit}}: {{maintenance_title}} on {{maintenance_date}}. Please plan for access. Thank you!",
 };
+
+/**
+ * Subject lines for the email channel (the SMS channel has no subject). Rendered
+ * with the same `{{var}}` substitution as the bodies. `manual` is generic since
+ * the staff-supplied body has no fixed shape.
+ */
+export const DEFAULT_EMAIL_SUBJECTS: Record<ReminderType, string> = {
+  rent_due_soon: "Rent due {{due_date}} — {{property}} {{unit}}",
+  rent_overdue: "Past-due rent — {{property}} {{unit}}",
+  partial_balance: "Balance remaining — {{property}} {{unit}}",
+  payment_receipt: "Payment received — {{property}} {{unit}}",
+  manual: "A message from {{property}}",
+  maintenance: "Scheduled maintenance — {{property}} {{unit}}",
+};

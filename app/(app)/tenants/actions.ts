@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { writeAudit, withAudit } from "@/lib/audit/audit";
 import { PaymentMethod } from "@/lib/generated/prisma/enums";
+import type { NotificationChannel } from "@/lib/generated/prisma/enums";
 import {
   invitePortalAccount,
   setPortalAccountActive,
@@ -23,6 +24,10 @@ function str(fd: FormData, key: string): string {
 /** "" → null; anything else must be a PaymentMethod enum value. */
 function parsePreferredMethod(raw: string): PaymentMethod | null {
   return raw in PaymentMethod ? (raw as PaymentMethod) : null;
+}
+
+function parseReminderChannel(raw: string): NotificationChannel {
+  return raw === "email" ? "email" : "sms";
 }
 
 export async function createTenant(
@@ -45,6 +50,8 @@ export async function createTenant(
       emergencyContactName: str(fd, "emergencyContactName") || null,
       emergencyContactPhone: str(fd, "emergencyContactPhone") || null,
       smsConsent: fd.get("smsConsent") === "on",
+      emailConsent: fd.get("emailConsent") === "on",
+      reminderChannel: parseReminderChannel(str(fd, "reminderChannel")),
       notes: str(fd, "notes") || null,
     },
   });
@@ -81,6 +88,8 @@ export async function updateTenant(
     emergencyContactName: str(fd, "emergencyContactName") || null,
     emergencyContactPhone: str(fd, "emergencyContactPhone") || null,
     smsConsent: fd.get("smsConsent") === "on",
+    emailConsent: fd.get("emailConsent") === "on",
+    reminderChannel: parseReminderChannel(str(fd, "reminderChannel")),
     isActive: fd.get("isActive") === "on",
     preferredPaymentMethod: parsePreferredMethod(str(fd, "preferredPaymentMethod")),
     notes: str(fd, "notes") || null,

@@ -132,6 +132,13 @@ enum ReminderStatus {
   failed
 }
 
+/// Delivery channel for reminders / notifications. Consent is absolute and
+/// tracked per channel (smsConsent / emailConsent on Tenant).
+enum NotificationChannel {
+  sms
+  email
+}
+
 // ---------------------------------------------------------------------------
 // Auth / identity
 // ---------------------------------------------------------------------------
@@ -485,6 +492,11 @@ model Tenant {
   emergencyContactName  String?
   emergencyContactPhone String?
   smsConsent            Boolean  @default(false)
+  // Email reminders: consent is absolute and independent of SMS consent.
+  emailConsent          Boolean  @default(false)
+  // Preferred channel for automated reminders. Delivery still requires that
+  // channel's consent + contact info; falls back to skip (never cross-sends).
+  reminderChannel       NotificationChannel @default(sms)
   notes                 String?
   isActive              Boolean  @default(true)
   // How this tenant prefers to pay (set by staff or by the tenant in the
@@ -738,7 +750,12 @@ model Reminder {
   // unique on (leaseId, tenantId, reminderType, periodKey) makes worker re-runs
   // converge — per tenant, so co-tenants each get their own scheduled reminder.
   periodKey         String?
+  // Channel this reminder went out on. A tenant has one preferred channel, so
+  // the (lease, tenant, type, period) idempotency slot still maps to one row;
+  // channel is an attribute of that row, not part of the unique key.
+  channel           NotificationChannel @default(sms)
   destinationPhone  String?
+  destinationEmail  String?
   messageBody       String
   status            ReminderStatus @default(queued)
   provider          String?

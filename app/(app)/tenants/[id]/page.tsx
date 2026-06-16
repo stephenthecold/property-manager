@@ -1148,6 +1148,28 @@ export default async function TenantDetail({
               </div>
               <div className="flex items-center gap-2">
                 <input
+                  id="emailConsent"
+                  name="emailConsent"
+                  type="checkbox"
+                  defaultChecked={tenant.emailConsent}
+                  className="size-4 accent-primary"
+                />
+                <Label htmlFor="emailConsent">Email consent</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="reminderChannel">Reminder channel</Label>
+                <select
+                  id="reminderChannel"
+                  name="reminderChannel"
+                  defaultValue={tenant.reminderChannel}
+                  className="rounded-md border p-1.5 text-sm"
+                >
+                  <option value="sms">SMS</option>
+                  <option value="email">Email</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
                   id="isActive"
                   name="isActive"
                   type="checkbox"
@@ -1171,6 +1193,11 @@ export default async function TenantDetail({
             {summary("Emergency contact", tenant.emergencyContactName ?? "—")}
             {summary("Emergency phone", tenant.emergencyContactPhone ?? "—")}
             {summary("SMS consent", tenant.smsConsent ? "Yes" : "No")}
+            {summary("Email consent", tenant.emailConsent ? "Yes" : "No")}
+            {summary(
+              "Reminder channel",
+              tenant.reminderChannel === "email" ? "Email" : "SMS",
+            )}
             {summary(
               "Preferred payment",
               tenant.preferredPaymentMethod
