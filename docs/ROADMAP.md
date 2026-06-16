@@ -149,11 +149,16 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   **sections** on the public `/apply` form (short text / paragraph / yes-no / single choice /
   checkbox list), e.g. a "Pets" section; answers are validated, snapshotted on the application,
   and shown to staff.
+- **Online-payment gateway seam** (workstream B) — a `PaymentGateway` interface + deterministic
+  stub + signature-verified `POST /api/payments/webhook` that posts a verified event through the
+  existing payment service (idempotent; no new balance math). A real adapter (+ portal "Pay now")
+  is the remaining production step.
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 
-**Still pending:** online payments gateway (B), DB-overridable storage config (E), maintenance
-**attachments** (D follow-up), the remaining F/H items, and the rest of the security backlog (G).
+**Still pending:** a real payment adapter + portal "Pay now" (B production step), DB-overridable
+storage config (E), maintenance **attachments** (D follow-up), the remaining F/H items, and the
+rest of the security backlog (G).
 
 ## Known simplifications (documented defaults)
 

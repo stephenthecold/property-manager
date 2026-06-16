@@ -39,18 +39,23 @@ payment from the portal still depends on **B**.
 - **Acceptance**: a tenant can authenticate, see only their data, and never reach a staff route
   (verified with a Playwright cross-tenant access test).
 
-## B. Online payments (ACH / card)
+## B. Online payments (ACH / card) ✅ seam + stub built
 
-- **Provider interface** `PaymentGateway` mirroring `SmsProvider`/`FileStorage`: `stub` default,
-  one real adapter (Stripe-style) selected by config. Secrets via env + the existing
-  `SETTINGS_ENC_KEY` encryption pattern (like the Twilio token).
-- **Ledger integration**: a gateway success posts a normal payment through the *existing*
-  payment service (FIFO allocation, idempotency key, audit) with `sourceType="gateway"` and the
-  provider reference in `sourceId` — no new balance math.
-- **Webhooks**: `/api/payments/webhook` verified by provider signature (reuse the
-  Twilio-signature verification shape); idempotent on the provider event id.
-- **Acceptance**: a stubbed gateway round-trip creates exactly one posted payment + receipt;
-  replaying the webhook is a no-op.
+- ✅ **Done — provider interface** `PaymentGateway`
+  ([`lib/providers/payment/`](../lib/providers/payment/)) mirroring `SmsProvider`/`FileStorage`:
+  `stub` default (deterministic, no real charges), env-selected via `PAYMENT_GATEWAY`. The
+  gateway only verifies + normalizes a webhook into a `GatewayPaymentEvent`; the shared webhook
+  secret stays in env (`PAYMENT_WEBHOOK_SECRET`). 10 unit tests.
+- ✅ **Done — ledger integration**: `lib/services/gateway-payments.ts` posts a verified event
+  through the *existing* `postPayment` service (FIFO allocation, audit, receipt) — **no new
+  balance math**. The provider reference is stored on the `Payment` (referenceNumber) and the
+  payment is idempotent on the provider event id (`idempotencyKey = gateway:<name>:<eventId>`).
+- ✅ **Done — webhook**: `POST /api/payments/webhook` (public prefix; verified by the provider
+  signature, not a session), idempotent on the provider event id — replaying a webhook is a no-op.
+- **Acceptance met (logic):** a stubbed verified event creates exactly one posted payment +
+  receipt via the existing service; a replay returns `duplicate`. **Still to do for production:** a
+  real adapter (Stripe-style) behind the same interface — `createCheckout`/intent + that
+  provider's signature scheme + a "Pay now" button in the tenant portal.
 
 ## C. Email channel ✅ built
 

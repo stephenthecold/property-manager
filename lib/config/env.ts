@@ -78,6 +78,12 @@ const envSchema = z.object({
   OCR_ENABLED: boolish.default(false),
   OCR_PROVIDER: z.string().optional(),
 
+  // Online-payment gateway (Phase 5). stub default — a real adapter slots in
+  // later behind the same interface. The webhook shared secret stays in env
+  // (never the DB), like the other provider secrets.
+  PAYMENT_GATEWAY: z.enum(["stub"]).default("stub"),
+  PAYMENT_WEBHOOK_SECRET: optionalSecret,
+
   // Background checks (tenant screening). Unset/"stub" = simulated decisions;
   // a real FCRA provider slots in behind lib/providers/background-check.
   BACKGROUND_CHECK_PROVIDER: z.string().optional(),
