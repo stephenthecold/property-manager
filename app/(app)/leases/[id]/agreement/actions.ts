@@ -71,7 +71,7 @@ export async function generateFromTemplateAction(
 
   let templateBytes: Buffer;
   try {
-    templateBytes = await getFileStorage().get(templateDoc.fileUrl);
+    templateBytes = await (await getFileStorage()).get(templateDoc.fileUrl);
   } catch (e) {
     return {
       error: storageUnconfigured(e)

@@ -83,15 +83,23 @@ payment from the portal still depends on **B**.
   source on `UploadedDocument` + wiring the upload path) and recording a status transition on an
   update.
 
-## E. Settings: DB-overridable storage & branding
+## E. Settings: DB-overridable storage & branding ✅ built
 
-- Mirror the SMS DB-over-env pattern for **non-secret** storage config (provider, bucket,
-  region, endpoint, path-style, local dir) on `AppSettings`; **secrets stay in env**. Requires
-  threading a resolved config into the storage factory/providers (today they read env in their
-  constructors) and a `resolveFileStorage()` that merges DB over env.
-- Builds directly on the read-only storage status panel already in Settings → Organization.
-- **Acceptance**: switching bucket/endpoint from the UI takes effect without redeploy; secrets
-  are never written to or read from the DB.
+- ✅ **Done** — non-secret storage config (provider + S3 bucket/region/endpoint/path-style) is now
+  DB-overridable on `AppSettings`, mirroring the SMS DB-over-env pattern.
+  [`lib/services/storage-config.ts`](../lib/services/storage-config.ts) (`resolveStorageConfig`)
+  merges DB over env; `getFileStorage()` is async and memoizes the constructed provider by a
+  non-secret config signature, so a Settings change rebuilds it on the next request (no redeploy).
+  The `S3FileStorage` constructor takes the resolved config (each field falls back to env). An
+  editable form sits under the existing storage status panel (Settings → Organization), and the
+  panel shows the **effective** config + its source (Settings vs environment).
+- **Safe-by-default:** with no DB override the resolver returns exactly the env values, so existing
+  deployments are byte-identical. **Secrets stay in env** (`S3_ACCESS_KEY_ID` /
+  `S3_SECRET_ACCESS_KEY` / `STORAGE_ENC_KEY`) and are never written to or read from the DB; the
+  **local dir** (`LOCAL_STORAGE_DIR`) and **encrypt flag** (`STORAGE_ENCRYPT`) also stay env-only
+  since the local dir is woven into the `/api/files` signing path.
+- Still pending (optional): DB-overridable local dir / encrypt would require threading the dir into
+  the file-serving signature helpers; left env-only on purpose.
 
 ## F. Performance backlog (from the audit)
 

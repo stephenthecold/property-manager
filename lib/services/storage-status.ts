@@ -1,6 +1,7 @@
 import { access, constants, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { getEnv } from "@/lib/config/env";
+import { resolveStorageConfig } from "@/lib/services/storage-config";
 
 /**
  * Best-effort persistence probe for containerized installs: true when `dir`
@@ -45,7 +46,10 @@ export interface StorageStatus {
 
 export async function getStorageStatus(): Promise<StorageStatus> {
   const env = getEnv();
-  const provider = env.STORAGE_PROVIDER;
+  // Effective config = NON-SECRET DB overrides merged over env (secrets, local
+  // dir, and the encrypt flag stay env-only).
+  const cfg = await resolveStorageConfig();
+  const provider = cfg.provider;
 
   if (provider === "stub") {
     return {
@@ -121,12 +125,13 @@ export async function getStorageStatus(): Promise<StorageStatus> {
     };
   }
 
-  // s3 (also R2 / B2 / MinIO via endpoint + path-style)
-  const hasKey = !!env.S3_ACCESS_KEY_ID;
-  const hasSecret = !!env.S3_SECRET_ACCESS_KEY;
-  const complete = !!env.S3_BUCKET && hasKey && hasSecret;
+  // s3 (also R2 / B2 / MinIO via endpoint + path-style). Bucket/region/endpoint/
+  // path-style come from the DB-over-env resolve; keys stay env-only secrets.
+  const hasKey = !!cfg.s3.accessKeyId;
+  const hasSecret = !!cfg.s3.secretAccessKey;
+  const complete = !!cfg.s3.bucket && hasKey && hasSecret;
   const missing: string[] = [];
-  if (!env.S3_BUCKET) missing.push("S3_BUCKET");
+  if (!cfg.s3.bucket) missing.push("bucket");
   if (!hasKey) missing.push("S3_ACCESS_KEY_ID");
   if (!hasSecret) missing.push("S3_SECRET_ACCESS_KEY");
 
@@ -134,14 +139,15 @@ export async function getStorageStatus(): Promise<StorageStatus> {
     provider,
     ready: complete,
     health: complete
-      ? { level: "ok", message: "S3 storage is configured." }
+      ? { level: "ok", message: `S3 storage is configured (config from ${cfg.source === "db" ? "Settings" : "environment"}).` }
       : { level: "error", message: `Incomplete S3 configuration — missing: ${missing.join(", ")}.` },
     fields: [
       { label: "Provider", value: "S3-compatible" },
-      { label: "Bucket", value: env.S3_BUCKET || "— (not set)" },
-      { label: "Region", value: env.S3_REGION || "us-east-1 (default)" },
-      { label: "Endpoint", value: env.S3_ENDPOINT || "AWS default" },
-      { label: "Path-style addressing", value: env.S3_FORCE_PATH_STYLE ? "on" : "off" },
+      { label: "Config source", value: cfg.source === "db" ? "Settings (DB over env)" : "Environment" },
+      { label: "Bucket", value: cfg.s3.bucket || "— (not set)" },
+      { label: "Region", value: cfg.s3.region || "us-east-1 (default)" },
+      { label: "Endpoint", value: cfg.s3.endpoint || "AWS default" },
+      { label: "Path-style addressing", value: cfg.s3.forcePathStyle ? "on" : "off" },
     ],
     secrets: [
       { label: "Access key ID", set: hasKey },

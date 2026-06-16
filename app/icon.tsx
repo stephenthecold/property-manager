@@ -29,7 +29,7 @@ export default async function Icon() {
         where: { id: app.logoDocumentId },
       });
       if (doc && doc.fileType && SATORI_SAFE.has(doc.fileType)) {
-        const bytes = await getFileStorage().get(doc.fileUrl);
+        const bytes = await (await getFileStorage()).get(doc.fileUrl);
         logoDataUrl = `data:${doc.fileType};base64,${bytes.toString("base64")}`;
       }
     } catch {

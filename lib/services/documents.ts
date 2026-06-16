@@ -39,7 +39,7 @@ function sanitizeFileName(name: string): string {
 export async function createUploadedDocument(
   input: CreateDocumentInput,
 ): Promise<{ documentId: string; key: string }> {
-  const storage = getFileStorage();
+  const storage = await getFileStorage();
   const now = new Date();
   const yyyy = String(now.getUTCFullYear());
   const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
@@ -104,7 +104,7 @@ export async function getDocumentDownloadUrl(
     where: { id: documentId },
   });
   if (!doc) return null;
-  const url = await getFileStorage().getSignedUrl(doc.fileUrl);
+  const url = await (await getFileStorage()).getSignedUrl(doc.fileUrl);
   return { url, fileName: doc.fileName, fileType: doc.fileType };
 }
 
@@ -143,7 +143,7 @@ export async function runOcrOnDocument(
   });
   if (!doc) throw new Error("Document not found");
 
-  const body = await getFileStorage().get(doc.fileUrl);
+  const body = await (await getFileStorage()).get(doc.fileUrl);
   const { text, confidence } = await provider.extract({
     body,
     contentType: doc.fileType ?? undefined,

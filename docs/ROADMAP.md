@@ -153,12 +153,14 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   stub + signature-verified `POST /api/payments/webhook` that posts a verified event through the
   existing payment service (idempotent; no new balance math). A real adapter (+ portal "Pay now")
   is the remaining production step.
+- **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
+  (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
+  effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 
-**Still pending:** a real payment adapter + portal "Pay now" (B production step), DB-overridable
-storage config (E), maintenance **attachments** (D follow-up), the remaining F/H items, and the
-rest of the security backlog (G).
+**Still pending:** a real payment adapter + portal "Pay now" (B production step), maintenance
+**attachments** (D follow-up), the remaining F/H items, and the rest of the security backlog (G).
 
 ## Known simplifications (documented defaults)
 

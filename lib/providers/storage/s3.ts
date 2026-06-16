@@ -13,25 +13,35 @@ import { getEnv } from "@/lib/config/env";
  * One S3-compatible implementation parameterized by env — works for AWS S3,
  * Cloudflare R2, Backblaze B2, and MinIO (set S3_ENDPOINT + S3_FORCE_PATH_STYLE).
  */
+export interface S3StorageConfig {
+  bucket?: string | null;
+  region?: string | null;
+  endpoint?: string | null;
+  forcePathStyle?: boolean;
+  accessKeyId?: string | null;
+  secretAccessKey?: string | null;
+}
+
 export class S3FileStorage implements FileStorage {
   readonly name = "s3";
   private readonly client: S3Client;
   private readonly bucket: string;
 
-  constructor() {
+  /** Resolved (DB-over-env) config wins; each field falls back to env. */
+  constructor(config?: S3StorageConfig) {
     const env = getEnv();
-    if (!env.S3_BUCKET) throw new Error("S3_BUCKET is required when STORAGE_PROVIDER=s3");
-    this.bucket = env.S3_BUCKET;
+    const bucket = config?.bucket ?? env.S3_BUCKET;
+    if (!bucket) throw new Error("S3 bucket is required when the storage provider is s3");
+    this.bucket = bucket;
+    const accessKeyId = config?.accessKeyId ?? env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = config?.secretAccessKey ?? env.S3_SECRET_ACCESS_KEY;
     this.client = new S3Client({
-      region: env.S3_REGION ?? "us-east-1",
-      endpoint: env.S3_ENDPOINT,
-      forcePathStyle: env.S3_FORCE_PATH_STYLE,
+      region: (config?.region ?? env.S3_REGION) ?? "us-east-1",
+      endpoint: config?.endpoint ?? env.S3_ENDPOINT,
+      forcePathStyle: config?.forcePathStyle ?? env.S3_FORCE_PATH_STYLE,
       credentials:
-        env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
-          ? {
-              accessKeyId: env.S3_ACCESS_KEY_ID,
-              secretAccessKey: env.S3_SECRET_ACCESS_KEY,
-            }
+        accessKeyId && secretAccessKey
+          ? { accessKeyId, secretAccessKey }
           : undefined,
     });
   }

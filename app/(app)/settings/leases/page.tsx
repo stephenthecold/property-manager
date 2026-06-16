@@ -28,12 +28,12 @@ export default async function LeaseSettingsPage() {
   let initialsUrl: string | null = null;
   try {
     if (app.landlordSignatureImageKey) {
-      signatureUrl = await getFileStorage().getSignedUrl(
+      signatureUrl = await (await getFileStorage()).getSignedUrl(
         app.landlordSignatureImageKey,
       );
     }
     if (app.landlordInitialsImageKey) {
-      initialsUrl = await getFileStorage().getSignedUrl(
+      initialsUrl = await (await getFileStorage()).getSignedUrl(
         app.landlordInitialsImageKey,
       );
     }

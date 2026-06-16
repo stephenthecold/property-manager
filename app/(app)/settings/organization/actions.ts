@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
-import { saveOrganizationSettings } from "@/lib/services/app-settings";
+import {
+  saveOrganizationSettings,
+  saveStorageConfig,
+} from "@/lib/services/app-settings";
 import { sanitizeReceiptPrefix } from "@/lib/accounting/receipts";
 import { createUploadedDocument } from "@/lib/services/documents";
 
@@ -103,4 +106,42 @@ export async function saveOrganizationAction(
 
   revalidatePath("/", "layout"); // brand name/logo appear on every page
   return { ok: true, message: "Organization settings saved." };
+}
+
+const strOrNull = (fd: FormData, key: string): string | null =>
+  String(fd.get(key) ?? "").trim() || null;
+
+/**
+ * Save NON-SECRET storage overrides (provider + S3 bucket/region/endpoint/
+ * path-style). Secrets stay in env. Blank fields clear the override (fall back
+ * to env). The storage factory rebuilds on the next request (config-signature
+ * cache + invalidated settings cache).
+ */
+export async function saveStorageConfigAction(
+  _prev: OrganizationState,
+  fd: FormData,
+): Promise<OrganizationState> {
+  await requireCapability("organization.settings");
+  const actor = await auditActor();
+
+  const pathStyleRaw = String(fd.get("s3ForcePathStyle") ?? "");
+  const s3ForcePathStyle =
+    pathStyleRaw === "true" ? true : pathStyleRaw === "false" ? false : null;
+
+  try {
+    await saveStorageConfig(
+      {
+        storageProvider: strOrNull(fd, "storageProvider"),
+        s3Bucket: strOrNull(fd, "s3Bucket"),
+        s3Region: strOrNull(fd, "s3Region"),
+        s3Endpoint: strOrNull(fd, "s3Endpoint"),
+        s3ForcePathStyle,
+      },
+      actor,
+    );
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to save storage config." };
+  }
+  revalidatePath("/settings/organization");
+  return { ok: true, message: "Storage settings saved." };
 }

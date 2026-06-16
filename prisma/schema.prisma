@@ -248,6 +248,14 @@ model AppSettings {
   // Tenant-facing free text (branded, whitespace-pre-wrap), null -> shipped copy.
   portalWelcomeText String? // shown on the tenant portal home
   applyIntroText    String? // shown atop the public /apply form
+  // File storage — NON-SECRET config, DB-over-env (mirrors the SMS pattern).
+  // null/blank on each -> the env value. Secrets (S3 keys, STORAGE_ENC_KEY) and
+  // the local dir / encrypt flag stay env-only. See lib/services/storage-config.ts.
+  storageProvider   String?  // "stub" | "local" | "s3"; null -> STORAGE_PROVIDER
+  s3Bucket          String?
+  s3Region          String?
+  s3Endpoint        String?
+  s3ForcePathStyle  Boolean? // null -> S3_FORCE_PATH_STYLE
   // Defaults applied when creating new properties (override env defaults)
   defaultTimezone   String?
   defaultCurrency   String?
