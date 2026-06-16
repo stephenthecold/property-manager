@@ -70,6 +70,7 @@ export default async function ApplyPage({
             unitId={unitId}
             businessName={settings.businessName}
             config={settings.applicationFields}
+            customSections={settings.applicationCustomSections}
           />
         </CardContent>
       </Card>

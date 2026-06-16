@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
-import { saveApplicationFields } from "@/lib/services/app-settings";
+import {
+  saveApplicationCustomSections,
+  saveApplicationFields,
+} from "@/lib/services/app-settings";
 import {
   APPLICATION_FIELDS,
   type ApplicationFormConfig,
@@ -37,4 +40,35 @@ export async function saveApplicationFieldsAction(
   revalidatePath("/settings/applications");
   revalidatePath("/apply");
   return { ok: true, message: "Application form updated." };
+}
+
+/**
+ * Save the operator-defined custom question sections. The builder serializes
+ * its state into a `sectionsJson` field; the service re-sanitizes it (clamps
+ * counts/lengths, drops malformed entries) before persisting.
+ */
+export async function saveCustomSectionsAction(
+  _prev: ApplicationSettingsState,
+  fd: FormData,
+): Promise<ApplicationSettingsState> {
+  await requireCapability("applications.manage");
+
+  let parsed: unknown = [];
+  const raw = String(fd.get("sectionsJson") ?? "");
+  if (raw.trim() !== "") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { error: "Couldn't read the questions — please try again." };
+    }
+  }
+
+  try {
+    await saveApplicationCustomSections(parsed, await auditActor());
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to save." };
+  }
+  revalidatePath("/settings/applications");
+  revalidatePath("/apply");
+  return { ok: true, message: "Custom questions updated." };
 }

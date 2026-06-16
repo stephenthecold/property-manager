@@ -90,6 +90,22 @@ export default async function ApplicationDetail({
   const checks = canManage ? await listBackgroundChecks(app.id) : [];
   const hasPendingCheck = checks.some((c) => c.status === "pending");
 
+  // Stored answers to operator-defined custom questions ([{ label, value }]).
+  const customAnswers: { label: string; value: string }[] = Array.isArray(
+    app.customAnswers,
+  )
+    ? (app.customAnswers as unknown[]).flatMap((a) =>
+        a && typeof a === "object" && "label" in a && "value" in a
+          ? [
+              {
+                label: String((a as { label: unknown }).label),
+                value: String((a as { value: unknown }).value),
+              },
+            ]
+          : [],
+      )
+    : [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -220,6 +236,21 @@ export default async function ApplicationDetail({
             <div className="mt-4">
               <div className="text-xs text-muted-foreground">Applicant message</div>
               <p className="whitespace-pre-wrap text-sm">{app.message}</p>
+            </div>
+          )}
+          {customAnswers.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="text-xs text-muted-foreground">
+                Additional questions
+              </div>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                {customAnswers.map((a, i) => (
+                  <div key={i} className="border-b py-1.5 text-sm">
+                    <dt className="text-xs text-muted-foreground">{a.label}</dt>
+                    <dd className="whitespace-pre-wrap font-medium">{a.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           )}
         </CardContent>

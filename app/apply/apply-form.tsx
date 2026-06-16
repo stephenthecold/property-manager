@@ -10,16 +10,22 @@ import {
   isShown,
   type ApplicationFormConfig,
 } from "@/lib/applications/form-config";
+import {
+  questionInputName,
+  type CustomSection,
+} from "@/lib/applications/custom-questions";
 import { submitApplicationAction, type ApplyState } from "./actions";
 
 export function ApplyForm({
   unitId,
   businessName,
   config,
+  customSections,
 }: {
   unitId: string | null;
   businessName: string;
   config: ApplicationFormConfig;
+  customSections: CustomSection[];
 }) {
   const [state, action, pending] = useActionState<ApplyState, FormData>(
     submitApplicationAction,
@@ -114,6 +120,116 @@ export function ApplyForm({
           />
         </div>
       )}
+
+      {customSections.map((section) => (
+        <div key={section.id} className="space-y-3 border-t pt-4">
+          {section.title && (
+            <h2 className="text-sm font-semibold">{section.title}</h2>
+          )}
+          {section.description && (
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+              {section.description}
+            </p>
+          )}
+          {section.questions.map((q) => {
+            const name = questionInputName(q.id);
+            const reqStar = q.required ? (
+              <span className="text-red-500"> *</span>
+            ) : null;
+            if (q.type === "yes_no") {
+              return (
+                <label key={q.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name={name}
+                    value="yes"
+                    className="size-4"
+                  />
+                  {q.label}
+                  {reqStar}
+                </label>
+              );
+            }
+            if (q.type === "multi_select") {
+              return (
+                <fieldset key={q.id} className="space-y-2">
+                  <legend className="text-sm font-medium">
+                    {q.label}
+                    {reqStar}
+                  </legend>
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {q.options.map((opt) => (
+                      <label
+                        key={opt}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          name={name}
+                          value={opt}
+                          className="size-4"
+                        />
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              );
+            }
+            if (q.type === "single_select") {
+              return (
+                <div key={q.id} className="space-y-2">
+                  <Label htmlFor={name}>
+                    {q.label}
+                    {reqStar}
+                  </Label>
+                  <select
+                    id={name}
+                    name={name}
+                    required={q.required}
+                    defaultValue=""
+                    className="w-full rounded-md border p-2 text-sm"
+                  >
+                    <option value="">Select…</option>
+                    {q.options.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            }
+            if (q.type === "long_text") {
+              return (
+                <div key={q.id} className="space-y-2">
+                  <Label htmlFor={name}>
+                    {q.label}
+                    {reqStar}
+                  </Label>
+                  <textarea
+                    id={name}
+                    name={name}
+                    rows={3}
+                    maxLength={2000}
+                    required={q.required}
+                    className="w-full rounded-md border p-2 text-sm"
+                  />
+                </div>
+              );
+            }
+            return (
+              <div key={q.id} className="space-y-2">
+                <Label htmlFor={name}>
+                  {q.label}
+                  {reqStar}
+                </Label>
+                <Input id={name} name={name} required={q.required} maxLength={200} />
+              </div>
+            );
+          })}
+        </div>
+      ))}
 
       <Button type="submit" disabled={pending}>
         {pending ? "Submitting…" : "Submit application"}

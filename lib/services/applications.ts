@@ -8,6 +8,8 @@ import {
 } from "@/lib/services/app-settings";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import type { RentalApplicationStatus } from "@/lib/generated/prisma/enums";
+import type { InputJsonValue } from "@/lib/generated/prisma/internal/prismaNamespace";
+import type { AnswerSnapshotItem } from "@/lib/applications/custom-questions";
 
 /**
  * Rental applications (module "applications"). Prospective-tenant intake from
@@ -34,6 +36,8 @@ export interface SubmitApplicationInput {
   message: string | null;
   /** From a staff-shared apply link (?unit=…); validated before use. */
   unitId: string | null;
+  /** Display snapshot of custom-question answers: [{ label, value }]. */
+  customAnswers?: AnswerSnapshotItem[];
 }
 
 /** Public submission. Resolves the unit/property from a shared link if valid. */
@@ -74,6 +78,10 @@ export async function submitApplication(
           monthlyIncomeCents: input.monthlyIncomeCents,
           employer: input.employer,
           message: input.message,
+          customAnswers:
+            input.customAnswers && input.customAnswers.length > 0
+              ? (input.customAnswers as unknown as InputJsonValue)
+              : undefined,
           unitId,
           propertyId,
         },

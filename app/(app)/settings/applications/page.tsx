@@ -4,6 +4,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { applyUrl } from "@/lib/services/applications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApplicationsSettingsForm } from "./applications-settings-form";
+import { CustomQuestionsBuilder } from "./custom-questions-builder";
 
 export const runtime = "nodejs";
 
@@ -19,20 +20,31 @@ export default async function ApplicationsSettingsPage() {
   const url = await applyUrl();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Application form</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Your public application form lives at{" "}
-          <a href={url} target="_blank" rel="noreferrer" className="font-mono text-primary underline underline-offset-2">
-            {url}
-          </a>
-          . Share it with prospects, or send it from a tenant&apos;s page.
-        </p>
-        <ApplicationsSettingsForm config={settings.applicationFields} />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Application form</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Your public application form lives at{" "}
+            <a href={url} target="_blank" rel="noreferrer" className="font-mono text-primary underline underline-offset-2">
+              {url}
+            </a>
+            . Share it with prospects, or send it from a tenant&apos;s page.
+          </p>
+          <ApplicationsSettingsForm config={settings.applicationFields} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Custom questions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CustomQuestionsBuilder initial={settings.applicationCustomSections} />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
