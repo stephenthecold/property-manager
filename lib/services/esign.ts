@@ -385,7 +385,7 @@ export async function cancelSigningRequest(i: {
 async function loadPngDataUrl(key: string | null): Promise<string | undefined> {
   if (!key) return undefined;
   try {
-    const buf = await getFileStorage().get(key);
+    const buf = await (await getFileStorage()).get(key);
     return `data:image/png;base64,${buf.toString("base64")}`;
   } catch (e) {
     console.error(`[esign] could not load signature image ${key}:`, e);
@@ -617,14 +617,14 @@ export async function recordSignature(i: {
 
   try {
     if (signatureImageKey && signatureBody) {
-      await getFileStorage().put({
+      await (await getFileStorage()).put({
         key: signatureImageKey,
         body: signatureBody,
         contentType: "image/png",
       });
     }
     if (initialsImageKey && initialsBody) {
-      await getFileStorage().put({
+      await (await getFileStorage()).put({
         key: initialsImageKey,
         body: initialsBody,
         contentType: "image/png",

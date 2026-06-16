@@ -84,6 +84,12 @@ export interface ResolvedAppSettings {
   /** Tenant-facing copy; null -> the shipped default text. */
   portalWelcomeText: string | null;
   applyIntroText: string | null;
+  /** NON-SECRET file-storage overrides (DB-over-env); null -> the env value. */
+  storageProvider: string | null;
+  s3Bucket: string | null;
+  s3Region: string | null;
+  s3Endpoint: string | null;
+  s3ForcePathStyle: boolean | null;
   defaultTimezone: string;
   defaultCurrency: string;
   /** Master switch for ALL SMS sends (manual, bulk, scheduled). */
@@ -196,6 +202,11 @@ async function resolve(): Promise<ResolvedAppSettings> {
     receiptPrefix: row?.receiptPrefix ?? null,
     portalWelcomeText: row?.portalWelcomeText ?? null,
     applyIntroText: row?.applyIntroText ?? null,
+    storageProvider: row?.storageProvider ?? null,
+    s3Bucket: row?.s3Bucket ?? null,
+    s3Region: row?.s3Region ?? null,
+    s3Endpoint: row?.s3Endpoint ?? null,
+    s3ForcePathStyle: row?.s3ForcePathStyle ?? null,
     defaultTimezone: row?.defaultTimezone || env.DEFAULT_TIMEZONE,
     defaultCurrency: row?.defaultCurrency || env.DEFAULT_CURRENCY,
     smsEnabled: row?.smsEnabled ?? true,
@@ -721,6 +732,57 @@ export async function saveOrganizationSettings(
         ? { businessName: before.businessName, logoDocumentId: before.logoDocumentId }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface StorageConfigInput {
+  storageProvider: string | null; // "stub" | "local" | "s3" | null (-> env)
+  s3Bucket: string | null;
+  s3Region: string | null;
+  s3Endpoint: string | null;
+  s3ForcePathStyle: boolean | null;
+}
+
+/**
+ * Persist NON-SECRET storage overrides (provider + S3 bucket/region/endpoint/
+ * path-style). Secrets stay in env and are never written here. null on a field
+ * clears the override (falls back to env).
+ */
+export async function saveStorageConfig(
+  input: StorageConfigInput,
+  actor: AuditContext,
+): Promise<void> {
+  const provider = input.storageProvider;
+  if (provider != null && !["stub", "local", "s3"].includes(provider)) {
+    throw new Error("Storage provider must be stub, local, or s3.");
+  }
+  const data = {
+    storageProvider: provider,
+    s3Bucket: input.s3Bucket,
+    s3Region: input.s3Region,
+    s3Endpoint: input.s3Endpoint,
+    s3ForcePathStyle: input.s3ForcePathStyle,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.storage.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      // S3 bucket/endpoint are config, not secrets — safe to audit.
+      after: {
+        storageProvider: provider,
+        s3Bucket: input.s3Bucket,
+        s3Endpoint: input.s3Endpoint,
+      },
     });
   });
   invalidateAppSettingsCache();

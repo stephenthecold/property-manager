@@ -58,7 +58,7 @@ export async function GET(
 
   let body: Buffer;
   try {
-    body = await getFileStorage().get(doc.fileUrl);
+    body = await (await getFileStorage()).get(doc.fileUrl);
   } catch (e) {
     console.error(`[portal/files] read failed for document ${doc.id}:`, e);
     return new NextResponse("Not found", { status: 404 });

@@ -45,7 +45,7 @@ export default async function ReceiptPage({
 
   // Attached paper-receipt photos (camera uploads): signed, short-lived URLs.
   const photoDocs = await listDocuments({ receiptId: receipt.id });
-  const storage = getFileStorage();
+  const storage = await getFileStorage();
   const photos = await Promise.all(
     photoDocs.map(async (d) => ({
       id: d.id,

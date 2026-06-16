@@ -6,6 +6,7 @@ import { getStorageStatus } from "@/lib/services/storage-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { OrganizationForm } from "./organization-form";
+import { StorageConfigForm } from "./storage-config-form";
 
 export const runtime = "nodejs";
 
@@ -97,14 +98,24 @@ export default async function OrganizationSettingsPage() {
           </dl>
 
           <p className="text-xs text-muted-foreground">
-            Storage is configured with environment variables (<code>STORAGE_PROVIDER</code> and the{" "}
-            <code>S3_*</code> / <code>LOCAL_STORAGE_DIR</code> settings — see{" "}
-            <code>.env.example</code>). To use a <strong>network share</strong>, mount it on the host
-            (NFS/SMB) and point <code>LOCAL_STORAGE_DIR</code> at the mount; set{" "}
-            <code>STORAGE_ENCRYPT=true</code> so files on the share are encrypted at rest (see{" "}
-            <code>docs/DEPLOYMENT.md</code>). Secret keys are read from the environment and never
-            shown or stored here. Change them on the host and restart the app to apply.
+            The provider and the non-secret S3 parameters can be overridden below without a
+            redeploy. <strong>Secret keys</strong> (<code>S3_ACCESS_KEY_ID</code> /{" "}
+            <code>S3_SECRET_ACCESS_KEY</code> / <code>STORAGE_ENC_KEY</code>), the{" "}
+            <code>LOCAL_STORAGE_DIR</code>, and <code>STORAGE_ENCRYPT</code> are read from the
+            environment and never shown or stored here (see <code>docs/DEPLOYMENT.md</code>).
           </p>
+
+          <div className="border-t pt-4">
+            <StorageConfigForm
+              initial={{
+                storageProvider: row?.storageProvider ?? "",
+                s3Bucket: row?.s3Bucket ?? "",
+                s3Region: row?.s3Region ?? "",
+                s3Endpoint: row?.s3Endpoint ?? "",
+                s3ForcePathStyle: row?.s3ForcePathStyle ?? null,
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

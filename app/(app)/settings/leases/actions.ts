@@ -187,7 +187,7 @@ export async function saveLandlordSignatureAction(
     const body = decodeDrawnDataUrl(dataUrl, mark.what);
     if (!Buffer.isBuffer(body)) return body;
     try {
-      await getFileStorage().put({
+      await (await getFileStorage()).put({
         key: mark.key,
         body,
         contentType: "image/png",
