@@ -16,7 +16,12 @@ import {
   resolveFormConfig,
   type ApplicationFormConfig,
 } from "@/lib/applications/form-config";
+import {
+  resolveCustomSections,
+  type CustomSection,
+} from "@/lib/applications/custom-questions";
 import type { LateFeeType, ReminderType } from "@/lib/generated/prisma/enums";
+import type { InputJsonValue } from "@/lib/generated/prisma/internal/prismaNamespace";
 
 /** AAD binding the encrypted Twilio token to its row/field (GCM transplant protection). */
 export const SMS_TOKEN_AAD = "appsettings:smsAuthToken:singleton";
@@ -135,6 +140,8 @@ export interface ResolvedAppSettings {
   modules: ModuleFlags;
   /** Public application form: per-field hidden/optional/required config. */
   applicationFields: ApplicationFormConfig;
+  /** Operator-defined custom question sections on the public application form. */
+  applicationCustomSections: CustomSection[];
   /** Org-wide charge defaults ("rates") — prefill new leases/units. */
   billing: {
     dueDay: number;
@@ -234,6 +241,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
+    applicationCustomSections: resolveCustomSections(row?.applicationCustomSections),
     billing: {
       dueDay: row?.defaultDueDay ?? 1,
       graceDays: row?.defaultGraceDays ?? 5,
@@ -498,6 +506,32 @@ export async function saveApplicationFields(
     });
   });
   invalidateAppSettingsCache();
+}
+
+/** Persist the operator-defined custom application question sections. */
+export async function saveApplicationCustomSections(
+  sections: unknown,
+  actor: AuditContext,
+): Promise<CustomSection[]> {
+  const clamped = resolveCustomSections(sections);
+  // The sanitized array is plain JSON; store it as-is.
+  const json = clamped as unknown as InputJsonValue;
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", applicationCustomSections: json, updatedBy: actor.actorId ?? null },
+      update: { applicationCustomSections: json, updatedBy: actor.actorId ?? null },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.application_custom_sections.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: { sectionCount: clamped.length },
+    });
+  });
+  invalidateAppSettingsCache();
+  return clamped;
 }
 
 /** Persist the module flags. Disabling hides UI only — data is retained. */

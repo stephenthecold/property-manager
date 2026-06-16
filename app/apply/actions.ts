@@ -3,6 +3,12 @@
 import { submitApplication } from "@/lib/services/applications";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { validateSubmission } from "@/lib/applications/form-config";
+import {
+  buildAnswerSnapshot,
+  questionInputName,
+  validateCustomAnswers,
+  type CustomAnswers,
+} from "@/lib/applications/custom-questions";
 import { toCents } from "@/lib/money";
 
 export interface ApplyState {
@@ -32,7 +38,7 @@ export async function submitApplicationAction(
 
   // Enforce the operator's per-field required config (Settings → Applications),
   // plus the always-on "at least one contact method" rule.
-  const { applicationFields } = await getAppSettings();
+  const { applicationFields, applicationCustomSections } = await getAppSettings();
   const missing = validateSubmission(applicationFields, {
     email: !!email,
     phone: !!phone,
@@ -42,9 +48,31 @@ export async function submitApplicationAction(
     employer: !!employer,
     message: !!message,
   });
-  if (missing.length > 0) {
-    return { error: `Please fill in: ${missing.join(", ")}.` };
+
+  // Collect + validate answers to the operator's custom questions.
+  const customAnswers: CustomAnswers = {};
+  for (const section of applicationCustomSections) {
+    for (const q of section.questions) {
+      const name = questionInputName(q.id);
+      if (q.type === "multi_select") {
+        customAnswers[q.id] = fd
+          .getAll(name)
+          .map((v) => String(v).trim())
+          .filter((v) => v !== "");
+      } else if (q.type === "yes_no") {
+        customAnswers[q.id] = fd.get(name) ? "on" : "";
+      } else {
+        customAnswers[q.id] = str(fd, name);
+      }
+    }
   }
+  const customMissing = validateCustomAnswers(applicationCustomSections, customAnswers);
+
+  const allMissing = [...missing, ...customMissing];
+  if (allMissing.length > 0) {
+    return { error: `Please fill in: ${allMissing.join(", ")}.` };
+  }
+  const answerSnapshot = buildAnswerSnapshot(applicationCustomSections, customAnswers);
 
   const moveRaw = str(fd, "desiredMoveInDate");
   let desiredMoveInDate: Date | null = null;
@@ -77,6 +105,7 @@ export async function submitApplicationAction(
       employer,
       message,
       unitId: str(fd, "unitId") || null,
+      customAnswers: answerSnapshot,
     });
   } catch {
     // Generic message — never leak module/DB internals to a public visitor.

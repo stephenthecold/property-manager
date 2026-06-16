@@ -145,6 +145,10 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   template renderer).
 - **Maintenance tickets** (workstream D, core) — job **priority** + a threaded, audited
   **update/progress log**.
+- **Custom application questions** (workstream H8) — operators define their own question
+  **sections** on the public `/apply` form (short text / paragraph / yes-no / single choice /
+  checkbox list), e.g. a "Pets" section; answers are validated, snapshotted on the application,
+  and shown to staff.
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 

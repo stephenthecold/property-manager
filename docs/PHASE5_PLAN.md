@@ -174,6 +174,18 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   **in** as injected config (never read from the DB inside the pure module) and covered by new
   tests. Lowest priority; flagged here so it's a deliberate decision, not an accidental one.
 
+### H8. Custom application questions ✅ built
+- ✅ **Done** — beyond the fixed `APPLICATION_FIELDS`, operators can define their own **question
+  sections** at Settings → Applications, with types **short text / paragraph / yes-no checkbox /
+  single choice / checkbox list (multi-select)** (e.g. a "Pets" section: a yes/no plus a checkbox
+  list of animals). Config lives in `AppSettings.applicationCustomSections`; the pure
+  [`lib/applications/custom-questions.ts`](../lib/applications/custom-questions.ts)
+  (`resolveCustomSections` / `validateCustomAnswers` / `buildAnswerSnapshot`) sanitizes the
+  untrusted JSON and validates submissions; answers are stored as a history-proof
+  `RentalApplication.customAnswers` snapshot and shown on the staff review page. 10 unit tests.
+- Still pending (small): drag-reorder of sections/questions, and attaching the answers into the
+  background-check / tenant-conversion flows.
+
 **Acceptance (per item):** the setting changes the rendered/behavioural value live (no redeploy),
 the change is audited, non-secret values only, and the shipped default is unchanged when the field
 is empty. Anything feeding accounting/period/money logic is threaded as injected config into the
