@@ -18,6 +18,9 @@ export interface OrganizationInitial {
   businessPhone: string;
   businessEmail: string;
   receiptFooter: string;
+  receiptPrefix: string;
+  portalWelcomeText: string;
+  applyIntroText: string;
   defaultTimezone: string;
   defaultCurrency: string;
   logoUrl: string | null;
@@ -150,6 +153,52 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
           className="w-full rounded-md border p-2 text-sm"
           placeholder="Thank you for your payment. Questions? Call us."
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="receiptPrefix">Receipt number prefix</Label>
+        <Input
+          id="receiptPrefix"
+          name="receiptPrefix"
+          defaultValue={initial.receiptPrefix}
+          placeholder="RCT"
+          maxLength={8}
+        />
+        <p className="text-xs text-muted-foreground">
+          Letters/digits only (max 8). Receipts are numbered{" "}
+          <code>{initial.receiptPrefix || "RCT"}-YYYYMMDD-0001</code>. Blank uses{" "}
+          <code>RCT</code>. Existing receipt numbers are never changed.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portalWelcomeText">Tenant portal welcome text</Label>
+        <textarea
+          id="portalWelcomeText"
+          name="portalWelcomeText"
+          defaultValue={initial.portalWelcomeText}
+          rows={2}
+          className="w-full rounded-md border p-2 text-sm"
+          placeholder="Welcome to your tenant portal. View your balance and pay rent here."
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown on the tenant portal home. Blank uses the default copy.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="applyIntroText">Rental application intro text</Label>
+        <textarea
+          id="applyIntroText"
+          name="applyIntroText"
+          defaultValue={initial.applyIntroText}
+          rows={2}
+          className="w-full rounded-md border p-2 text-sm"
+          placeholder="Tell us about yourself and we'll be in touch."
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown atop the public application form. Blank uses the default copy.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

@@ -235,6 +235,12 @@ model AppSettings {
   businessEmail     String?
   logoDocumentId    String? // UploadedDocument.id (loose ref)
   receiptFooter     String? // free text printed at the bottom of receipts
+  // Receipt number prefix ("RCT-YYYYMMDD-NNNN"); null/blank -> "RCT".
+  // Sanitized to A-Z/0-9, max 8 (lib/accounting/receipts.ts).
+  receiptPrefix     String?
+  // Tenant-facing free text (branded, whitespace-pre-wrap), null -> shipped copy.
+  portalWelcomeText String? // shown on the tenant portal home
+  applyIntroText    String? // shown atop the public /apply form
   // Defaults applied when creating new properties (override env defaults)
   defaultTimezone   String?
   defaultCurrency   String?
@@ -741,7 +747,9 @@ model Reminder {
   sentAt            DateTime?
   createdAt         DateTime       @default(now())
 
-  @@index([tenantId])
+  // Composite covers the plain tenantId lookup (leading-column prefix) AND the
+  // tenant reminder timeline ordered by createdAt.
+  @@index([tenantId, createdAt])
   @@index([leaseId])
   @@index([providerMessageId])
 }

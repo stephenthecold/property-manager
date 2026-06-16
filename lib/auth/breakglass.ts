@@ -114,7 +114,7 @@ export async function verifyBreakGlass(
 export async function issueBreakGlass(
   ttlHours = DEFAULT_TTL_HOURS,
 ): Promise<{ passphrase: string; expiresAt: Date }> {
-  const passphrase = randomToken(18); // 36 hex chars
+  const passphrase = randomToken(32); // 256-bit (64 hex chars)
   const passwordHash = await hashPassword(passphrase);
   const expiresAt = new Date(Date.now() + ttlHours * 3_600_000);
 

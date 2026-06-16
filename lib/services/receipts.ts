@@ -14,6 +14,7 @@ import {
   formatReceiptNumber,
   nextSequenceFromNumbers,
   receiptDateKey,
+  sanitizeReceiptPrefix,
 } from "@/lib/accounting/receipts";
 import { formatCurrency } from "@/lib/money";
 import {
@@ -62,19 +63,21 @@ export async function ensureReceiptForPayment(
 
   const property = payment.lease.unit.property;
   const dateKey = receiptDateKey(payment.paymentDate, property.timezone);
+  const prefix = sanitizeReceiptPrefix((await getAppSettings()).receiptPrefix);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const receipt = await prisma.$transaction(async (tx) => {
         const taken = await tx.receipt.findMany({
-          where: { receiptNumber: { startsWith: `RCT-${dateKey}-` } },
+          where: { receiptNumber: { startsWith: `${prefix}-${dateKey}-` } },
           select: { receiptNumber: true },
         });
         const seq = nextSequenceFromNumbers(
           dateKey,
           taken.map((r) => r.receiptNumber),
+          prefix,
         );
-        const receiptNumber = formatReceiptNumber(dateKey, seq);
+        const receiptNumber = formatReceiptNumber(dateKey, seq, prefix);
 
         // "Balance after payment" = SUM over all entries UP TO AND INCLUDING
         // this payment's ledger entry, in the same deterministic ordering the

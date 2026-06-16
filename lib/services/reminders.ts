@@ -13,7 +13,7 @@ import type { SendSmsResult } from "@/lib/providers/sms/types";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
-import { leaseSnapshot, loadLeaseAccounting } from "@/lib/services/accounting";
+import { batchLeaseAccounting, leaseSnapshot } from "@/lib/services/accounting";
 import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
 
@@ -335,12 +335,16 @@ export async function sendBulkOverdueReminders(
     skippedDuplicate: 0,
   };
 
+  // One batched read for the whole sweep (two queries total) instead of two
+  // per lease — the per-lease pure compute below is unchanged.
+  const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
+
   for (const lease of leases) {
     try {
       const tz = lease.unit.property.timezone;
-      const { entries, charges, allocatedByCharge } = await loadLeaseAccounting(
+      const { entries, charges, allocatedByCharge } = accountingByLease.get(
         lease.id,
-      );
+      ) ?? { entries: [], charges: [], allocatedByCharge: {} };
       const open = computeOpenCharges(charges, allocatedByCharge);
       const periodKeyById = new Map(entries.map((e) => [e.id, e.periodKey]));
       // Open charges are oldest-first; the first one past its due date wins.
@@ -420,6 +424,10 @@ export async function runScheduledReminders(
     skipped: 0,
   };
 
+  // One batched read for the whole sweep (two queries total) instead of two
+  // per lease — the per-lease pure compute below is unchanged.
+  const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
+
   for (const lease of leases) {
     try {
       const tz = lease.unit.property.timezone;
@@ -430,9 +438,9 @@ export async function runScheduledReminders(
         lease.tenantId,
         ...lease.coTenants.map((ct) => ct.tenantId),
       ];
-      const { entries, charges, allocatedByCharge } = await loadLeaseAccounting(
+      const { entries, charges, allocatedByCharge } = accountingByLease.get(
         lease.id,
-      );
+      ) ?? { entries: [], charges: [], allocatedByCharge: {} };
 
       // (a) Rent due soon. Billing only mints a period's rent_charge once the
       // due date arrives, so for a future due date there is no charge row yet —

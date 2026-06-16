@@ -119,12 +119,33 @@ AuthSettings.
   sent-via-email, audited). The email *reminder* channel (consent model + per-channel
   idempotency slots) stays in Phase 5.
 
-## Phase 5 — Next large phase
+## Phase 5 — In progress
 
-See [PHASE5_PLAN.md](./PHASE5_PLAN.md) for the actionable plan. Headline workstreams: tenant
-portal + online payments (ACH/card), email channel, maintenance tickets, DB-overridable
-storage/branding, and the remaining batch-load/perf items from the audit. All attach to
+See [PHASE5_PLAN.md](./PHASE5_PLAN.md) for the workstream plan and live status. All attach to
 existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capability layer).
+
+**Shipped so far (beyond the 4.x line above):**
+
+- **Tenant portal** (workstream A) — local auth lane (`/portal` + `/api/portal`, hashed cookie
+  tokens), tenant-scoped balance/ledger/receipts/documents, invite + SMS-code sign-in, and staff
+  **impersonation / trial-login** (Settings → Impersonate).
+- **Rental applications** module — public `/apply` intake with an operator-configurable form
+  (Settings → Applications), staff review/edit, one-click convert/deny, and a **background-check**
+  provider seam + stub + screening UI (`applications.manage`).
+- **Built-in e-signing** for lease agreements and renewals (saved landlord signature, drawn/typed
+  initials; `esign.manage`).
+- **SMS opt-in/out** (STOP/START/HELP webhook + portal toggle) and **10DLC / A2P compliance**
+  (hosted privacy/terms pages, settings card, portal footer).
+- **Dashboard customization** — per-user add/remove/reorder of stat bubbles and sections (edit
+  mode + hidden tray); **vacancy outlook**; unit **occupancy/serviceability** reconcile.
+- **Outbound email** (SMTP, receipt-by-email), **Cash App** payment tag, void-from-Payments,
+  waive rent/late-fees, request links from the request host, weekly staff overdue digest.
+- **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
+  256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
+
+**Still pending:** online payments gateway (B), the generalized email reminder/notification
+channel (C), richer maintenance tickets — priority + threaded updates (D), DB-overridable storage
+config (E), the remaining F/H items, and the rest of the security backlog (G).
 
 ## Known simplifications (documented defaults)
 

@@ -56,13 +56,13 @@ export default async function ApplyPage({
       <div className="space-y-1 text-center">
         <div className="text-lg font-semibold">{settings.businessName}</div>
         <h1 className="text-2xl font-semibold tracking-wide">Rental application</h1>
-        {unitLabel ? (
+        {unitLabel && (
           <p className="text-sm text-muted-foreground">Applying for {unitLabel}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Tell us about yourself and we will be in touch.
-          </p>
         )}
+        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+          {settings.applyIntroText ||
+            "Tell us about yourself and we will be in touch."}
+        </p>
       </div>
       <Card>
         <CardContent className="py-6">
