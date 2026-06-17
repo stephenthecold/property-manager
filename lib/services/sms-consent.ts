@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { writeAudit, type AuditContext } from "@/lib/audit/audit";
+import { writeAudit, type AuditContext, type Tx } from "@/lib/audit/audit";
+import type { NotificationChannel } from "@/lib/generated/prisma/enums";
 import { phoneKey } from "@/lib/portal/identity";
 import {
   SMS_CONSENT_TEXT,
@@ -13,7 +14,7 @@ import {
 
 /**
  * SMS consent — the effective state is `Tenant.smsConsent`; every change is also
- * written as an append-only `SmsConsentRecord` (the compliance proof: phone,
+ * written as an append-only `ConsentRecord` (channel="sms"; the compliance proof: phone,
  * status, timestamp, source, exact consent text/version, IP, user agent).
  * Entry points: the public opt-in form, the rental application, the portal
  * toggle, inbound STOP/START keywords, and staff.
@@ -57,8 +58,9 @@ export async function recordSmsConsent(
   const matches = await matchTenantsByPhone(rawPhone);
   const tenantId = matches[0]?.id ?? null;
 
-  const record = await prisma.smsConsentRecord.create({
+  const record = await prisma.consentRecord.create({
     data: {
+      channel: "sms",
       phone: key ?? rawPhone.trim(),
       phoneRaw: rawPhone.trim() || null,
       fullName: meta.fullName ?? null,
@@ -123,8 +125,8 @@ export async function listTenantConsentStatuses(): Promise<TenantConsentRow[]> {
       },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
-    prisma.smsConsentRecord.findMany({
-      where: { consent: false, tenantId: { not: null } },
+    prisma.consentRecord.findMany({
+      where: { channel: "sms", consent: false, tenantId: { not: null } },
       select: { tenantId: true },
       distinct: ["tenantId"],
     }),
@@ -140,6 +142,57 @@ export async function listTenantConsentStatuses(): Promise<TenantConsentRow[]> {
       hasOptOutRecord: optedOut.has(t.id),
     }),
   }));
+}
+
+/**
+ * Append a staff-sourced consent record (SMS or email) when a tenant's consent
+ * flag actually changed, INSIDE the caller's transaction so the record commits
+ * with the tenant write. No-op when unchanged. This closes the prior gap where
+ * staff edits flipped the consent boolean without leaving a compliance trail —
+ * and gives email the same history SMS already had. The dedicated SMS flows
+ * (public form, portal, keywords) are untouched.
+ */
+export async function recordStaffConsentChange(
+  tx: Tx,
+  i: {
+    tenantId: string;
+    channel: NotificationChannel;
+    consent: boolean;
+    /** Previous effective state; null on tenant creation. */
+    prior: boolean | null;
+    phone: string | null;
+    email: string | null;
+    fullName: string | null;
+    actor: AuditContext;
+  },
+): Promise<void> {
+  if (i.prior === i.consent) return; // unchanged → no event
+  const isSms = i.channel === "sms";
+  await tx.consentRecord.create({
+    data: {
+      channel: i.channel,
+      phone: isSms ? (phoneKey(i.phone) ?? i.phone ?? "unknown") : null,
+      phoneRaw: isSms ? i.phone : null,
+      email: i.email,
+      fullName: i.fullName,
+      tenantId: i.tenantId,
+      consent: i.consent,
+      source: "staff",
+      // SMS keeps its exact opt-in language on record; email has no fixed text.
+      consentText: isSms && i.consent ? SMS_CONSENT_TEXT : null,
+      consentVersion: isSms && i.consent ? SMS_CONSENT_VERSION : null,
+    },
+  });
+  await writeAudit(tx, {
+    ...i.actor,
+    action: isSms ? "tenant.sms_consent_changed" : "tenant.email_consent_changed",
+    entityType: "Tenant",
+    entityId: i.tenantId,
+    before: isSms ? { smsConsent: i.prior } : { emailConsent: i.prior },
+    after: isSms
+      ? { smsConsent: i.consent, source: "staff" }
+      : { emailConsent: i.consent, source: "staff" },
+  });
 }
 
 /** Inbound STOP/START handler: record + apply, sourced as inbound_sms_keyword. */
@@ -170,8 +223,9 @@ export async function setTenantSmsConsent(
   });
   await prisma.$transaction(async (tx) => {
     await tx.tenant.update({ where: { id: tenantId }, data: { smsConsent: consent } });
-    await tx.smsConsentRecord.create({
+    await tx.consentRecord.create({
       data: {
+        channel: "sms",
         phone: phoneKey(tenant?.phone) ?? (tenant?.phone ?? "unknown"),
         phoneRaw: tenant?.phone ?? null,
         fullName: tenant ? `${tenant.firstName} ${tenant.lastName}`.trim() : null,

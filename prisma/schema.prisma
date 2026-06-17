@@ -1019,13 +1019,16 @@ model UploadedDocument {
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.
-/// Append-only audit log of SMS consent events (opt-in / opt-out). One row per
-/// event with the exact consent text + version, source, and request metadata —
-/// the compliance record proving when/how consent was captured. The effective
-/// state stays on Tenant.smsConsent; this is the history behind it.
-model SmsConsentRecord {
+/// Append-only audit log of consent events (opt-in / opt-out) for SMS AND email.
+/// One row per event with the exact consent text + version, source, and request
+/// metadata — the compliance record proving when/how consent was captured. The
+/// effective state stays on Tenant.smsConsent / Tenant.emailConsent; this is the
+/// history behind it. `channel` distinguishes SMS from email; email rows carry
+/// no phone.
+model ConsentRecord {
   id            String   @id @default(cuid())
-  phone         String   // normalized last-10-digit key for matching
+  channel       NotificationChannel @default(sms)
+  phone         String?  // normalized last-10-digit key (SMS rows); null for email
   phoneRaw      String?  // as entered
   fullName      String?
   email         String?
@@ -1041,8 +1044,9 @@ model SmsConsentRecord {
   createdAt     DateTime @default(now())
 
   @@index([phone, createdAt])
+  @@index([email, createdAt])
   @@index([tenantId])
-  @@index([consent])
+  @@index([channel, consent])
 }
 
 model Reminder {

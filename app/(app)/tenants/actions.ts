@@ -14,6 +14,7 @@ import {
 } from "@/lib/services/portal-auth";
 import { createTrialToken, startImpersonation } from "@/lib/services/impersonation";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { recordStaffConsentChange } from "@/lib/services/sms-consent";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import type { FormState } from "@/lib/forms";
@@ -41,27 +42,46 @@ export async function createTenant(
   if (!firstName || !lastName) {
     return { error: "First and last name are required." };
   }
-  const tenant = await prisma.tenant.create({
-    data: {
-      firstName,
-      lastName,
-      phone: str(fd, "phone") || null,
-      email: str(fd, "email") || null,
-      mailingAddress: str(fd, "mailingAddress") || null,
-      emergencyContactName: str(fd, "emergencyContactName") || null,
-      emergencyContactPhone: str(fd, "emergencyContactPhone") || null,
-      smsConsent: fd.get("smsConsent") === "on",
-      emailConsent: fd.get("emailConsent") === "on",
-      reminderChannel: parseReminderChannel(str(fd, "reminderChannel")),
-      notes: str(fd, "notes") || null,
-    },
-  });
-  await writeAudit(prisma, {
-    ...(await auditActor()),
-    action: "tenant.created",
-    entityType: "Tenant",
-    entityId: tenant.id,
-    after: { firstName, lastName },
+  const smsConsent = fd.get("smsConsent") === "on";
+  const emailConsent = fd.get("emailConsent") === "on";
+  const phone = str(fd, "phone") || null;
+  const email = str(fd, "email") || null;
+  const actor = await auditActor();
+  const tenant = await prisma.$transaction(async (tx) => {
+    const created = await tx.tenant.create({
+      data: {
+        firstName,
+        lastName,
+        phone,
+        email,
+        mailingAddress: str(fd, "mailingAddress") || null,
+        emergencyContactName: str(fd, "emergencyContactName") || null,
+        emergencyContactPhone: str(fd, "emergencyContactPhone") || null,
+        smsConsent,
+        emailConsent,
+        reminderChannel: parseReminderChannel(str(fd, "reminderChannel")),
+        notes: str(fd, "notes") || null,
+      },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "tenant.created",
+      entityType: "Tenant",
+      entityId: created.id,
+      after: { firstName, lastName },
+    });
+    // Record an initial consent event per channel that starts opted-in (prior =
+    // null/false on creation), so the compliance trail begins at tenant creation.
+    const fullName = `${firstName} ${lastName}`.trim();
+    await recordStaffConsentChange(tx, {
+      tenantId: created.id, channel: "sms", consent: smsConsent, prior: false,
+      phone, email, fullName, actor,
+    });
+    await recordStaffConsentChange(tx, {
+      tenantId: created.id, channel: "email", consent: emailConsent, prior: false,
+      phone, email, fullName, actor,
+    });
+    return created;
   });
   redirect(`/tenants/${tenant.id}`);
 }
@@ -96,9 +116,10 @@ export async function updateTenant(
     notes: str(fd, "notes") || null,
   };
 
+  const actor = await auditActor();
   await withAudit(
     {
-      ...(await auditActor()),
+      ...actor,
       action: "tenant.updated",
       entityType: "Tenant",
       entityId: tenant.id,
@@ -111,6 +132,7 @@ export async function updateTenant(
         emergencyContactName: tenant.emergencyContactName,
         emergencyContactPhone: tenant.emergencyContactPhone,
         smsConsent: tenant.smsConsent,
+        emailConsent: tenant.emailConsent,
         isActive: tenant.isActive,
         preferredPaymentMethod: tenant.preferredPaymentMethod,
         notes: tenant.notes,
@@ -118,6 +140,16 @@ export async function updateTenant(
     },
     async (tx) => {
       const updated = await tx.tenant.update({ where: { id: tenant.id }, data });
+      // Compliance trail for staff-initiated consent changes (both channels).
+      const fullName = `${data.firstName} ${data.lastName}`.trim();
+      await recordStaffConsentChange(tx, {
+        tenantId: tenant.id, channel: "sms", consent: data.smsConsent,
+        prior: tenant.smsConsent, phone: data.phone, email: data.email, fullName, actor,
+      });
+      await recordStaffConsentChange(tx, {
+        tenantId: tenant.id, channel: "email", consent: data.emailConsent,
+        prior: tenant.emailConsent, phone: data.phone, email: data.email, fullName, actor,
+      });
       return { result: updated, after: data };
     },
   );
