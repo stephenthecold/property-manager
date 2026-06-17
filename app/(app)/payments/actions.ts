@@ -52,6 +52,16 @@ export async function recordPayment(
   const appliedPeriodKey = String(fd.get("appliedPeriodKey") ?? "").trim() || null;
   const notes = String(fd.get("notes") ?? "").trim() || null;
 
+  // Optional non-tenant payer (e.g. a housing authority paying the HAP portion).
+  // Blank = the tenant paid; a value must reference a real, active payer.
+  const payerIdRaw = String(fd.get("payerId") ?? "").trim();
+  let payerId: string | null = null;
+  if (payerIdRaw) {
+    const payer = await prisma.payer.findUnique({ where: { id: payerIdRaw } });
+    if (!payer || !payer.isActive) return { error: "Select a valid payer." };
+    payerId = payer.id;
+  }
+
   try {
     const res = await postPayment({
       leaseId,
@@ -61,6 +71,7 @@ export async function recordPayment(
       referenceNumber: reference,
       appliedPeriodKey,
       notes,
+      payerId,
       idempotencyKey,
       actor: await auditActor(),
     });

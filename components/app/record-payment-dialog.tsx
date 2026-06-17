@@ -30,11 +30,19 @@ export interface LeaseOption {
   group: string;
 }
 
+export interface PayerOption {
+  id: string;
+  /** Display text, e.g. "Metro Housing Authority". */
+  label: string;
+}
+
 type RecordPaymentDialogProps = {
   defaultAmount?: string;
   trigger?: string;
   /** Small outline trigger for table rows (e.g. the dashboard Collect button). */
   compact?: boolean;
+  /** When provided, render a "Paid by" picker (tenant default + these payers). */
+  payerOptions?: PayerOption[];
 } & (
   | {
       /** Fixed lease: the dialog posts to this lease (dashboard/tenant pages). */
@@ -51,6 +59,7 @@ type RecordPaymentDialogProps = {
 export function RecordPaymentDialog({
   leaseId,
   leaseOptions,
+  payerOptions,
   defaultAmount,
   trigger = "Record payment",
   compact = false,
@@ -171,6 +180,28 @@ export function RecordPaymentDialog({
             <Label htmlFor="referenceNumber">Reference / check #</Label>
             <Input id="referenceNumber" name="referenceNumber" />
           </div>
+          {payerOptions && payerOptions.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="payerId">Paid by</Label>
+              <select
+                id="payerId"
+                name="payerId"
+                defaultValue=""
+                className="h-9 w-full rounded-md border px-3 text-sm"
+              >
+                <option value="">Tenant</option>
+                {payerOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Choose a third-party payer (e.g. a housing authority) when the
+                payment came from someone other than the tenant.
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" name="notes" />

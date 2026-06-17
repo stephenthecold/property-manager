@@ -205,6 +205,16 @@ export default async function TenantDetail({
     : null;
   const templateLease = activeLease ?? tenant.leases[0] ?? null;
   const templateCurrency = templateLease?.unit.property.currency ?? "USD";
+
+  // Active non-tenant payers (HUD/housing authorities, …) for the "Paid by"
+  // picker, so a HAP payment can be recorded from the tenant's page.
+  const payerOptions = (
+    await prisma.payer.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    })
+  ).map((p) => ({ id: p.id, label: p.name }));
   const templateVars = buildReminderVars({
     cashAppTag: appSettings.cashAppCashtag,
     tenantFirstName: tenant.firstName,
@@ -287,6 +297,7 @@ export default async function TenantDetail({
               </Button>
               <RecordPaymentDialog
                 leaseId={activeLease.id}
+                payerOptions={payerOptions}
                 defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
               />
             </>

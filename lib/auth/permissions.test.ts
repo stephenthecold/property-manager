@@ -19,6 +19,8 @@ const LEGACY_MIN: Record<Capability, Role> = {
   "tenants.manage": "manager",
   "leases.manage": "manager",
   "payments.manage": "manager",
+  // payers.manage is new (no legacy gate); manager mirrors tenants.manage.
+  "payers.manage": "manager",
   "documents.manage": "manager",
   "reminders.send": "manager",
   "reports.view": "manager",

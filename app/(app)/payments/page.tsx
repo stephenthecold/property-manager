@@ -63,6 +63,7 @@ export default async function PaymentsPage({
     take: 100,
     include: {
       lease: { include: { tenant: true, unit: { include: { property: true } } } },
+      payer: { select: { name: true } },
     },
   });
 
@@ -87,6 +88,14 @@ export default async function PaymentsPage({
     group: l.unit.property.name,
   }));
 
+  // Active non-tenant payers (HUD/housing authorities, …) for the "Paid by" picker.
+  const payers = await prisma.payer.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const payerOptions = payers.map((p) => ({ id: p.id, label: p.name }));
+
   // One query for all rows: digital receipt per payment (partial unique index).
   const receipts = await prisma.receipt.findMany({
     where: {
@@ -108,7 +117,11 @@ export default async function PaymentsPage({
             Showing the 100 most recent.
           </p>
         </div>
-        <RecordPaymentDialog leaseOptions={leaseOptions} trigger="Record payment" />
+        <RecordPaymentDialog
+          leaseOptions={leaseOptions}
+          payerOptions={payerOptions}
+          trigger="Record payment"
+        />
       </div>
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
@@ -191,13 +204,19 @@ export default async function PaymentsPage({
             ],
             cells: [
               p.paymentDate.toLocaleDateString(),
-              <Link
-                key="t"
-                href={`/tenants/${p.lease.tenantId}`}
-                className="font-medium hover:underline"
-              >
-                {p.lease.tenant.firstName} {p.lease.tenant.lastName}
-              </Link>,
+              <div key="t">
+                <Link
+                  href={`/tenants/${p.lease.tenantId}`}
+                  className="font-medium hover:underline"
+                >
+                  {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+                </Link>
+                {p.payer && (
+                  <div className="text-xs text-muted-foreground">
+                    via {p.payer.name}
+                  </div>
+                )}
+              </div>,
               `${p.lease.unit.property.name} · ${p.lease.unit.unitNumber}`,
               <span key="m" className="capitalize">
                 {p.method.replace("_", " ")}

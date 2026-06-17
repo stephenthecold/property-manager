@@ -22,6 +22,9 @@ export interface PostPaymentInput {
   referenceNumber?: string | null;
   notes?: string | null;
   appliedPeriodKey?: string | null;
+  /** Non-tenant payer (e.g. a housing authority paying the HAP portion). null =
+   * the tenant paid. Attribution only — never affects FIFO allocation. */
+  payerId?: string | null;
   idempotencyKey: string;
   actor: AuditContext;
 }
@@ -121,6 +124,7 @@ export async function postPayment(
           unitId: lease.unitId,
           propertyId: lease.unit.propertyId,
           buildingId: lease.unit.buildingId,
+          payerId: input.payerId ?? null,
           paymentDate: input.paymentDate,
           amountCents: input.amountCents,
           method: input.method,
@@ -169,6 +173,7 @@ export async function postPayment(
         after: {
           amountCents: input.amountCents.toString(),
           method: input.method,
+          payerId: input.payerId ?? null,
           leftoverCreditCents: plan.leftoverCents.toString(),
         },
       });
