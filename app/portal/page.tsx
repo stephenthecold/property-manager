@@ -154,6 +154,16 @@ export default async function PortalHomePage({
           </CardContent>
         </Card>
       )}
+      {settings.portalPaymentHelpText && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">How to pay</CardTitle>
+          </CardHeader>
+          <CardContent className="py-0 pb-4 text-sm whitespace-pre-wrap text-muted-foreground">
+            {settings.portalPaymentHelpText}
+          </CardContent>
+        </Card>
+      )}
       {/* Lease + balance */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>

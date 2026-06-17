@@ -11,6 +11,8 @@ import { StubEmailProvider } from "@/lib/providers/email/stub";
 import { SmtpEmailProvider, type SmtpAuth } from "@/lib/providers/email/smtp";
 import type { EmailProvider } from "@/lib/providers/email/types";
 import { DEFAULT_EMAIL_SUBJECTS, DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
+import { sanitizeReminderSendHour } from "@/lib/reminders/schedule";
+import { sanitizeTablePageSize } from "@/lib/config/table";
 import type { PermissionMatrix } from "@/lib/auth/permissions";
 import {
   resolveFormConfig,
@@ -108,6 +110,13 @@ export interface ResolvedAppSettings {
   /** Tenant-facing copy; null -> the shipped default text. */
   portalWelcomeText: string | null;
   applyIntroText: string | null;
+  /** H5 tenant-facing copy; null -> the shipped default text. */
+  portalPaymentHelpText: string | null;
+  applyConfirmationText: string | null;
+  /** H3 free-text header block on reports + receipts; null/blank -> nothing. */
+  reportHeaderText: string | null;
+  /** H2 default DataTable page size, sanitized to one of 10/20/50. */
+  defaultTablePageSize: number;
   /** NON-SECRET file-storage overrides (DB-over-env); null -> the env value. */
   storageProvider: string | null;
   s3Bucket: string | null;
@@ -124,6 +133,8 @@ export interface ResolvedAppSettings {
   smsFromNumber: string | null;
   smsHasAuthToken: boolean;
   dueSoonDays: number;
+  /** H4 hour (0-23) the worker runs the daily sweeps; null -> env/default cron. */
+  reminderSendHour: number | null;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
   /** Master switch for ALL email sends. Config is DB-only (no env fallback). */
@@ -236,6 +247,10 @@ async function resolve(): Promise<ResolvedAppSettings> {
     receiptPrefix: row?.receiptPrefix ?? null,
     portalWelcomeText: row?.portalWelcomeText ?? null,
     applyIntroText: row?.applyIntroText ?? null,
+    portalPaymentHelpText: row?.portalPaymentHelpText ?? null,
+    applyConfirmationText: row?.applyConfirmationText ?? null,
+    reportHeaderText: row?.reportHeaderText ?? null,
+    defaultTablePageSize: sanitizeTablePageSize(row?.defaultTablePageSize ?? null),
     storageProvider: row?.storageProvider ?? null,
     s3Bucket: row?.s3Bucket ?? null,
     s3Region: row?.s3Region ?? null,
@@ -251,6 +266,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     smsFromNumber: row?.smsFromNumber ?? env.SMS_FROM_NUMBER ?? null,
     smsHasAuthToken: !!row?.smsAuthTokenCiphertext,
     dueSoonDays: row?.reminderDueSoonDays ?? env.REMINDER_DUE_SOON_DAYS,
+    reminderSendHour: sanitizeReminderSendHour(row?.reminderSendHour ?? null),
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
     emailEnabled: row?.emailEnabled ?? false,
@@ -726,6 +742,11 @@ export interface OrganizationSettingsInput {
   receiptPrefix: string | null;
   portalWelcomeText: string | null;
   applyIntroText: string | null;
+  portalPaymentHelpText: string | null;
+  applyConfirmationText: string | null;
+  reportHeaderText: string | null;
+  /** One of 10/20/50; null clears the override (back to the 10 default). */
+  defaultTablePageSize: number | null;
   defaultTimezone: string | null;
   defaultCurrency: string | null;
 }
@@ -747,6 +768,10 @@ export async function saveOrganizationSettings(
     receiptPrefix: input.receiptPrefix,
     portalWelcomeText: input.portalWelcomeText,
     applyIntroText: input.applyIntroText,
+    portalPaymentHelpText: input.portalPaymentHelpText,
+    applyConfirmationText: input.applyConfirmationText,
+    reportHeaderText: input.reportHeaderText,
+    defaultTablePageSize: input.defaultTablePageSize,
     defaultTimezone: input.defaultTimezone,
     defaultCurrency: input.defaultCurrency,
     updatedBy: actor.actorId ?? null,
@@ -832,6 +857,8 @@ export interface MessagingSettingsInput {
   smsAuthToken?: string;
   smsFromNumber: string | null;
   reminderDueSoonDays: number | null;
+  /** Hour 0-23 the worker runs daily sweeps; null -> env REMINDER_CRON / default. */
+  reminderSendHour: number | null;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
   /** Per-type overrides; empty/missing values fall back to defaults. */
@@ -866,6 +893,7 @@ export async function saveMessagingSettings(
     smsAccountSid: input.smsAccountSid,
     smsFromNumber: input.smsFromNumber,
     reminderDueSoonDays: input.reminderDueSoonDays,
+    reminderSendHour: input.reminderSendHour,
     dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
     overdueRemindersEnabled: input.overdueRemindersEnabled,
     smsTemplates: input.smsTemplates,
@@ -889,6 +917,7 @@ export async function saveMessagingSettings(
         smsProvider: input.smsProvider,
         smsFromNumber: input.smsFromNumber,
         reminderDueSoonDays: input.reminderDueSoonDays,
+        reminderSendHour: input.reminderSendHour,
         dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
         overdueRemindersEnabled: input.overdueRemindersEnabled,
         tokenChanged: input.smsAuthToken !== undefined,

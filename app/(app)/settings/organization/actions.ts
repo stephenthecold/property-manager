@@ -95,6 +95,14 @@ export async function saveOrganizationAction(
         })(),
         portalWelcomeText: str(fd, "portalWelcomeText"),
         applyIntroText: str(fd, "applyIntroText"),
+        portalPaymentHelpText: str(fd, "portalPaymentHelpText"),
+        applyConfirmationText: str(fd, "applyConfirmationText"),
+        reportHeaderText: str(fd, "reportHeaderText"),
+        // Restrict to the offered options; anything else clears the override.
+        defaultTablePageSize: (() => {
+          const n = Number(str(fd, "defaultTablePageSize"));
+          return [10, 20, 50].includes(n) ? n : null;
+        })(),
         defaultTimezone: timezone,
         defaultCurrency: str(fd, "defaultCurrency")?.toUpperCase() ?? null,
       },

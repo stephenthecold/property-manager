@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { sendBulkOverdueRemindersAction } from "@/app/(app)/reminders/actions";
 import {
   getIncomeSummary,
@@ -59,6 +60,7 @@ export default async function ReportsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("reports.view");
+  const app = await getAppSettings();
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v) ?? "";
@@ -107,6 +109,11 @@ export default async function ReportsPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Reports</h1>
+      {app.reportHeaderText && (
+        <p className="whitespace-pre-line text-sm text-muted-foreground">
+          {app.reportHeaderText}
+        </p>
+      )}
 
       <Card>
         <CardHeader>

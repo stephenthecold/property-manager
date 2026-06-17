@@ -76,6 +76,16 @@ export async function saveMessagingAction(
     reminderDueSoonDays = n;
   }
 
+  const hourRaw = String(fd.get("reminderSendHour") ?? "").trim();
+  let reminderSendHour: number | null = null;
+  if (hourRaw !== "") {
+    const n = Number(hourRaw);
+    if (!Number.isInteger(n) || n < 0 || n > 23) {
+      return { error: "Send hour must be a whole number between 0 and 23." };
+    }
+    reminderSendHour = n;
+  }
+
   const smsTemplates: Partial<Record<ReminderType, string>> = {};
   for (const t of TEMPLATE_TYPES) {
     const body = String(fd.get(`tpl_${t}`) ?? "").trim();
@@ -93,6 +103,7 @@ export async function saveMessagingAction(
         smsAuthToken: tokenRaw === "" ? undefined : tokenRaw,
         smsFromNumber: fromNumber,
         reminderDueSoonDays,
+        reminderSendHour,
         dueSoonRemindersEnabled: fd.get("dueSoonRemindersEnabled") === "on",
         overdueRemindersEnabled: fd.get("overdueRemindersEnabled") === "on",
         smsTemplates,

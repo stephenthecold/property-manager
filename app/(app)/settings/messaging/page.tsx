@@ -52,6 +52,8 @@ export default async function MessagingSettingsPage() {
               reminderDueSoonDays:
                 row?.reminderDueSoonDays != null ? String(row.reminderDueSoonDays) : "",
               envDueSoonDays: env.REMINDER_DUE_SOON_DAYS,
+              reminderSendHour:
+                row?.reminderSendHour != null ? String(row.reminderSendHour) : "",
               envProvider: env.SMS_PROVIDER,
               dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
               overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,

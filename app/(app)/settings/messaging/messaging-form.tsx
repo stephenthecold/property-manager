@@ -20,6 +20,7 @@ export interface MessagingInitial {
   smsFromNumber: string;
   reminderDueSoonDays: string; // "" = env default
   envDueSoonDays: number;
+  reminderSendHour: string; // "" = env REMINDER_CRON / 09:00 default
   envProvider: string;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
@@ -183,6 +184,24 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
               placeholder={`Server default (${initial.envDueSoonDays})`}
               className="w-48"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="reminderSendHour">Daily send hour (0–23)</Label>
+            <Input
+              id="reminderSendHour"
+              name="reminderSendHour"
+              type="number"
+              min={0}
+              max={23}
+              defaultValue={initial.reminderSendHour}
+              placeholder="Server default (9)"
+              className="w-48"
+            />
+            <p className="text-xs text-muted-foreground">
+              Hour the worker runs the daily reminder + digest sweeps (server
+              local time). Blank uses <code>REMINDER_CRON</code> / 09:00. Takes
+              effect on the next worker restart.
+            </p>
           </div>
         </div>
 

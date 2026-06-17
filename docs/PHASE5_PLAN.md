@@ -149,17 +149,21 @@ the accounting core stays in a clock-injected, unit-tested pure module.
 - **Currency / number / date locale.** [`lib/money.ts`](../lib/money.ts) `formatCurrency` defaults
   `locale = "en-US"` and dates render with a fixed format; surface an org locale so `Intl`
   formatting follows it. **Display only** — never the cents math.
-- **Default table page size.** [`components/app/data-table.tsx`](../components/app/data-table.tsx)
-  hard-codes `PAGE_SIZE_OPTIONS = [10, 20, 50]` and `defaultPageSize = 10`. Make the default (and
-  optionally the options) an org preference threaded into the `DataTable` server pages.
+- ✅ **Done — default table page size.** `AppSettings.defaultTablePageSize` (Settings →
+  Organization) sets the initial `DataTable` page size app-wide. Options live in the pure
+  `lib/config/table.ts` (`sanitizeTablePageSize` clamps to 10/20/50); the value is supplied once via
+  a `TablePageSizeProvider` mounted in the app shell, so no page threads it and a per-table
+  `defaultPageSize` prop still wins. Locale (currency/number/date) is still pending — it needs
+  `formatCurrency`/date threading across many call sites.
 
 ### H3. Documents & numbering
 - ✅ **Done — receipt number prefix.** `AppSettings.receiptPrefix` (Settings → Organization) drives
   the `<PREFIX>-YYYYMMDD-NNNN` number; the pure `lib/accounting/receipts.ts` takes a prefix +
   `sanitizeReceiptPrefix` (A–Z/0–9, max 8), sequence parsing is prefix-scoped, and existing
   receipt numbers are never disturbed.
-- Still pending: **report/receipt header text** beyond the existing `receiptFooter` (e.g. a report
-  subtitle or "remit to" block), same free-text + audit pattern as the footer.
+- ✅ **Done — report/receipt header text.** `AppSettings.reportHeaderText` (Settings → Organization)
+  is free-text printed atop the Reports page and each receipt (e.g. a "remit to" block), blank →
+  nothing, same free-text + audit pattern as the footer.
 
 ### H4. Notifications content & timing (Settings → Messaging / Notifications)
 - ✅ **Done — email subjects.** Per-type email **subject** overrides
@@ -169,16 +173,18 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   without a separate body store.
 - Still pending (small): a separate email **body** store distinct from the SMS template (today
   both channels share the body text).
-- **Reminder/digest send time.** The schedules are env-only — `REMINDER_CRON` (`0 9 * * *`) and
-  `STAFF_DIGEST_CRON` in [`worker/index.ts`](../worker/index.ts). Surface a send-hour/day setting
-  that the worker reads from the DB (DB-over-env), like the other messaging config.
+- ✅ **Done — reminder send hour.** `AppSettings.reminderSendHour` (Settings → Messaging) sets the
+  hour the worker runs its daily reminder + digest sweeps. The pure `lib/reminders/schedule.ts`
+  (`reminderCron`) resolves DB-over-env: a saved hour → `0 H * * *`, else `REMINDER_CRON`, else
+  09:00; read once at worker startup. `STAFF_DIGEST_CRON` (the weekly Monday digest) stays env-only.
 
 ### H5. Tenant-facing copy (Settings → Organization)
 - ✅ **Done** — `AppSettings.portalWelcomeText` (tenant portal home) and `AppSettings.applyIntroText`
   (public `/apply` form) are editable branded free-text (`whitespace-pre-wrap`), blank → shipped
   default, same shape as the hosted privacy/terms text.
-- Still pending: a portal "how to pay" blurb and the `/apply` **confirmation** copy could follow
-  the same pattern.
+- ✅ **Done — portal "how to pay" + apply confirmation.** `AppSettings.portalPaymentHelpText`
+  (a tenant-portal "How to pay" card) and `AppSettings.applyConfirmationText` (the public `/apply`
+  post-submit message) are editable branded free-text, blank → hidden / shipped default.
 
 ### H6. Status & terminology labels (stretch)
 - **Status badge labels** (and optionally colours) and a few domain nouns ("Rent", "Tenant") are

@@ -71,6 +71,7 @@ export default async function ApplyPage({
             businessName={settings.businessName}
             config={settings.applicationFields}
             customSections={settings.applicationCustomSections}
+            confirmationText={settings.applyConfirmationText ?? undefined}
           />
         </CardContent>
       </Card>
