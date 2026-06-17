@@ -67,6 +67,25 @@ export function splitMatchesExpected(
   return sharesTotalCents(shares) === expectedMonthlyCents;
 }
 
+/**
+ * Whether a tenant overdue reminder should be SUPPRESSED ("don't dun the
+ * tenant"): the lease has a split effective at `asOf` and the tenant has already
+ * paid at least their own portion, so any amount still outstanding is a third
+ * party's (e.g. a housing authority's HAP) — not the tenant's fault. With no
+ * split lines effective, never suppress (returns false). A subsidy-only split
+ * (no tenant portion) means the tenant owes nothing and is also suppressed.
+ */
+export function suppressTenantOverdue(opts: {
+  shares: readonly RentShareInput[];
+  asOf: Date;
+  tenantPaidCents: Cents;
+}): boolean {
+  const effective = sharesEffectiveAt(opts.shares, opts.asOf);
+  if (effective.length === 0) return false;
+  const tenantExpected = expectedByPayer(effective).get(TENANT_KEY) ?? 0n;
+  return opts.tenantPaidCents >= tenantExpected;
+}
+
 export interface PayerExpectation {
   payerId: string | null;
   expectedCents: Cents;

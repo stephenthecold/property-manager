@@ -3,6 +3,7 @@ import {
   payerKey,
   reconcileExpectations,
   sharesEffectiveAt,
+  suppressTenantOverdue,
   type RentShareInput,
 } from "@/lib/accounting/rent-shares";
 
@@ -151,4 +152,85 @@ export async function getSubsidyExpectations(
     }
   }
   return rows;
+}
+
+// --- "Don't dun the tenant" guard (B3) --------------------------------------
+
+export interface TenantOverdueGuard {
+  shares: RentShareInput[];
+  /** Tenant-side (payerId null) posted payments since the UTC month start. */
+  tenantPaidThisMonthCents: bigint;
+}
+
+/**
+ * For each lease that has a rent split, load the data needed to decide whether
+ * an overdue reminder should skip the tenant (their portion is covered, so the
+ * shortfall is a third-party subsidy). Two queries total; leases with no split
+ * are absent from the map, so the caller treats them as "never suppress".
+ */
+export async function loadTenantOverdueGuards(
+  leaseIds: string[],
+  now: Date,
+): Promise<Map<string, TenantOverdueGuard>> {
+  const out = new Map<string, TenantOverdueGuard>();
+  if (leaseIds.length === 0) return out;
+
+  const shares = await prisma.rentShare.findMany({
+    where: { leaseId: { in: leaseIds } },
+  });
+  if (shares.length === 0) return out;
+
+  const sharesByLease = new Map<string, RentShareInput[]>();
+  for (const s of shares) {
+    const arr = sharesByLease.get(s.leaseId) ?? [];
+    arr.push({
+      payerId: s.payerId,
+      label: s.label,
+      amountCents: s.amountCents,
+      effectiveDate: s.effectiveDate,
+      endDate: s.endDate,
+    });
+    sharesByLease.set(s.leaseId, arr);
+  }
+
+  const paid = await prisma.payment.groupBy({
+    by: ["leaseId"],
+    where: {
+      leaseId: { in: [...sharesByLease.keys()] },
+      payerId: null,
+      status: "posted",
+      paymentDate: { gte: monthStartUtc(now) },
+    },
+    _sum: { amountCents: true },
+  });
+  const paidByLease = new Map(
+    paid.map((p) => [p.leaseId, p._sum.amountCents ?? 0n]),
+  );
+
+  for (const [leaseId, ls] of sharesByLease) {
+    out.set(leaseId, {
+      shares: ls,
+      tenantPaidThisMonthCents: paidByLease.get(leaseId) ?? 0n,
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether to suppress a tenant overdue reminder for a specific overdue charge.
+ * Only judges the CURRENT month (the guard only carries this month's tenant
+ * payments), so older debt still reminds — erring toward sending.
+ */
+export function shouldSuppressTenantOverdue(
+  guard: TenantOverdueGuard | undefined,
+  chargeDueDate: Date,
+  now: Date,
+): boolean {
+  if (!guard) return false;
+  if (chargeDueDate < monthStartUtc(now)) return false;
+  return suppressTenantOverdue({
+    shares: guard.shares,
+    asOf: chargeDueDate,
+    tenantPaidCents: guard.tenantPaidThisMonthCents,
+  });
 }

@@ -7,6 +7,7 @@ import {
   sharesEffectiveAt,
   sharesTotalCents,
   splitMatchesExpected,
+  suppressTenantOverdue,
 } from "@/lib/accounting/rent-shares";
 
 const HA = "payer_ha";
@@ -87,5 +88,38 @@ describe("rent-shares", () => {
     const rows = reconcileExpectations([subsidy], received);
     expect(rows[0].missingCents).toBe(0n);
     expect(rows[0].receivedCents).toBe(90000n);
+  });
+
+  describe("suppressTenantOverdue (don't-dun-the-tenant)", () => {
+    const asOf = new Date("2026-06-15T00:00:00Z");
+    const shares = [tenant, subsidy]; // tenant $200, HAP $800
+
+    it("never suppresses a lease with no split", () => {
+      expect(suppressTenantOverdue({ shares: [], asOf, tenantPaidCents: 0n })).toBe(false);
+    });
+
+    it("suppresses once the tenant has paid their own portion", () => {
+      // Tenant paid $200; the open $800 is the housing authority's — don't dun.
+      expect(suppressTenantOverdue({ shares, asOf, tenantPaidCents: 20000n })).toBe(true);
+      expect(suppressTenantOverdue({ shares, asOf, tenantPaidCents: 25000n })).toBe(true);
+    });
+
+    it("still duns when the tenant's own portion is short", () => {
+      expect(suppressTenantOverdue({ shares, asOf, tenantPaidCents: 0n })).toBe(false);
+      expect(suppressTenantOverdue({ shares, asOf, tenantPaidCents: 19999n })).toBe(false);
+    });
+
+    it("suppresses a subsidy-only split (tenant owes nothing)", () => {
+      expect(suppressTenantOverdue({ shares: [subsidy], asOf, tenantPaidCents: 0n })).toBe(true);
+    });
+
+    it("ignores a split that isn't effective yet", () => {
+      const future = share({
+        payerId: null,
+        amountCents: 20000n,
+        effectiveDate: new Date("2026-07-01T00:00:00Z"),
+      });
+      expect(suppressTenantOverdue({ shares: [future], asOf, tenantPaidCents: 0n })).toBe(false);
+    });
   });
 });

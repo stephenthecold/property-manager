@@ -16,6 +16,10 @@ import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { batchLeaseAccounting, leaseSnapshot } from "@/lib/services/accounting";
+import {
+  loadTenantOverdueGuards,
+  shouldSuppressTenantOverdue,
+} from "@/lib/services/rent-shares";
 import { buildReminderVars, renderTemplate } from "@/lib/reminders/templates";
 import { dueSoonCandidate, isPastGrace } from "@/lib/reminders/rules";
 
@@ -415,6 +419,10 @@ export async function sendBulkOverdueReminders(
   // One batched read for the whole sweep (two queries total) instead of two
   // per lease — the per-lease pure compute below is unchanged.
   const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
+  const overdueGuards = await loadTenantOverdueGuards(
+    leases.map((l) => l.id),
+    now,
+  );
 
   for (const lease of leases) {
     try {
@@ -429,6 +437,12 @@ export async function sendBulkOverdueReminders(
         (c) => daysBetween(c.dueDate, now, tz) > 0 && periodKeyById.get(c.entryId),
       );
       if (!oldestOverdue) continue;
+
+      // Don't dun the tenant for a third party's portion (e.g. a housing
+      // authority's HAP) when their own portion is already covered this month.
+      if (shouldSuppressTenantOverdue(overdueGuards.get(lease.id), oldestOverdue.dueDate, now)) {
+        continue;
+      }
 
       // Same recipient set as the scheduled sweep, so manual and scheduled
       // sends fill the same per-tenant idempotency slots.
@@ -504,6 +518,12 @@ export async function runScheduledReminders(
   // One batched read for the whole sweep (two queries total) instead of two
   // per lease — the per-lease pure compute below is unchanged.
   const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
+  // Don't-dun guards: for subsidized leases, skip the tenant overdue reminder
+  // once the tenant has paid their own portion (the shortfall is the subsidy's).
+  const overdueGuards = await loadTenantOverdueGuards(
+    leases.map((l) => l.id),
+    now,
+  );
 
   for (const lease of leases) {
     try {
@@ -582,6 +602,14 @@ export async function runScheduledReminders(
           now,
         });
         if (!pastGrace) continue;
+
+        // Don't dun the tenant for a third party's (e.g. housing authority's)
+        // portion: skip when the lease is split and the tenant's own portion is
+        // already covered this month.
+        if (shouldSuppressTenantOverdue(overdueGuards.get(lease.id), c.dueDate, now)) {
+          result.skipped += recipientIds.length;
+          continue;
+        }
 
         for (const tenantId of recipientIds) {
           const r = await sendReminder({
