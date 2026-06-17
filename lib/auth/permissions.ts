@@ -18,6 +18,7 @@ export const CAPABILITIES = [
   "tenants.manage",
   "leases.manage",
   "payments.manage",
+  "payers.manage",
   "documents.manage",
   "reminders.send",
   "reports.view",
@@ -49,6 +50,9 @@ const MIN_ROLE: Record<Capability, Role> = {
   "tenants.manage": "manager",
   "leases.manage": "manager",
   "payments.manage": "manager",
+  // Non-tenant payer directory (HUD/housing authorities, …). Operational, like
+  // tenants.manage — the staff who manage tenants manage the payers too.
+  "payers.manage": "manager",
   "documents.manage": "manager",
   "reminders.send": "manager",
   "reports.view": "manager",
@@ -82,6 +86,7 @@ export const CAPABILITY_META: Record<
   "tenants.manage": { label: "Manage tenants", group: "Operations", description: "Create and edit tenant records." },
   "leases.manage": { label: "Manage leases", group: "Operations", description: "Create, edit, renew, terminate leases; co-tenants, deposits, rent increases." },
   "payments.manage": { label: "Record & void payments", group: "Operations", description: "Record payments and void them (reversals)." },
+  "payers.manage": { label: "Manage non-tenant payers", group: "Operations", description: "Maintain the directory of third-party payers (HUD/housing authorities, employers, guarantors) who pay on a tenant's behalf." },
   "documents.manage": { label: "Manage documents", group: "Operations", description: "Upload documents, run OCR, and view document detail." },
   "reminders.send": { label: "Send reminders", group: "Operations", description: "Send individual and bulk SMS reminders." },
   "reports.view": { label: "View & export reports", group: "Operations", description: "View the Reports page and export financial CSVs." },

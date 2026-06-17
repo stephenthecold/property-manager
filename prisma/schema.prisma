@@ -582,6 +582,7 @@ model Lease {
   coTenants     LeaseTenant[]
   deposits      LeaseDeposit[]
   expenses      PropertyExpense[]
+  rentShares    RentShare[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -682,6 +683,10 @@ model Payment {
   unitId           String?
   propertyId       String?
   buildingId       String?
+  // Who actually paid. null = the tenant paid. A non-null payer is a third
+  // party paying on the tenant's behalf (e.g. a HUD/Section 8 housing
+  // authority). Attribution only — never affects allocation or balances.
+  payerId          String?
   paymentDate      DateTime
   amountCents      BigInt
   method           PaymentMethod @default(cash)
@@ -695,12 +700,78 @@ model Payment {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  lease Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payer Payer? @relation(fields: [payerId], references: [id], onDelete: SetNull)
 
   @@index([leaseId])
   @@index([tenantId])
   @@index([paymentDate])
   @@index([status, paymentDate])
+  @@index([payerId])
+}
+
+// ---------------------------------------------------------------------------
+// Non-tenant payers (HUD / housing authority, employer, guarantor, …). A Payer
+// is a party that pays on a tenant's behalf; a Payment may be attributed to one
+// via Payment.payerId. Purely an attribution directory — Payers never touch the
+// ledger or tenant balances. Subsidy-split expectations attach to a lease later.
+// ---------------------------------------------------------------------------
+
+enum PayerType {
+  housing_authority
+  employer
+  guarantor
+  family
+  nonprofit
+  other
+}
+
+/// A reusable third-party payer the org receives payments from on behalf of a
+/// tenant (e.g. a Section 8 / HUD housing authority paying the HAP portion).
+model Payer {
+  id             String    @id @default(cuid())
+  name           String
+  type           PayerType @default(housing_authority)
+  contactName    String?
+  email          String?
+  phone          String?
+  mailingAddress String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  payments   Payment[]
+  rentShares RentShare[]
+
+  @@index([isActive, name])
+}
+
+/// A line of a lease's monthly rent that a particular party is expected to pay
+/// (e.g. "$200 tenant portion" + "$800 HAP subsidy from Metro Housing
+/// Authority"). payerId null = the tenant's portion. This is an EXPECTATION
+/// overlay only: the ledger still carries the whole rent as one charge, and
+/// rent shares never post entries or affect balances/allocation. Effective-dated
+/// so a recertification supersedes prior splits (set endDate on the old rows).
+model RentShare {
+  id            String    @id @default(cuid())
+  leaseId       String
+  payerId       String? // null = tenant portion
+  label         String
+  amountCents   BigInt // expected monthly amount from this payer
+  effectiveDate DateTime @default(now())
+  endDate       DateTime? // exclusive; null = open-ended
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lease Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payer Payer? @relation(fields: [payerId], references: [id], onDelete: SetNull)
+
+  @@index([leaseId, effectiveDate])
+  @@index([payerId])
 }
 
 // ---------------------------------------------------------------------------

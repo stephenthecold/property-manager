@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
+import { getLeaseRentShares } from "@/lib/services/rent-shares";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import {
   loadLeaseAccounting,
@@ -32,6 +33,7 @@ import {
 } from "@/app/(app)/leases/actions";
 import { UTILITY_OPTIONS } from "@/lib/config/lease";
 import { updateTenant } from "@/app/(app)/tenants/actions";
+import { addRentShareAction, removeRentShareAction } from "./rent-share-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -205,6 +207,27 @@ export default async function TenantDetail({
     : null;
   const templateLease = activeLease ?? tenant.leases[0] ?? null;
   const templateCurrency = templateLease?.unit.property.currency ?? "USD";
+
+  const canManageLeases = hasCapability(
+    actingRole,
+    "leases.manage",
+    appSettings.rolePermissions,
+  );
+
+  // Active non-tenant payers (HUD/housing authorities, …) for the "Paid by"
+  // picker, so a HAP payment can be recorded from the tenant's page.
+  const payerOptions = (
+    await prisma.payer.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    })
+  ).map((p) => ({ id: p.id, label: p.name }));
+
+  // Rent split (subsidy) lines for the active lease, and their total for the
+  // "matches expected monthly" check. Expectation overlay only — never ledgered.
+  const rentShares = activeLease ? await getLeaseRentShares(activeLease.id) : [];
+  const rentSharesTotalCents = rentShares.reduce((s, r) => s + r.amountCents, 0n);
   const templateVars = buildReminderVars({
     cashAppTag: appSettings.cashAppCashtag,
     tenantFirstName: tenant.firstName,
@@ -287,6 +310,7 @@ export default async function TenantDetail({
               </Button>
               <RecordPaymentDialog
                 leaseId={activeLease.id}
+                payerOptions={payerOptions}
                 defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
               />
             </>
@@ -797,6 +821,135 @@ export default async function TenantDetail({
                   </div>
                 </FormDialog>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-t-4 border-t-sky-500">
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+                <span>Rent split (subsidy)</span>
+                {canManageLeases && (
+                  <FormDialog
+                    trigger="Add split line"
+                    title="Add rent-split line"
+                    description="Declare how much of the monthly rent a party pays. Leave 'Paid by' as Tenant for the tenant's portion; pick a payer (e.g. a housing authority) for a subsidy portion."
+                    action={addRentShareAction}
+                    submitLabel="Add line"
+                  >
+                    <input type="hidden" name="leaseId" value={activeLease.id} />
+                    <div className="space-y-2">
+                      <Label htmlFor="rsLabel">Label</Label>
+                      <Input id="rsLabel" name="label" placeholder="HAP subsidy" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="rsPayer">Paid by</Label>
+                      <select
+                        id="rsPayer"
+                        name="payerId"
+                        defaultValue=""
+                        className="h-9 w-full rounded-md border px-3 text-sm"
+                      >
+                        <option value="">Tenant</option>
+                        {payerOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="rsAmount">Amount</Label>
+                        <Input id="rsAmount" name="amount" inputMode="decimal" placeholder="800.00" required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="rsEff">Effective date</Label>
+                        <Input id="rsEff" name="effectiveDate" type="date" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="rsEnd">End date (optional — e.g. at recertification)</Label>
+                      <Input id="rsEnd" name="endDate" type="date" />
+                    </div>
+                  </FormDialog>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rentShares.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No rent split set — the tenant owes the full rent. For a
+                  subsidized lease, add lines for each portion (e.g. a tenant
+                  portion plus a housing-authority HAP subsidy).
+                </p>
+              ) : (
+                <>
+                  <ul className="space-y-2 text-sm">
+                    {rentShares.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <span>
+                          <span className="font-medium tabular-nums">
+                            {formatCurrency(s.amountCents, currency)}
+                          </span>{" "}
+                          {s.label} —{" "}
+                          <span className={s.payerName ? "" : "text-muted-foreground"}>
+                            {s.payerName ?? "Tenant"}
+                          </span>
+                          {s.endDate && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              (ends{" "}
+                              {s.endDate.toLocaleDateString("en-US", {
+                                timeZone: activeLease.unit.property.timezone,
+                              })}
+                              )
+                            </span>
+                          )}
+                        </span>
+                        {canManageLeases && (
+                          <form action={removeRentShareAction}>
+                            <input type="hidden" name="rentShareId" value={s.id} />
+                            <ConfirmSubmitButton
+                              confirmMessage="Remove this rent-split line?"
+                              variant="outline"
+                              size="xs"
+                            >
+                              Remove
+                            </ConfirmSubmitButton>
+                          </form>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-sm">
+                    Split total{" "}
+                    <span className="font-medium tabular-nums">
+                      {formatCurrency(rentSharesTotalCents, currency)}
+                    </span>{" "}
+                    vs expected monthly{" "}
+                    <span className="tabular-nums">
+                      {formatCurrency(expectedMonthlyChargeCents(activeLease), currency)}
+                    </span>
+                    {rentSharesTotalCents !== expectedMonthlyChargeCents(activeLease) && (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {" "}
+                        — doesn&apos;t match; adjust the lines.
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Expectation overlay only — the ledger still carries the whole
+                    rent. Missing subsidy payments surface on the{" "}
+                    <Link href="/payers" className="underline">
+                      Payers
+                    </Link>{" "}
+                    page.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
