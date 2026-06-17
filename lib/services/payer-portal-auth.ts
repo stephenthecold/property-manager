@@ -26,10 +26,15 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 const MIN_PASSWORD_LENGTH = 8;
 
 export type PayerAuthFailure =
+  | "module_disabled"
   | "invalid_link"
   | "weak_password"
   | "bad_credentials"
   | "locked";
+
+async function payerPortalEnabled(): Promise<boolean> {
+  return (await getAppSettings()).modules.payerPortal;
+}
 
 export type PayerAuthResult =
   | { ok: true; accountId: string }
@@ -56,6 +61,13 @@ export async function invitePayerPortalAccount(i: {
   payerId: string;
   actor: AuditContext;
 }): Promise<PayerInviteResult> {
+  if (!(await payerPortalEnabled())) {
+    return {
+      ok: false,
+      error: "The payer portal module is disabled (Settings → Modules).",
+      email: "skipped",
+    };
+  }
   const payer = await prisma.payer.findUnique({ where: { id: i.payerId } });
   if (!payer) return { ok: false, error: "Payer not found.", email: "skipped" };
   if (!payer.isActive) {
@@ -176,6 +188,7 @@ export async function acceptPayerInvite(i: {
   token: string;
   password: string;
 }): Promise<PayerAuthResult> {
+  if (!(await payerPortalEnabled())) return { ok: false, code: "module_disabled" };
   if (!/^[0-9a-f]{64}$/.test(i.token)) return { ok: false, code: "invalid_link" };
   if (i.password.length < MIN_PASSWORD_LENGTH || i.password.length > 200) {
     return { ok: false, code: "weak_password" };
@@ -226,6 +239,7 @@ export async function loginPayerWithPassword(i: {
   email: string;
   password: string;
 }): Promise<PayerAuthResult> {
+  if (!(await payerPortalEnabled())) return { ok: false, code: "module_disabled" };
   const account = await prisma.payerPortalAccount.findUnique({
     where: { email: emailKey(i.email) ?? " none" },
     include: { payer: { select: { isActive: true } } },

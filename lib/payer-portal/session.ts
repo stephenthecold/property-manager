@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { sha256 } from "@/lib/auth/crypto";
+import { getAppSettings } from "@/lib/services/app-settings";
 import type { Payer, PayerPortalAccount } from "@/lib/generated/prisma/client";
 
 /**
@@ -58,6 +59,10 @@ export async function getPayerSession(): Promise<PayerIdentity | null> {
   const store = await cookies();
   const token = store.get(PAYER_PORTAL_COOKIE)?.value;
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
+
+  // Module off → locked out immediately (data + sessions kept, like /portal).
+  const { modules } = await getAppSettings();
+  if (!modules.payerPortal) return null;
 
   const session = await prisma.payerPortalSession.findUnique({
     where: { tokenHash: sha256(token) },

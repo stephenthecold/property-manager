@@ -19,6 +19,7 @@ export interface PayerLoginState {
 }
 
 const FAILURE_MESSAGES: Record<PayerAuthFailure, string> = {
+  module_disabled: "The payer portal is currently unavailable.",
   invalid_link: "This link is invalid or has expired.",
   weak_password: "Password must be at least 8 characters.",
   bad_credentials: "That email and password combination didn't match.",
