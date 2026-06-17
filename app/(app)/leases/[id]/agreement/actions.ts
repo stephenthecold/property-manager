@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { auditActor, requireCapability } from "@/lib/auth/session";
-import { buildAgreementVars } from "@/lib/services/lease-agreement";
+import {
+  buildAgreementVars,
+  signatureMarkerDocxVars,
+} from "@/lib/services/lease-agreement";
 import {
   createUploadedDocument,
   getDocumentDownloadUrl,
@@ -80,9 +83,17 @@ export async function generateFromTemplateAction(
     };
   }
 
+  // Signature markers ({{landlord_signature}} etc.) aren't data vars — fill them
+  // with the saved landlord signature (as text) and the tenants' printed names
+  // so they don't survive as literal "{{…}}" tags in the Word document.
+  const docxVars = {
+    ...ctx.vars,
+    ...signatureMarkerDocxVars(ctx.app, ctx.vars),
+  };
+
   let filled: Buffer;
   try {
-    filled = await fillDocxTemplate(templateBytes, ctx.vars);
+    filled = await fillDocxTemplate(templateBytes, docxVars);
   } catch {
     return {
       error:

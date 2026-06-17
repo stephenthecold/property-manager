@@ -6,6 +6,8 @@ import {
   getAppSettings,
   type ResolvedAppSettings,
 } from "@/lib/services/app-settings";
+import { getFileStorage } from "@/lib/providers/storage";
+import { initialsFromName } from "@/lib/esign/markers";
 import { UTILITY_OPTIONS, sanitizeUtilities } from "@/lib/config/lease";
 import type { TemplateVars } from "@/lib/reminders/templates";
 
@@ -180,4 +182,62 @@ export async function buildAgreementVars(
   };
 
   return { vars, lease, app };
+}
+
+/**
+ * The saved landlord signature, resolved into renderable marks for the
+ * printable agreement page. The drawn PNGs (signature/initials) are loaded as
+ * data URLs so the server component can embed them without a second request;
+ * loading is best-effort — a storage outage degrades to the typed name/initials.
+ * Returns null when no signature has been saved (the page then shows blank
+ * wet-signature lines, unchanged).
+ */
+export interface ResolvedLandlordSignature {
+  name: string;
+  /** data:image/png;base64,… when a drawn signature image exists. */
+  imageDataUrl?: string;
+  /** data:image/png;base64,… when drawn initials exist. */
+  initialsImageDataUrl?: string;
+}
+
+async function loadSignaturePng(key: string | null): Promise<string | undefined> {
+  if (!key) return undefined;
+  try {
+    const buf = await (await getFileStorage()).get(key);
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch (e) {
+    console.error(`[lease-agreement] could not load signature image ${key}:`, e);
+    return undefined; // fall back to the typed name/initials
+  }
+}
+
+export async function resolveLandlordSignature(
+  app: ResolvedAppSettings,
+): Promise<ResolvedLandlordSignature | null> {
+  if (!app.landlordSignatureName) return null;
+  return {
+    name: app.landlordSignatureName,
+    imageDataUrl: await loadSignaturePng(app.landlordSignatureImageKey),
+    initialsImageDataUrl: await loadSignaturePng(app.landlordInitialsImageKey),
+  };
+}
+
+/**
+ * Text values for the inline signature markers when filling a .docx, which is
+ * static text with no captured marks. The saved landlord signature is applied
+ * as its typed name (and derived initials); tenants get their printed name(s)
+ * to sign beside. Empty strings when nothing is saved — so the markers never
+ * survive as literal `{{landlord_signature}}` text in the generated document.
+ */
+export function signatureMarkerDocxVars(
+  app: ResolvedAppSettings,
+  vars: TemplateVars,
+): Record<string, string> {
+  const landlord = app.landlordSignatureName ?? "";
+  return {
+    landlord_signature: landlord,
+    landlord_initials: landlord ? initialsFromName(landlord) : "",
+    tenant_signatures: vars.tenant_names,
+    tenant_initials: "",
+  };
 }

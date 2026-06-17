@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
-import { buildAgreementVars } from "@/lib/services/lease-agreement";
+import {
+  buildAgreementVars,
+  resolveLandlordSignature,
+} from "@/lib/services/lease-agreement";
 import {
   getDocumentDownloadUrl,
   listDocuments,
@@ -16,7 +19,7 @@ import {
   documentHasInlineSignatures,
   markerPassthroughVars,
 } from "@/lib/esign/markers";
-import { AgreementText } from "@/components/app/agreement-text";
+import { AgreementText, SIGNATURE_FONT } from "@/components/app/agreement-text";
 import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
 import { PrintButton } from "@/components/app/print-button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -51,11 +54,38 @@ function termRow(label: string, value: string) {
   );
 }
 
-function SignatureBlock({ role, name }: { role: string; name: string }) {
+function SignatureBlock({
+  role,
+  name,
+  signature,
+}: {
+  role: string;
+  name: string;
+  /** When present, the saved signature is stamped on the line and the date filled. */
+  signature?: { name: string; imageDataUrl?: string; date: string };
+}) {
   return (
     <div className="grid grid-cols-[3fr_2fr_1.2fr] items-end gap-x-8 gap-y-1">
       <div>
-        <div className="h-7 border-b" />
+        <div className="flex h-7 items-end overflow-hidden border-b">
+          {signature ? (
+            signature.imageDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- inline data URL
+              <img
+                src={signature.imageDataUrl}
+                alt={`${signature.name} signature`}
+                className="max-h-7 object-contain object-left"
+              />
+            ) : (
+              <span
+                className="text-2xl leading-none italic"
+                style={{ fontFamily: SIGNATURE_FONT }}
+              >
+                {signature.name}
+              </span>
+            )
+          ) : null}
+        </div>
         <div className="mt-1 text-xs text-muted-foreground">{role} signature</div>
       </div>
       <div>
@@ -63,7 +93,7 @@ function SignatureBlock({ role, name }: { role: string; name: string }) {
         <div className="mt-1 text-xs text-muted-foreground">Printed name</div>
       </div>
       <div>
-        <div className="h-7 border-b" />
+        <div className="flex h-7 items-end border-b text-sm">{signature?.date ?? ""}</div>
         <div className="mt-1 text-xs text-muted-foreground">Date</div>
       </div>
     </div>
@@ -150,6 +180,14 @@ export default async function LeaseAgreementPage({
   const coTenantNames = lease.coTenants.map(
     (ct) => `${ct.tenant.firstName} ${ct.tenant.lastName}`.trim(),
   );
+
+  // The saved landlord signature (Settings → Leases) is pre-applied to the
+  // printable agreement, mirroring how e-sign auto-applies it. Best-effort:
+  // a storage outage degrades a drawn signature to the typed name.
+  const savedSignature = await resolveLandlordSignature(app);
+  const landlordSignature = savedSignature
+    ? { ...savedSignature, date: vars.today }
+    : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -413,6 +451,7 @@ export default async function LeaseAgreementPage({
             mode="wet"
             landlordName={vars.business_legal_name}
             tenantNames={[vars.primary_tenant, ...coTenantNames]}
+            landlordSignature={landlordSignature}
           />
 
           {/* Utility responsibilities */}
@@ -438,7 +477,19 @@ export default async function LeaseAgreementPage({
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Signatures
               </h2>
-              <SignatureBlock role="Landlord" name={vars.business_legal_name} />
+              <SignatureBlock
+                role="Landlord"
+                name={vars.business_legal_name}
+                signature={
+                  landlordSignature
+                    ? {
+                        name: landlordSignature.name,
+                        imageDataUrl: landlordSignature.imageDataUrl,
+                        date: landlordSignature.date,
+                      }
+                    : undefined
+                }
+              />
               <SignatureBlock role="Tenant" name={vars.primary_tenant} />
               {coTenantNames.map((name) => (
                 <SignatureBlock key={name} role="Co-tenant" name={name} />
