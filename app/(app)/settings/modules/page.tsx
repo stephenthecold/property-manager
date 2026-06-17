@@ -31,6 +31,12 @@ const MODULE_INFO = [
     description:
       "Public application form at /apply that prospective tenants submit (no login). Staff review submissions at Applications, change status, email/text the apply link to a prospect, and convert an approved applicant into a tenant. Turning it off hides the form and the staff page; submissions are kept.",
   },
+  {
+    key: "payerPortal" as const,
+    label: "Payer portal",
+    description:
+      "Self-service portal at /payer-portal where invited third-party payers (e.g. a HUD/Section 8 housing authority) sign in (email + password — local accounts, never your staff SSO) to a read-only view of the leases they pay, their expected share, and what they've paid. Invite/enable payers from the Payers page. Turning it off blocks payer logins immediately; the Payers directory and all data are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

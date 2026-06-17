@@ -2,6 +2,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { getPayerSession } from "@/lib/payer-portal/session";
 import { signOutPayerAction } from "./actions";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,22 @@ export default async function PayerPortalLayout({
   children: React.ReactNode;
 }) {
   const settings = await getAppSettings();
+  if (!settings.modules.payerPortal) {
+    return (
+      <div className="mx-auto flex min-h-[60vh] max-w-md items-center px-4">
+        <Card className="w-full">
+          <CardContent className="py-10 text-center">
+            <div className="text-lg font-semibold">
+              The payer portal is currently unavailable.
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Please contact the property manager.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const identity = await getPayerSession();
 
   return (

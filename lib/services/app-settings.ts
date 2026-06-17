@@ -42,6 +42,8 @@ export interface ModuleFlags {
   tenantPortal: boolean;
   /** Prospective-tenant rental applications (public /apply + staff /applications). */
   applications: boolean;
+  /** Third-party payer portal (/payer-portal, local payer logins). */
+  payerPortal: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -50,6 +52,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   maintenance: false,
   tenantPortal: false,
   applications: false,
+  payerPortal: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -67,6 +70,10 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.applications === "boolean"
         ? obj.applications
         : MODULE_DEFAULTS.applications,
+    payerPortal:
+      typeof obj.payerPortal === "boolean"
+        ? obj.payerPortal
+        : MODULE_DEFAULTS.payerPortal,
   };
 }
 

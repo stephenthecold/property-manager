@@ -176,7 +176,9 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   opaque hashed cookie tokens in `lib/payer-portal/session.ts`, never staff/tenant rows) so a
   housing authority can sign in (email + password via an invite link) to a **read-only** view of
   the leases they pay, their expected share, and what they've paid this month. Staff invite /
-  enable / disable from the Payers page. Future: a real online-pay adapter + a portal "Pay now".
+  enable / disable from the Payers page. Gated by the **`payerPortal`** module (Settings →
+  Modules, off by default) — disabling blocks payer logins immediately while keeping all data,
+  like the tenant portal. Future: a real online-pay adapter + a portal "Pay now".
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.

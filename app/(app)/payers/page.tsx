@@ -5,6 +5,7 @@ import { PAYER_TYPES, payerTypeLabel } from "@/lib/payers/payer-type";
 import type { PayerType } from "@/lib/generated/prisma/enums";
 import { formatCurrency } from "@/lib/money";
 import { getSubsidyExpectations } from "@/lib/services/rent-shares";
+import { getAppSettings } from "@/lib/services/app-settings";
 import {
   createPayerAction,
   invitePayerPortalAction,
@@ -106,7 +107,7 @@ export default async function PayersPage({
   const portalSent = first("portalSent");
   const portalError = first("portalError");
 
-  const [payers, expectations] = await Promise.all([
+  const [payers, expectations, settings] = await Promise.all([
     prisma.payer.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
       include: {
@@ -115,7 +116,11 @@ export default async function PayersPage({
       },
     }),
     getSubsidyExpectations(new Date()),
+    getAppSettings(),
   ]);
+  // The Payers directory is core (payment attribution); only the PORTAL column
+  // and its invite/enable controls are gated by the payerPortal module.
+  const payerPortalEnabled = settings.modules.payerPortal;
 
   // Missing first (largest shortfall), then the rest, for the tracker table.
   const tracker = [...expectations].sort(
@@ -258,7 +263,9 @@ export default async function PayersPage({
           { key: "contact", label: "Contact", sortable: false, className: "hidden md:table-cell" },
           { key: "payments", label: "Payments", align: "right", numeric: true, className: "hidden sm:table-cell" },
           { key: "status", label: "Status" },
-          { key: "portal", label: "Portal", sortable: false, className: "hidden lg:table-cell" },
+          ...(payerPortalEnabled
+            ? [{ key: "portal", label: "Portal", sortable: false, className: "hidden lg:table-cell" }]
+            : []),
           { key: "actions", label: "", align: "right", sortable: false },
         ]}
         rows={payers.map((p) => {
@@ -278,7 +285,7 @@ export default async function PayersPage({
             null,
             p._count.payments,
             p.isActive ? "active" : "inactive",
-            null,
+            ...(payerPortalEnabled ? [null] : []),
             null,
           ],
           cells: [
@@ -298,7 +305,9 @@ export default async function PayersPage({
             ) : (
               <span key="s" className="text-muted-foreground">Inactive</span>
             ),
-            <div key="portal" className="flex flex-col items-start gap-1">
+            ...(payerPortalEnabled
+              ? [
+                  <div key="portal" className="flex flex-col items-start gap-1">
               <span
                 className={
                   acct?.isActive && acct?.passwordHash
@@ -330,6 +339,8 @@ export default async function PayersPage({
                 )}
               </div>
             </div>,
+                ]
+              : []),
             <div key="a" className="flex justify-end gap-2">
               <FormDialog
                 trigger="Edit"
