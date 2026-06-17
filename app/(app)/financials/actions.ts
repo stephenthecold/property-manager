@@ -6,6 +6,7 @@ import { toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
 import type { FormState } from "@/lib/forms";
@@ -81,6 +82,12 @@ export async function createExpenseAction(
     return { error: "Date must be a valid date (YYYY-MM-DD)." };
   }
 
+  // Optional vendor paid (module "vendors"); validate against the active list.
+  const vendorId = str(fd, "vendorId") || null;
+  if (vendorId && !(await isActiveVendor(vendorId))) {
+    return { error: "Selected vendor not found." };
+  }
+
   await withAudit(
     {
       ...(await auditActor()),
@@ -99,6 +106,7 @@ export async function createExpenseAction(
           amountCents,
           incurredOn: incurredOn!,
           description: str(fd, "description") || null,
+          vendorId,
           createdBy: dbUser.id,
         },
       });

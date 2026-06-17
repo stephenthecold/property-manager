@@ -20,6 +20,7 @@ import {
   setJobPriorityAction,
 } from "./actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { listActiveVendors } from "@/lib/services/vendors";
 import {
   MAINTENANCE_PRIORITIES,
   priorityLabel,
@@ -78,7 +79,7 @@ export default async function MaintenancePage({
   if (filterPropertyId) jobWhere.propertyId = filterPropertyId;
   if (filterStatus) jobWhere.status = filterStatus;
 
-  const [jobs, tasks, properties, units] = await Promise.all([
+  const [jobs, tasks, properties, units, vendors] = await Promise.all([
     prisma.maintenanceJob.findMany({
       where: jobWhere,
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
@@ -86,6 +87,7 @@ export default async function MaintenancePage({
       include: {
         property: { select: { name: true, timezone: true, currency: true } },
         unit: { select: { unitNumber: true } },
+        vendor: { select: { name: true } },
         updates: { orderBy: { createdAt: "desc" } },
       },
     }),
@@ -99,6 +101,7 @@ export default async function MaintenancePage({
       orderBy: [{ property: { name: "asc" } }, { unitNumber: "asc" }],
       select: { id: true, unitNumber: true, property: { select: { name: true } } },
     }),
+    settings.modules.vendors ? listActiveVendors() : Promise.resolve([]),
   ]);
 
   // Attachments (loose ref) for the visible jobs, with signed download URLs.
@@ -188,6 +191,23 @@ export default async function MaintenancePage({
                 ))}
               </select>
             </div>
+            {settings.modules.vendors && vendors.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="mjVendor">Vendor (optional)</Label>
+                <select
+                  id="mjVendor"
+                  name="vendorId"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
+                >
+                  <option value="">— none —</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="mjDue">Due date (optional)</Label>
               <Input id="mjDue" name="dueDate" type="date" />
@@ -324,6 +344,11 @@ export default async function MaintenancePage({
                   j.unit?.unitNumber ?? "—",
                   <span key="t" title={j.details ?? undefined} className="font-medium">
                     {j.title}
+                    {j.vendor && (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        Vendor: {j.vendor.name}
+                      </span>
+                    )}
                   </span>,
                   <span key="pri" className="inline-flex items-center gap-1">
                     <Badge

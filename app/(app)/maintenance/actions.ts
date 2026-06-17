@@ -9,6 +9,7 @@ import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
 import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
+import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
 import type { FormState } from "@/lib/forms";
@@ -108,6 +109,13 @@ export async function createJobAction(fd: FormData): Promise<void> {
     fail("Tenant SMS notifications need a due date.");
   }
 
+  // Optional vendor assignment (module "vendors"). Validate it's a real active
+  // vendor; the picker only offers active ones.
+  const vendorId = str(fd, "vendorId") || null;
+  if (vendorId && !(await isActiveVendor(vendorId))) {
+    fail("Selected vendor not found.");
+  }
+
   await withAudit(
     {
       ...(await auditActor()),
@@ -125,6 +133,7 @@ export async function createJobAction(fd: FormData): Promise<void> {
           dueDate,
           notifyTenants,
           notifyDaysBefore,
+          vendorId,
           createdBy: dbUser.id,
         },
       });
@@ -202,6 +211,7 @@ export async function completeJobAction(
             amountCents: costCents,
             incurredOn: new Date(),
             description: `Maintenance: ${job.title}`,
+            vendorId: job.vendorId, // carry the job's vendor onto the expense
             sourceType: "maintenance_job",
             sourceId: job.id,
             createdBy: dbUser.id,

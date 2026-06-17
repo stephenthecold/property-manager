@@ -5,6 +5,7 @@ import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability } from "@/lib/auth/permissions";
 import { getFinancialSummary } from "@/lib/services/financials";
+import { listActiveVendors } from "@/lib/services/vendors";
 import { formatCurrency } from "@/lib/money";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -59,7 +60,7 @@ export default async function FinancialsPage({
   if (filterPropertyId) expenseWhere.propertyId = filterPropertyId;
   if (filterCategory) expenseWhere.category = filterCategory;
 
-  const [summary, expenses, properties, units, leases] = await Promise.all([
+  const [summary, expenses, properties, units, leases, vendors] = await Promise.all([
     getFinancialSummary(now),
     prisma.propertyExpense.findMany({
       where: expenseWhere,
@@ -69,6 +70,7 @@ export default async function FinancialsPage({
         property: { select: { name: true, currency: true } },
         unit: { select: { unitNumber: true } },
         lease: { include: { tenant: { select: { firstName: true, lastName: true } } } },
+        vendor: { select: { name: true } },
       },
     }),
     prisma.property.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -84,6 +86,7 @@ export default async function FinancialsPage({
       },
       orderBy: { startDate: "desc" },
     }),
+    settings.modules.vendors ? listActiveVendors() : Promise.resolve([]),
   ]);
 
   const t = summary.totals;
@@ -186,6 +189,23 @@ export default async function FinancialsPage({
                   ))}
                 </select>
               </div>
+            {settings.modules.vendors && vendors.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="exVendor">Vendor (optional)</Label>
+                <select
+                  id="exVendor"
+                  name="vendorId"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
+                >
+                  <option value="">— none —</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="exDesc">Description</Label>
               <Input id="exDesc" name="description" placeholder="June water bill" />
@@ -405,6 +425,9 @@ export default async function FinancialsPage({
                 </span>,
                 <span key="d" className="text-muted-foreground">
                   {e.description ?? ""}
+                  {e.vendor && (
+                    <span className="block text-xs">Vendor: {e.vendor.name}</span>
+                  )}
                 </span>,
                 <span key="a" className="tabular-nums">
                   {formatCurrency(e.amountCents, e.property.currency)}
