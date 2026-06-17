@@ -583,6 +583,7 @@ model Lease {
   deposits      LeaseDeposit[]
   expenses      PropertyExpense[]
   rentShares    RentShare[]
+  notices       Notice[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -822,6 +823,51 @@ model RentShare {
 
   @@index([leaseId, effectiveDate])
   @@index([payerId])
+}
+
+// ---------------------------------------------------------------------------
+// Notices (module "notices") — formal landlord notices to a tenant (late rent /
+// pay-or-quit, lease violation, notice to quit, non-renewal, rent increase).
+// The subject + body are SNAPSHOTTED at create so what was served is immutable
+// even if templates/lease change later. Operating record, never a ledger entry.
+// ---------------------------------------------------------------------------
+
+enum NoticeType {
+  late_rent
+  lease_violation
+  notice_to_quit
+  non_renewal
+  rent_increase
+  general
+}
+
+enum NoticeStatus {
+  draft
+  served
+  void
+}
+
+model Notice {
+  id            String       @id @default(cuid())
+  leaseId       String
+  tenantId      String // the tenant the notice addresses (primary on the lease)
+  type          NoticeType
+  status        NoticeStatus @default(draft)
+  subject       String
+  body          String // rendered + editable; snapshotted
+  // The deadline/effective date the notice communicates (pay-by, move-out, …).
+  effectiveDate DateTime?
+  servedAt      DateTime?
+  servedMethod  String? // "hand" | "mail" | "posted" | "email"
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

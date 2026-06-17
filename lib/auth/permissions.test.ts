@@ -39,6 +39,8 @@ const LEGACY_MIN: Record<Capability, Role> = {
   // the staff who manage tenants also review/convert applicants.
   "applications.view": "manager",
   "applications.manage": "manager",
+  // notices.manage is new (no legacy gate); manager mirrors leases.manage.
+  "notices.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",

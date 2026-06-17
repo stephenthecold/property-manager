@@ -179,6 +179,14 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   enable / disable from the Payers page. Gated by the **`payerPortal`** module (Settings →
   Modules, off by default) — disabling blocks payer logins immediately while keeping all data,
   like the tenant portal. Future: a real online-pay adapter + a portal "Pay now".
+- **Notices** (module `notices`, off by default) — formal landlord notices to a tenant
+  (late-rent/pay-or-quit, lease violation, notice to quit, non-renewal, rent increase, general).
+  Generate from a per-type template prefilled with the lease's details (pure
+  `lib/notices/templates.ts`, unit-tested), edit while a **draft**, then **mark served**
+  (date + method) and **print** (`/notices/[id]`). Subject/body are **snapshotted** at create so
+  what was served is immutable; a notice is an operating record, never a ledger entry. Gated by
+  `notices.manage`. The shipped templates are starting points — operators review them for their
+  jurisdiction before serving.
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.
