@@ -15,7 +15,14 @@ export interface CheckoutClaims {
   amountCents: string;
   /** Random per-checkout, so each token (and its derived event id) is unique. */
   nonce: string;
+  /** Issued-at epoch ms — bounds how long a captured token stays redeemable. */
+  iat: number;
 }
+
+/** How long a checkout token stays valid after issuance. */
+export const CHECKOUT_TTL_MS = 30 * 60 * 1000; // 30 minutes
+/** Tolerance for issuer/verifier clock skew on the future side. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -35,11 +42,18 @@ export function signCheckoutToken(claims: CheckoutClaims, secret: string): strin
   return `${payload}.${hmac(payload, secret)}`;
 }
 
-/** Verify + parse a token; null on any tampering/format/secret mismatch. */
+/**
+ * Verify + parse a token; null on any tampering/format/secret mismatch, OR if
+ * the token is older than `maxAgeMs` (or implausibly future). `nowMs` is
+ * injectable so this stays pure and unit-testable; it defaults to the wall clock.
+ */
 export function verifyCheckoutToken(
   token: string,
   secret: string,
+  opts: { nowMs?: number; maxAgeMs?: number } = {},
 ): CheckoutClaims | null {
+  const nowMs = opts.nowMs ?? Date.now();
+  const maxAgeMs = opts.maxAgeMs ?? CHECKOUT_TTL_MS;
   const dot = token.indexOf(".");
   if (dot <= 0) return null;
   const payload = token.slice(0, dot);
@@ -56,11 +70,20 @@ export function verifyCheckoutToken(
       typeof o.leaseId !== "string" ||
       typeof o.amountCents !== "string" ||
       typeof o.nonce !== "string" ||
+      typeof o.iat !== "number" ||
+      !Number.isFinite(o.iat) ||
       !/^\d+$/.test(o.amountCents)
     ) {
       return null;
     }
-    return { leaseId: o.leaseId, amountCents: o.amountCents, nonce: o.nonce };
+    // Expired, or issued implausibly far in the future (clock skew tolerated).
+    if (nowMs - o.iat > maxAgeMs || o.iat - nowMs > CLOCK_SKEW_MS) return null;
+    return {
+      leaseId: o.leaseId,
+      amountCents: o.amountCents,
+      nonce: o.nonce,
+      iat: o.iat,
+    };
   } catch {
     return null;
   }
