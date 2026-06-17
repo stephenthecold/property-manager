@@ -6,7 +6,7 @@ import { hasCapability, type Capability } from "@/lib/auth/permissions";
 import { doSignOut } from "@/app/login/actions";
 import { exitViewAs } from "@/app/(app)/settings/users/actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
-import { NavLinks, type NavItem } from "@/components/app/nav-links";
+import { NavLinks, type NavEntry } from "@/components/app/nav-links";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -26,40 +26,64 @@ export default async function AppLayout({
 
   // Nav reflects the acting role's capabilities (so links never lead to a
   // "Forbidden" page). Viewing surfaces stay visible; capability-gated ones hide.
+  // Links are grouped into a few dropdowns to keep the header from overflowing;
+  // a group with no visible children is dropped entirely.
   const can = (cap: Capability) => hasCapability(actingRole, cap, app.rolePermissions);
-  const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/properties", label: "Properties" },
-    { href: "/tenants", label: "Tenants" },
-    { href: "/leases", label: "Leases" },
-    { href: "/payments", label: "Payments" },
-    ...(can("payers.manage") ? [{ href: "/payers", label: "Payers" }] : []),
-    ...(can("documents.manage") ? [{ href: "/documents", label: "Documents" }] : []),
-    { href: "/reminders", label: "Reminders" },
-    ...(can("tenants.manage") ? [{ href: "/sms-consents", label: "SMS consent" }] : []),
-    ...(can("reports.view") ? [{ href: "/reports", label: "Reports" }] : []),
-    ...(app.modules.financials && can("financials.view")
-      ? [{ href: "/financials", label: "Financials" }]
-      : []),
-    ...(app.modules.maintenance && can("maintenance.manage")
-      ? [{ href: "/maintenance", label: "Maintenance" }]
-      : []),
-    ...(app.modules.tenantPortal && can("portal.manage")
-      ? [{ href: "/requests", label: "Requests" }]
-      : []),
-    ...(app.modules.applications && can("applications.view")
-      ? [{ href: "/applications", label: "Applications" }]
-      : []),
-    ...(app.modules.notices && can("notices.manage")
-      ? [{ href: "/notices", label: "Notices" }]
-      : []),
-    ...(app.modules.inspections && can("inspections.manage")
-      ? [{ href: "/inspections", label: "Inspections" }]
-      : []),
-    ...(app.modules.vendors && can("vendors.manage")
-      ? [{ href: "/vendors", label: "Vendors" }]
-      : []),
-  ];
+  const navEntries: NavEntry[] = (
+    [
+      { href: "/dashboard", label: "Dashboard" },
+      {
+        label: "Leasing",
+        items: [
+          { href: "/properties", label: "Properties" },
+          { href: "/tenants", label: "Tenants" },
+          { href: "/leases", label: "Leases" },
+          ...(app.modules.applications && can("applications.view")
+            ? [{ href: "/applications", label: "Applications" }]
+            : []),
+          ...(can("documents.manage") ? [{ href: "/documents", label: "Documents" }] : []),
+        ],
+      },
+      {
+        label: "Money",
+        items: [
+          { href: "/payments", label: "Payments" },
+          ...(can("payers.manage") ? [{ href: "/payers", label: "Payers" }] : []),
+          ...(app.modules.financials && can("financials.view")
+            ? [{ href: "/financials", label: "Financials" }]
+            : []),
+          ...(can("reports.view") ? [{ href: "/reports", label: "Reports" }] : []),
+        ],
+      },
+      {
+        label: "Operations",
+        items: [
+          ...(app.modules.maintenance && can("maintenance.manage")
+            ? [{ href: "/maintenance", label: "Maintenance" }]
+            : []),
+          ...(app.modules.inspections && can("inspections.manage")
+            ? [{ href: "/inspections", label: "Inspections" }]
+            : []),
+          ...(app.modules.vendors && can("vendors.manage")
+            ? [{ href: "/vendors", label: "Vendors" }]
+            : []),
+          ...(app.modules.tenantPortal && can("portal.manage")
+            ? [{ href: "/requests", label: "Requests" }]
+            : []),
+        ],
+      },
+      {
+        label: "Comms",
+        items: [
+          { href: "/reminders", label: "Reminders" },
+          ...(can("tenants.manage") ? [{ href: "/sms-consents", label: "SMS consent" }] : []),
+          ...(app.modules.notices && can("notices.manage")
+            ? [{ href: "/notices", label: "Notices" }]
+            : []),
+        ],
+      },
+    ] satisfies NavEntry[]
+  ).filter((e) => !("items" in e) || (e.items?.length ?? 0) > 0);
   const showSettings = (
     ["billing.settings", "organization.settings", "messaging.settings", "auth.settings", "users.manage"] as Capability[]
   ).some(can);
@@ -93,7 +117,7 @@ export default async function AppLayout({
               )}
               {app.businessName}
             </Link>
-            <NavLinks items={navItems} />
+            <NavLinks items={navEntries} />
           </div>
           <div className="flex items-center gap-3 text-sm">
             {can("audit.view") && (
