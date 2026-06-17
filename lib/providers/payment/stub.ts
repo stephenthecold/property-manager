@@ -1,6 +1,10 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
+import { getEnv } from "@/lib/config/env";
+import { signCheckoutToken } from "@/lib/providers/payment/checkout-token";
 import type {
+  CheckoutInput,
+  CheckoutResult,
   GatewayPaymentEvent,
   ParseWebhookInput,
   PaymentGateway,
@@ -80,5 +84,23 @@ export class StubPaymentGateway implements PaymentGateway {
         : new Date();
 
     return { eventId, leaseId, amountCents, reference, method, occurredAt };
+  }
+
+  /**
+   * Dev-simulated hosted checkout: no real charge. Encodes the lease + amount in
+   * an HMAC-signed token (keyed by the shared secret) and points the payer at an
+   * in-app confirm page; "completing" there records a payment through the same
+   * webhook→ledger service. Returns null with no secret configured (can't sign).
+   * A real adapter replaces this with a provider API call returning a hosted URL.
+   */
+  async createCheckout(input: CheckoutInput): Promise<CheckoutResult | null> {
+    const secret = getEnv().PAYMENT_WEBHOOK_SECRET ?? null;
+    if (!secret) return null;
+    const nonce = randomBytes(12).toString("hex");
+    const token = signCheckoutToken(
+      { leaseId: input.leaseId, amountCents: input.amountCents.toString(), nonce },
+      secret,
+    );
+    return { url: `/portal/pay/${token}`, reference: `stub_${nonce}` };
   }
 }

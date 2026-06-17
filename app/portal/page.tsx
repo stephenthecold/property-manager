@@ -8,9 +8,15 @@ import {
 } from "@/lib/services/accounting";
 import { cashAppLink } from "@/lib/payments/cash-app";
 import { resolveComplianceLinks } from "@/lib/config/compliance";
-import { formatCurrency } from "@/lib/money";
+import { formatCurrency, fromCents } from "@/lib/money";
+import { onlinePaymentsConfigured } from "@/lib/services/gateway-checkout";
+import { startPortalCheckoutAction } from "./pay/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   CashPickupForm,
   MaintenanceRequestForm,
@@ -37,11 +43,18 @@ function money(cents: bigint, currency: string): string {
   return formatCurrency(cents, currency);
 }
 
-export default async function PortalHomePage() {
+export default async function PortalHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { tenant } = await requirePortalSession();
   const settings = await getAppSettings();
   const now = new Date();
   const compliance = resolveComplianceLinks(settings);
+  const sp = await searchParams;
+  const paid = (Array.isArray(sp.paid) ? sp.paid[0] : sp.paid) === "1";
+  const payError = Array.isArray(sp.payerror) ? sp.payerror[0] : sp.payerror;
 
   const leases = await prisma.lease.findMany({
     where: {
@@ -62,6 +75,16 @@ export default async function PortalHomePage() {
     activeLease && accounting
       ? snapshotFromAccounting(activeLease, activeLease.unit, now, tz, accounting)
       : null;
+
+  // Online "Pay now": available when a gateway is configured and there's an
+  // active lease. Default the amount to the balance (or current period due).
+  const payNowAvailable = !!activeLease && onlinePaymentsConfigured();
+  const defaultPayAmount =
+    snap && snap.netBalanceCents > 0n
+      ? fromCents(snap.netBalanceCents)
+      : snap && snap.currentPeriodOutstandingCents > 0n
+        ? fromCents(snap.currentPeriodOutstandingCents)
+        : "";
 
   const [ledger, payments, receipts, documents, requests] = await Promise.all([
     activeLease
@@ -106,6 +129,24 @@ export default async function PortalHomePage() {
 
   return (
     <div className="space-y-6">
+      {paid && (
+        <Alert>
+          <AlertDescription>
+            Payment received — thank you! Your balance updates below.
+          </AlertDescription>
+        </Alert>
+      )}
+      {payError && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {payError === "amount"
+              ? "Enter a valid payment amount."
+              : payError === "unavailable"
+                ? "Online payments aren't available right now."
+                : "We couldn't start that payment. Please try again."}
+          </AlertDescription>
+        </Alert>
+      )}
       {settings.portalWelcomeText && (
         <Card>
           <CardContent className="py-4 text-sm whitespace-pre-wrap text-muted-foreground">
@@ -196,6 +237,27 @@ export default async function PortalHomePage() {
           <CardTitle className="text-base">How to pay</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
+          {payNowAvailable && activeLease && (
+            <form
+              action={startPortalCheckoutAction}
+              className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3"
+            >
+              <input type="hidden" name="leaseId" value={activeLease.id} />
+              <div className="space-y-1">
+                <Label htmlFor="payAmount">Pay online</Label>
+                <Input
+                  id="payAmount"
+                  name="amount"
+                  inputMode="decimal"
+                  defaultValue={defaultPayAmount}
+                  placeholder="0.00"
+                  className="w-32"
+                  required
+                />
+              </div>
+              <Button type="submit">Pay now</Button>
+            </form>
+          )}
           {settings.cashAppCashtag ? (
             <p>
               Pay with Cash App:{" "}
