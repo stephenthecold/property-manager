@@ -40,6 +40,8 @@ export interface CheckoutInput {
   amountCents: bigint;
   /** Where to send the payer after the checkout completes/cancels. */
   returnUrl: string;
+  /** ISO currency code (e.g. "usd"); defaults to USD when omitted. */
+  currency?: string;
 }
 
 export interface CheckoutResult {

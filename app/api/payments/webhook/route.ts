@@ -31,6 +31,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const rawBody = await req.text();
   const signature =
+    req.headers.get("stripe-signature") ??
     req.headers.get("x-payment-signature") ??
     req.headers.get("x-webhook-signature");
 

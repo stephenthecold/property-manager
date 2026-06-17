@@ -78,13 +78,15 @@ const envSchema = z.object({
   OCR_ENABLED: boolish.default(false),
   OCR_PROVIDER: z.string().optional(),
 
-  // Online-payment gateway (Phase 5). stub default — a real adapter slots in
-  // later behind the same interface. The webhook shared secret stays in env
-  // (never the DB), like the other provider secrets. Optional, but the webhook
-  // route FAILS CLOSED without it: with no secret configured, POSTs to
-  // /api/payments/webhook are rejected (never posted to the ledger).
-  PAYMENT_GATEWAY: z.enum(["stub"]).default("stub"),
+  // Online-payment gateway (Phase 5). "stub" default; "stripe" is a real adapter.
+  // PAYMENT_WEBHOOK_SECRET is the endpoint signing secret (stub HMAC, or Stripe
+  // `whsec_...`); it stays in env (never the DB). Optional, but the webhook route
+  // FAILS CLOSED without it: POSTs to /api/payments/webhook are rejected (never
+  // posted to the ledger). STRIPE_SECRET_KEY (`sk_...`) is needed only to START a
+  // checkout via the Stripe API; it never touches the DB.
+  PAYMENT_GATEWAY: z.enum(["stub", "stripe"]).default("stub"),
   PAYMENT_WEBHOOK_SECRET: optionalSecret,
+  STRIPE_SECRET_KEY: optionalSecret,
 
   // Background checks (tenant screening). Unset/"stub" = simulated decisions;
   // a real FCRA provider slots in behind lib/providers/background-check.
