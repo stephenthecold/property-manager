@@ -32,6 +32,24 @@ export interface ParseWebhookInput {
   secret: string | null;
 }
 
+/** A request to begin a payment (the OUTBOUND side of the gateway). */
+export interface CheckoutInput {
+  /** The lease to credit; carried through to the resulting webhook/event. */
+  leaseId: string;
+  /** Integer cents to collect. */
+  amountCents: bigint;
+  /** Where to send the payer after the checkout completes/cancels. */
+  returnUrl: string;
+}
+
+export interface CheckoutResult {
+  /** Where to send the payer — a provider-hosted page (or, for the stub, an
+   * in-app dev confirm page). May be relative to the app. */
+  url: string;
+  /** The provider's checkout/session reference. */
+  reference: string;
+}
+
 export interface PaymentGateway {
   readonly name: string;
   /**
@@ -40,4 +58,12 @@ export interface PaymentGateway {
    * payment we should record — the route then acks without posting anything.
    */
   parseWebhook(input: ParseWebhookInput): GatewayPaymentEvent | null;
+  /**
+   * Begin a payment and return where to send the payer. Returns null when the
+   * gateway can't start a checkout (e.g. the stub with no shared secret, or a
+   * provider that's webhook-only). A real adapter calls its provider's API here
+   * and returns the hosted-checkout URL; the provider later POSTs the webhook
+   * that {@link parseWebhook} normalizes — so no new ledger path is introduced.
+   */
+  createCheckout(input: CheckoutInput): Promise<CheckoutResult | null>;
 }

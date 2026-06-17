@@ -156,10 +156,14 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   opted in / opted out / missing mobile); email + printable-letter opt-in invitations (never SMS);
   exact STOP/HELP inbound replies; and a shipped default privacy policy with the required
   mobile/SMS data-sharing restriction. Outbound SMS stays gated on `smsConsent` + a valid number.
-- **Online-payment gateway seam** (workstream B) — a `PaymentGateway` interface + deterministic
-  stub + signature-verified `POST /api/payments/webhook` that posts a verified event through the
-  existing payment service (idempotent; no new balance math). The webhook **fails closed** without
-  `PAYMENT_WEBHOOK_SECRET`. A real adapter (+ portal "Pay now") is the remaining production step.
+- **Online-payment gateway seam** (workstream B) — a `PaymentGateway` interface (`parseWebhook`
+  inbound + `createCheckout` outbound) + deterministic stub + signature-verified
+  `POST /api/payments/webhook` that posts a verified event through the existing payment service
+  (idempotent; no new balance math). The webhook **fails closed** without `PAYMENT_WEBHOOK_SECRET`.
+  A tenant-portal **"Pay now"** flow is wired: the stub mints an HMAC-signed checkout token and a
+  dev-simulated confirm page completes through the *same* webhook→ledger path (scoped to the
+  signed-in tenant, idempotent). Dropping in a **real provider adapter** (Stripe-style
+  `createCheckout` + its webhook signature) is the remaining production step.
 - **Non-tenant payers & subsidized rent (HUD / Section 8)** — a reusable **`Payer`** directory
   (housing authorities, employers, guarantors) with **payer attribution on payments**
   (`Payment.payerId`, `payers.manage`); a per-lease **rent split** (`RentShare`: tenant portion +
