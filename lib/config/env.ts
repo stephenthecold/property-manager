@@ -80,7 +80,9 @@ const envSchema = z.object({
 
   // Online-payment gateway (Phase 5). stub default — a real adapter slots in
   // later behind the same interface. The webhook shared secret stays in env
-  // (never the DB), like the other provider secrets.
+  // (never the DB), like the other provider secrets. Optional, but the webhook
+  // route FAILS CLOSED without it: with no secret configured, POSTs to
+  // /api/payments/webhook are rejected (never posted to the ledger).
   PAYMENT_GATEWAY: z.enum(["stub"]).default("stub"),
   PAYMENT_WEBHOOK_SECRET: optionalSecret,
 

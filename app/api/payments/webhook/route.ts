@@ -14,11 +14,25 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request): Promise<Response> {
   const gateway = getPaymentGateway();
+  const secret = getEnv().PAYMENT_WEBHOOK_SECRET ?? null;
+
+  // Fail closed: without a configured shared secret we cannot authenticate the
+  // sender, so we never parse or post the untrusted body. (The gateway verifier
+  // also rejects when secret is null; this is an explicit, logged signal.)
+  if (!secret) {
+    console.warn(
+      "[payments/webhook] PAYMENT_WEBHOOK_SECRET is not configured; rejecting webhook",
+    );
+    return NextResponse.json(
+      { ok: false, error: "gateway not configured" },
+      { status: 503 },
+    );
+  }
+
   const rawBody = await req.text();
   const signature =
     req.headers.get("x-payment-signature") ??
     req.headers.get("x-webhook-signature");
-  const secret = getEnv().PAYMENT_WEBHOOK_SECRET ?? null;
 
   const event = gateway.parseWebhook({ rawBody, signature, secret });
   if (!event) {
@@ -29,7 +43,13 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const result = await recordGatewayPayment(gateway.name, event);
     if (result.status === "lease_not_found") {
-      return NextResponse.json({ ok: false, error: "lease_not_found" }, { status: 404 });
+      // Ack with 200 (no provider retry) and reveal nothing about which leases
+      // exist: a distinct 404 here would be a lease-enumeration oracle for a
+      // signed-but-misrouted event. Log it for operator diagnosis instead.
+      console.warn(
+        `[payments/webhook] verified event ${event.eventId} references an unknown lease; ignored`,
+      );
+      return NextResponse.json({ ok: false, status: "ignored" });
     }
     return NextResponse.json({ ok: true, status: result.status });
   } catch (e) {

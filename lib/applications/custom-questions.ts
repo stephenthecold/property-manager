@@ -59,6 +59,8 @@ const MAX_OPTIONS = 30;
 const MAX_LABEL = 200;
 const MAX_OPTION = 120;
 const MAX_DESC = 500;
+// Cap a free-text answer from the public form so it can't be an unbounded blob.
+const MAX_ANSWER = 2000;
 
 let autoId = 0;
 function makeId(prefix: string): string {
@@ -210,9 +212,11 @@ export function buildAnswerSnapshot(
       if (q.type === "yes_no") {
         value = "Yes";
       } else if (Array.isArray(answer)) {
+        // Choice values are validated against the option list (each <= MAX_OPTION).
         value = answer.join(", ");
       } else {
-        value = (answer as string).trim();
+        // Free-text (short_text / paragraph) is otherwise unbounded — clamp it.
+        value = (answer as string).trim().slice(0, MAX_ANSWER);
       }
       out.push({ label: q.label, value });
     }

@@ -15,7 +15,10 @@ function verifySignature(
   signature: string | null,
   secret: string | null,
 ): boolean {
-  if (!secret) return true; // dev: no secret configured -> accept
+  // Fail closed: with no shared secret we cannot authenticate the sender, so we
+  // reject rather than accept. A deployment that wants to accept gateway
+  // webhooks must configure PAYMENT_WEBHOOK_SECRET (and sign requests with it).
+  if (!secret) return false;
   if (!signature) return false;
   const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
   const a = Buffer.from(expected);
@@ -26,8 +29,9 @@ function verifySignature(
 /**
  * Deterministic, API-free gateway for dev/QA. The webhook body is JSON:
  *   { eventId, leaseId, amountCents, reference?, method?, occurredAt? }
- * authenticated by a hex `HMAC-SHA256(secret, rawBody)` signature when a secret
- * is configured. Returns null for anything malformed or unverified so the route
+ * authenticated by a hex `HMAC-SHA256(secret, rawBody)` signature. A secret is
+ * REQUIRED — with none configured the verifier fails closed and every event is
+ * rejected. Returns null for anything malformed or unverified so the route
  * records nothing. No real charge is ever pulled — it only normalizes the event.
  */
 export class StubPaymentGateway implements PaymentGateway {
