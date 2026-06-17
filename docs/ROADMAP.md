@@ -158,8 +158,17 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   mobile/SMS data-sharing restriction. Outbound SMS stays gated on `smsConsent` + a valid number.
 - **Online-payment gateway seam** (workstream B) — a `PaymentGateway` interface + deterministic
   stub + signature-verified `POST /api/payments/webhook` that posts a verified event through the
-  existing payment service (idempotent; no new balance math). A real adapter (+ portal "Pay now")
-  is the remaining production step.
+  existing payment service (idempotent; no new balance math). The webhook **fails closed** without
+  `PAYMENT_WEBHOOK_SECRET`. A real adapter (+ portal "Pay now") is the remaining production step.
+- **Non-tenant payers & subsidized rent (HUD / Section 8)** — a reusable **`Payer`** directory
+  (housing authorities, employers, guarantors) with **payer attribution on payments**
+  (`Payment.payerId`, `payers.manage`); a per-lease **rent split** (`RentShare`: tenant portion +
+  subsidy portion(s), effective-dated for recerts) managed on the tenant page; a **missing-payment
+  tracker** of expected-vs-received per payer (Payers page); and **subsidy-aware overdue reminders**
+  that don't dun a tenant for a third party's portion. All an expectation overlay — the ledger
+  still carries the whole rent as one charge (no new balance math). Pure
+  `lib/accounting/rent-shares.ts` + `lib/payers/payer-type.ts` are unit-tested. Future: a payer
+  portal + a real online-pay adapter.
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.
