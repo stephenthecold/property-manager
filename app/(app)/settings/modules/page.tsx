@@ -37,6 +37,12 @@ const MODULE_INFO = [
     description:
       "Self-service portal at /payer-portal where invited third-party payers (e.g. a HUD/Section 8 housing authority) sign in (email + password — local accounts, never your staff SSO) to a read-only view of the leases they pay, their expected share, and what they've paid. Invite/enable payers from the Payers page. Turning it off blocks payer logins immediately; the Payers directory and all data are kept.",
   },
+  {
+    key: "notices" as const,
+    label: "Notices",
+    description:
+      "Formal landlord notices to a tenant (late-rent / pay-or-quit, lease violation, notice to quit, non-renewal, rent increase). Generate from a per-type template prefilled with the lease's details, edit, then mark served (with date + method) and print. The text is snapshotted so what was served is immutable. Turning it off hides the Notices page; all notices are kept. NOTE: the default templates are starting points — review them against your local/state requirements before serving.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

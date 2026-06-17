@@ -44,6 +44,8 @@ export interface ModuleFlags {
   applications: boolean;
   /** Third-party payer portal (/payer-portal, local payer logins). */
   payerPortal: boolean;
+  /** Formal landlord notices to tenants (late/violation/quit/non-renewal). */
+  notices: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -53,6 +55,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   tenantPortal: false,
   applications: false,
   payerPortal: false,
+  notices: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -74,6 +77,8 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.payerPortal === "boolean"
         ? obj.payerPortal
         : MODULE_DEFAULTS.payerPortal,
+    notices:
+      typeof obj.notices === "boolean" ? obj.notices : MODULE_DEFAULTS.notices,
   };
 }
 

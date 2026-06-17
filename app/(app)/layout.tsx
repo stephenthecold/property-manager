@@ -50,6 +50,9 @@ export default async function AppLayout({
     ...(app.modules.applications && can("applications.view")
       ? [{ href: "/applications", label: "Applications" }]
       : []),
+    ...(app.modules.notices && can("notices.manage")
+      ? [{ href: "/notices", label: "Notices" }]
+      : []),
   ];
   const showSettings = (
     ["billing.settings", "organization.settings", "messaging.settings", "auth.settings", "users.manage"] as Capability[]
