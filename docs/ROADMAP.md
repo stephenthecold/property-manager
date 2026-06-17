@@ -191,6 +191,12 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   what was served is immutable; a notice is an operating record, never a ledger entry. Gated by
   `notices.manage`. The shipped templates are starting points — operators review them for their
   jurisdiction before serving.
+- **Inspections & deposit disposition** (module `inspections`, off by default) — schedule/record
+  property-condition inspections (move-in / move-out / routine). A move-out inspection drives a
+  **deposit disposition**: itemize deductions (`InspectionItem`) against the lease's *refundable*
+  deposit (total deposit − the non-refundable portion) and the refund (or balance owed) is computed
+  by a pure, unit-tested `lib/inspections/disposition.ts`. Inspections are operating records — they
+  never touch the ledger. Gated by `inspections.manage`.
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.

@@ -31,6 +31,7 @@ export const CAPABILITIES = [
   "applications.view",
   "applications.manage",
   "notices.manage",
+  "inspections.manage",
   "billing.settings",
   "messaging.settings",
   "organization.settings",
@@ -72,6 +73,8 @@ const MIN_ROLE: Record<Capability, Role> = {
   "applications.manage": "manager",
   // Formal landlord notices to tenants — manager+ (operational), like leases.
   "notices.manage": "manager",
+  // Property inspections + deposit disposition — manager+ (operational).
+  "inspections.manage": "manager",
   "billing.settings": "finance",
   "messaging.settings": "admin",
   "organization.settings": "admin",
@@ -102,6 +105,7 @@ export const CAPABILITY_META: Record<
   "applications.view": { label: "View rental applications", group: "Operations", description: "See the rental-application queue and submission details." },
   "applications.manage": { label: "Manage rental applications", group: "Operations", description: "Change application status, email/text the apply link, and convert an applicant into a tenant." },
   "notices.manage": { label: "Manage notices", group: "Operations", description: "Create, serve, void, and print formal landlord notices (late rent, lease violation, notice to quit, non-renewal, rent increase)." },
+  "inspections.manage": { label: "Manage inspections", group: "Operations", description: "Schedule and record property inspections and itemize move-out deposit dispositions." },
   "billing.settings": { label: "Billing defaults", group: "Settings", description: "Edit org-wide charge/late-fee/internet rate defaults." },
   "messaging.settings": { label: "Messaging settings", group: "Settings", description: "Configure the SMS provider and reminder templates." },
   "organization.settings": { label: "Organization settings", group: "Settings", description: "Edit business identity, branding, and storage configuration." },

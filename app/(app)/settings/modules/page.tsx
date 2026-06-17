@@ -43,6 +43,12 @@ const MODULE_INFO = [
     description:
       "Formal landlord notices to a tenant (late-rent / pay-or-quit, lease violation, notice to quit, non-renewal, rent increase). Generate from a per-type template prefilled with the lease's details, edit, then mark served (with date + method) and print. The text is snapshotted so what was served is immutable. Turning it off hides the Notices page; all notices are kept. NOTE: the default templates are starting points — review them against your local/state requirements before serving.",
   },
+  {
+    key: "inspections" as const,
+    label: "Inspections & deposit disposition",
+    description:
+      "Schedule and record property-condition inspections (move-in, move-out, routine). A move-out inspection drives a deposit disposition: itemize deductions against the lease's refundable deposit and the refund is computed for you. Inspections are operating records — they never touch tenant ledger balances. Turning it off hides the Inspections page; all records are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {
