@@ -162,8 +162,12 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   (idempotent; no new balance math). The webhook **fails closed** without `PAYMENT_WEBHOOK_SECRET`.
   A tenant-portal **"Pay now"** flow is wired: the stub mints an HMAC-signed checkout token and a
   dev-simulated confirm page completes through the *same* webhook→ledger path (scoped to the
-  signed-in tenant, idempotent). Dropping in a **real provider adapter** (Stripe-style
-  `createCheckout` + its webhook signature) is the remaining production step.
+  signed-in tenant, idempotent). A **real Stripe adapter** (`PAYMENT_GATEWAY=stripe`) is built —
+  REST via fetch (no SDK): `createCheckout` opens a Stripe Checkout Session (`STRIPE_SECRET_KEY`)
+  and a signature-verified `checkout.session.completed` webhook (`PAYMENT_WEBHOOK_SECRET` = the
+  `whsec_...` signing secret) posts through the existing payment service (idempotent on the Stripe
+  event id). Signature verification + event normalization are unit-tested; live charges need real
+  Stripe keys.
 - **Non-tenant payers & subsidized rent (HUD / Section 8)** — a reusable **`Payer`** directory
   (housing authorities, employers, guarantors) with **payer attribution on payments**
   (`Payment.payerId`, `payers.manage`); a per-lease **rent split** (`RentShare`: tenant portion +
