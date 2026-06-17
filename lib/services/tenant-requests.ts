@@ -3,7 +3,7 @@ import type {
   TenantRequestStatus,
   TenantRequestType,
 } from "@/lib/generated/prisma/enums";
-import { writeAudit, type AuditContext } from "@/lib/audit/audit";
+import { writeAudit, type AuditContext, type Tx } from "@/lib/audit/audit";
 import { notifyStaffCashPickup } from "@/lib/services/staff-alerts";
 
 /**
@@ -128,6 +128,56 @@ export async function updateTenantRequestStatus(i: {
  * The job carries the tenant's description; the request links to it and moves
  * to in_progress so the queue shows where the work went.
  */
+/**
+ * Keep a tenant request in step with its linked maintenance job's lifecycle.
+ * Runs INSIDE the maintenance job's transaction (so the request status and the
+ * job status commit together). The link is the loose `maintenanceJobId` ref —
+ * completing the job resolves the request; reopening it puts the request back
+ * in progress. A declined request is never reopened/auto-resolved.
+ */
+export async function syncTenantRequestForJob(
+  tx: Tx,
+  i: { jobId: string; jobStatus: "completed" | "reopened"; actor: AuditContext },
+): Promise<void> {
+  const request = await tx.tenantRequest.findFirst({
+    where: { maintenanceJobId: i.jobId },
+  });
+  if (!request || request.status === "declined") return;
+
+  if (i.jobStatus === "completed") {
+    if (request.status === "done") return;
+    await tx.tenantRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "done",
+        handledBy: i.actor.actorId ?? request.handledBy,
+        handledAt: new Date(),
+        resolutionNote: request.resolutionNote ?? "Resolved via the linked maintenance job.",
+      },
+    });
+    await writeAudit(tx, {
+      ...i.actor,
+      action: "tenant_request.auto_resolved",
+      entityType: "TenantRequest",
+      entityId: request.id,
+      after: { status: "done", maintenanceJobId: i.jobId },
+    });
+  } else {
+    if (request.status !== "done") return;
+    await tx.tenantRequest.update({
+      where: { id: request.id },
+      data: { status: "in_progress" },
+    });
+    await writeAudit(tx, {
+      ...i.actor,
+      action: "tenant_request.reopened_with_job",
+      entityType: "TenantRequest",
+      entityId: request.id,
+      after: { status: "in_progress", maintenanceJobId: i.jobId },
+    });
+  }
+}
+
 export async function convertRequestToJob(i: {
   requestId: string;
   actor: AuditContext;

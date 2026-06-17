@@ -8,6 +8,7 @@ import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
+import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
 import type { FormState } from "@/lib/forms";
@@ -168,9 +169,10 @@ export async function completeJobAction(
     return { error: "Cost cannot be negative." };
   }
 
+  const actor = await auditActor();
   await withAudit(
     {
-      ...(await auditActor()),
+      ...actor,
       action: "maintenance.job_completed",
       entityType: "MaintenanceJob",
       entityId: job.id,
@@ -180,6 +182,13 @@ export async function completeJobAction(
       const updated = await tx.maintenanceJob.update({
         where: { id: job.id },
         data: { status: "completed", completedAt: new Date(), costCents },
+      });
+      // Cohesion: resolve the originating tenant request, if this job came from
+      // one (same transaction, so request + job statuses commit together).
+      await syncTenantRequestForJob(tx, {
+        jobId: job.id,
+        jobStatus: "completed",
+        actor,
       });
       // Mirror a real cost into the Financials expense log (cross-module seam).
       // The expense survives module toggles and job reopening — it is the
@@ -205,6 +214,7 @@ export async function completeJobAction(
   revalidate(job.unitId);
   revalidatePath("/financials");
   revalidatePath("/dashboard");
+  revalidatePath("/requests");
   return { ok: true };
 }
 
@@ -215,9 +225,10 @@ export async function reopenJobAction(fd: FormData): Promise<void> {
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job || job.status !== "completed") return;
 
+  const actor = await auditActor();
   await withAudit(
     {
-      ...(await auditActor()),
+      ...actor,
       action: "maintenance.job_reopened",
       entityType: "MaintenanceJob",
       entityId: job.id,
@@ -228,10 +239,17 @@ export async function reopenJobAction(fd: FormData): Promise<void> {
         where: { id: job.id },
         data: { status: "pending", completedAt: null },
       });
+      // Cohesion: a reopened job puts its originating request back in progress.
+      await syncTenantRequestForJob(tx, {
+        jobId: job.id,
+        jobStatus: "reopened",
+        actor,
+      });
       return { result: updated, after: { status: "pending" } };
     },
   );
   revalidate(job.unitId);
+  revalidatePath("/requests");
 }
 
 export async function deleteJobAction(fd: FormData): Promise<void> {
