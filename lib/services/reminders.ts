@@ -15,7 +15,12 @@ import { resolveReminderDelivery } from "@/lib/reminders/channel";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
-import { batchLeaseAccounting, leaseSnapshot } from "@/lib/services/accounting";
+import {
+  batchLeaseAccounting,
+  leaseSnapshot,
+  snapshotFromAccounting,
+  type LeaseAccounting,
+} from "@/lib/services/accounting";
 import {
   loadTenantOverdueGuards,
   shouldSuppressTenantOverdue,
@@ -92,11 +97,15 @@ async function renderDefaultBody(
   periodKey: string | null,
   now: Date,
   dueDate?: Date | null,
+  /** Precomputed (batched) accounting — avoids a per-reminder DB round-trip. */
+  accounting?: LeaseAccounting,
 ): Promise<{ body: string; subject: string }> {
   const property = lease.unit.property;
   const tz = property.timezone;
   const currency = property.currency;
-  const snapshot = await leaseSnapshot(lease, lease.unit, now, tz);
+  const snapshot = accounting
+    ? snapshotFromAccounting(lease, lease.unit, now, tz, accounting)
+    : await leaseSnapshot(lease, lease.unit, now, tz);
 
   // Prefer the charge's REAL due date (a prorated move-in charge is keyed to
   // an anchor period that predates the start date, so the periodKey parse
@@ -142,6 +151,11 @@ export interface SendReminderInput {
   periodKey?: string | null;
   /** The charge's real due date (overrides deriving it from periodKey). */
   dueDate?: Date | null;
+  /** Precomputed lease (with unit.property) — skips a per-reminder lease fetch
+   *  when a batch sweep already loaded it. */
+  lease?: LeaseWithProperty;
+  /** Precomputed (batched) accounting for the lease — skips the snapshot query. */
+  accounting?: LeaseAccounting;
   actor: AuditContext;
   now?: Date;
 }
@@ -202,10 +216,12 @@ export async function sendReminder(
         error: "messageBody or leaseId required",
       };
     }
-    const lease = await prisma.lease.findUnique({
-      where: { id: i.leaseId },
-      include: { unit: { include: { property: true } } },
-    });
+    const lease =
+      i.lease ??
+      (await prisma.lease.findUnique({
+        where: { id: i.leaseId },
+        include: { unit: { include: { property: true } } },
+      }));
     if (!lease) {
       return { reminderId: null, status: "skipped", error: "lease not found" };
     }
@@ -216,6 +232,7 @@ export async function sendReminder(
       i.periodKey ?? null,
       now,
       i.dueDate,
+      i.accounting,
     );
     body = rendered.body;
     subject = rendered.subject;
@@ -427,9 +444,12 @@ export async function sendBulkOverdueReminders(
   for (const lease of leases) {
     try {
       const tz = lease.unit.property.timezone;
-      const { entries, charges, allocatedByCharge } = accountingByLease.get(
-        lease.id,
-      ) ?? { entries: [], charges: [], allocatedByCharge: {} };
+      const acc: LeaseAccounting = accountingByLease.get(lease.id) ?? {
+        entries: [],
+        charges: [],
+        allocatedByCharge: {},
+      };
+      const { entries, charges, allocatedByCharge } = acc;
       const open = computeOpenCharges(charges, allocatedByCharge);
       const periodKeyById = new Map(entries.map((e) => [e.id, e.periodKey]));
       // Open charges are oldest-first; the first one past its due date wins.
@@ -456,6 +476,8 @@ export async function sendBulkOverdueReminders(
           reminderType: "rent_overdue",
           periodKey: periodKeyById.get(oldestOverdue.entryId) ?? null,
           dueDate: oldestOverdue.dueDate,
+          lease,
+          accounting: acc,
           actor,
           now,
         });
@@ -535,9 +557,12 @@ export async function runScheduledReminders(
         lease.tenantId,
         ...lease.coTenants.map((ct) => ct.tenantId),
       ];
-      const { entries, charges, allocatedByCharge } = accountingByLease.get(
-        lease.id,
-      ) ?? { entries: [], charges: [], allocatedByCharge: {} };
+      const acc: LeaseAccounting = accountingByLease.get(lease.id) ?? {
+        entries: [],
+        charges: [],
+        allocatedByCharge: {},
+      };
+      const { entries, charges, allocatedByCharge } = acc;
 
       // (a) Rent due soon. Billing only mints a period's rent_charge once the
       // due date arrives, so for a future due date there is no charge row yet —
@@ -575,6 +600,8 @@ export async function runScheduledReminders(
               leaseId: lease.id,
               reminderType: "rent_due_soon",
               periodKey: candidate.periodKey,
+              lease,
+              accounting: acc,
               actor,
               now,
             });
@@ -618,6 +645,8 @@ export async function runScheduledReminders(
             reminderType: "rent_overdue",
             periodKey,
             dueDate: c.dueDate,
+            lease,
+            accounting: acc,
             actor,
             now,
           });
