@@ -197,6 +197,10 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   deposit (total deposit − the non-refundable portion) and the refund (or balance owed) is computed
   by a pure, unit-tested `lib/inspections/disposition.ts`. Inspections are operating records — they
   never touch the ledger. Gated by `inspections.manage`.
+- **Vendors** (module `vendors`, off by default) — a directory of contractors / service providers
+  (trade, contact, notes) at `/vendors`, mirroring the Payers directory pattern (add/edit,
+  activate/deactivate, audited; never hard-deleted). Reference data only — vendors never touch the
+  ledger. Gated by `vendors.manage`. Future: link a vendor to maintenance jobs / expenses.
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.

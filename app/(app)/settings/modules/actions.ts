@@ -15,6 +15,7 @@ export async function saveModulesAction(fd: FormData): Promise<void> {
       payerPortal: fd.get("payerPortal") === "on",
       notices: fd.get("notices") === "on",
       inspections: fd.get("inspections") === "on",
+      vendors: fd.get("vendors") === "on",
     },
     await auditActor(),
   );
