@@ -20,6 +20,11 @@ function formString(form: FormData, name: string): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** A plausible cuid; bounds an otherwise-free id form field. */
+function isLikelyId(v: string): boolean {
+  return /^[a-z0-9]{20,40}$/.test(v);
+}
+
 export async function POST(req: Request) {
   const auth = await authorizeApiCapability("documents.manage");
   if (!auth.ok) {
@@ -53,15 +58,25 @@ export async function POST(req: Request) {
       ? (rawUploadType as UploadType)
       : "other";
 
+  // Optional attachment refs must look like real ids before they reach the DB.
+  const tenantId = formString(form, "tenantId");
+  const paymentId = formString(form, "paymentId");
+  const receiptId = formString(form, "receiptId");
+  for (const id of [tenantId, paymentId, receiptId]) {
+    if (id && !isLikelyId(id)) {
+      return NextResponse.json({ error: "Invalid attachment id" }, { status: 400 });
+    }
+  }
+
   try {
     const { documentId } = await createUploadedDocument({
       body: Buffer.from(await file.arrayBuffer()),
       fileName: file.name,
       contentType: file.type || null,
       uploadType,
-      tenantId: formString(form, "tenantId"),
-      paymentId: formString(form, "paymentId"),
-      receiptId: formString(form, "receiptId"),
+      tenantId,
+      paymentId,
+      receiptId,
       notes: formString(form, "notes"),
       actor: { actorType: "user", actorId: auth.dbUser.id, actorEmail: auth.dbUser.email },
     });

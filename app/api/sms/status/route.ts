@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/config/env";
 import { verifyTwilioSignature } from "@/lib/reminders/twilio-signature";
+import { getEffectiveTwilioAuthToken } from "@/lib/services/app-settings";
 import { recordDeliveryStatus } from "@/lib/services/reminders";
 
 export const runtime = "nodejs";
@@ -19,15 +20,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // Only a signature-verified Twilio callback may mutate reminder state.
+    // Authenticate against the EFFECTIVE Twilio token (DB or env), like the
+    // inbound webhook — otherwise a DB-configured Twilio drops status callbacks.
     // With any other provider (stub default) there is NO legitimate caller of
-    // this public endpoint, so the body is ignored entirely — otherwise it
-    // would be an unauthenticated mutation in the default configuration.
-    const env = getEnv();
-    if (env.SMS_PROVIDER !== "twilio" || !env.SMS_AUTH_TOKEN) {
+    // this public endpoint, so the body is ignored entirely.
+    const token = await getEffectiveTwilioAuthToken();
+    if (!token) {
       return new NextResponse(null, { status: 204 });
     }
+    const env = getEnv();
     const ok = verifyTwilioSignature({
-      authToken: env.SMS_AUTH_TOKEN,
+      authToken: token,
       url: `${env.APP_URL.replace(/\/+$/, "")}/api/sms/status`,
       params,
       signature: req.headers.get("x-twilio-signature") ?? "",

@@ -24,6 +24,13 @@ export const runtime = "nodejs";
 
 const INVALID = Symbol("invalid");
 
+/** A plausible cuid (lowercase alphanumeric). Bounds an otherwise-free id param
+ * before it reaches a ledger-enumerating query — defense in depth (Prisma
+ * already parameterizes). */
+function isLikelyId(v: string): boolean {
+  return /^[a-z0-9]{20,40}$/.test(v);
+}
+
 /**
  * Parse an optional "yyyy-MM-dd" param as a bound in `tz`; `endOfDay` makes it
  * inclusive. Bounds are civil days in the report's timezone (the property's tz
@@ -69,8 +76,8 @@ export async function GET(
     headers = RENT_ROLL_HEADERS;
   } else if (type === "tenant-ledger") {
     const tenantId = q.get("tenantId");
-    if (!tenantId) {
-      return new NextResponse("tenantId is required", { status: 400 });
+    if (!tenantId || !isLikelyId(tenantId)) {
+      return new NextResponse("Valid tenantId is required", { status: 400 });
     }
     rows = (await getTenantLedger(tenantId)) as unknown as Record<
       string,
@@ -79,8 +86,8 @@ export async function GET(
     headers = LEDGER_HEADERS;
   } else if (type === "unit-ledger") {
     const unitId = q.get("unitId");
-    if (!unitId) {
-      return new NextResponse("unitId is required", { status: 400 });
+    if (!unitId || !isLikelyId(unitId)) {
+      return new NextResponse("Valid unitId is required", { status: 400 });
     }
     rows = (await getUnitLedger(unitId)) as unknown as Record<string, string>[];
     headers = UNIT_LEDGER_HEADERS;

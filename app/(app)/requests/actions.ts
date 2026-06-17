@@ -19,6 +19,7 @@ const STATUSES: TenantRequestStatus[] = ["open", "in_progress", "done", "decline
 
 export async function setRequestStatusAction(fd: FormData): Promise<void> {
   await requireCapability("portal.manage");
+  await assertModuleEnabled("tenantPortal");
   const requestId = String(fd.get("requestId") ?? "").trim();
   const status = String(fd.get("status") ?? "").trim() as TenantRequestStatus;
   if (!requestId || !STATUSES.includes(status)) fail("Invalid request or status.");
@@ -35,6 +36,7 @@ export async function setRequestStatusAction(fd: FormData): Promise<void> {
 
 export async function convertRequestToJobAction(fd: FormData): Promise<void> {
   await requireCapability("portal.manage");
+  await assertModuleEnabled("tenantPortal");
   await assertModuleEnabled("maintenance");
   const requestId = String(fd.get("requestId") ?? "").trim();
   if (!requestId) fail("Invalid request.");

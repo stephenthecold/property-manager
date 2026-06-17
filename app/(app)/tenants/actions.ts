@@ -13,6 +13,7 @@ import {
   setPortalAccountActive,
 } from "@/lib/services/portal-auth";
 import { createTrialToken, startImpersonation } from "@/lib/services/impersonation";
+import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import type { FormState } from "@/lib/forms";
@@ -143,6 +144,7 @@ export async function invitePortalAccountAction(
   fd: FormData,
 ): Promise<PortalInviteState> {
   await requireCapability("portal.manage");
+  await assertModuleEnabled("tenantPortal");
   const tenantId = str(fd, "tenantId");
   if (!tenantId) return { error: "Missing tenant." };
   const result = await invitePortalAccount({
@@ -170,6 +172,7 @@ export async function setPortalAccountActiveAction(
   fd: FormData,
 ): Promise<PortalInviteState> {
   await requireCapability("portal.manage");
+  await assertModuleEnabled("tenantPortal");
   const tenantId = str(fd, "tenantId");
   const isActive = str(fd, "isActive") === "true";
   if (!tenantId) return { error: "Missing tenant." };
@@ -199,6 +202,7 @@ async function requestMeta(): Promise<{ ip: string | null; userAgent: string | n
 /** Open the portal AS this tenant in the current browser (portal.impersonate). */
 export async function impersonateTenantAction(fd: FormData): Promise<void> {
   await requireCapability("portal.impersonate");
+  await assertModuleEnabled("tenantPortal");
   const tenantId = str(fd, "tenantId");
   if (!tenantId) throw new Error("Missing tenant.");
   const actor = await auditActor();
@@ -213,6 +217,7 @@ export async function createTrialLinkAction(
   fd: FormData,
 ): Promise<PortalInviteState> {
   await requireCapability("portal.impersonate");
+  await assertModuleEnabled("tenantPortal");
   const tenantId = str(fd, "tenantId");
   if (!tenantId) return { error: "Missing tenant." };
   try {

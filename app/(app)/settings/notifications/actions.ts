@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
 import { withAudit } from "@/lib/audit/audit";
 import { auditActor, requireRole } from "@/lib/auth/session";
 

@@ -143,7 +143,10 @@ export async function postPayment(
           tenantId: lease.tenantId,
           entryType: "payment",
           amountCents: -input.amountCents, // payments reduce what is owed
-          currency: lease.unit ? "USD" : "USD",
+          // Ledger currency follows the documented one-currency-per-property
+          // simplification; display always reads property.currency. (Was a
+          // dead `lease.unit ? "USD" : "USD"` ternary.)
+          currency: "USD",
           periodKey: input.appliedPeriodKey ?? null,
           effectiveDate: input.paymentDate,
           sourceType: "payment",
