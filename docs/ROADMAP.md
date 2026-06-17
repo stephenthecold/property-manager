@@ -200,7 +200,9 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
 - **Vendors** (module `vendors`, off by default) — a directory of contractors / service providers
   (trade, contact, notes) at `/vendors`, mirroring the Payers directory pattern (add/edit,
   activate/deactivate, audited; never hard-deleted). Reference data only — vendors never touch the
-  ledger. Gated by `vendors.manage`. Future: link a vendor to maintenance jobs / expenses.
+  ledger. Gated by `vendors.manage`. A vendor can be **assigned to a maintenance job and to a
+  property expense** (optional pickers, shown only when the module is on); completing a job carries
+  its vendor onto the auto-logged maintenance expense.
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.
