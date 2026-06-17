@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHECKOUT_TTL_MS,
   signCheckoutToken,
   verifyCheckoutToken,
 } from "@/lib/providers/payment/checkout-token";
 
 const SECRET = "whsec_test";
-const claims = { leaseId: "lease_abc", amountCents: "120000", nonce: "n1" };
+const NOW = 1_700_000_000_000;
+const claims = { leaseId: "lease_abc", amountCents: "120000", nonce: "n1", iat: NOW };
 
 describe("checkout-token", () => {
   it("round-trips signed claims", () => {
     const token = signCheckoutToken(claims, SECRET);
-    expect(verifyCheckoutToken(token, SECRET)).toEqual(claims);
+    expect(verifyCheckoutToken(token, SECRET, { nowMs: NOW })).toEqual(claims);
   });
 
   it("rejects a wrong secret", () => {
@@ -33,10 +35,34 @@ describe("checkout-token", () => {
   });
 
   it("rejects a non-numeric amount claim", () => {
-    const bad = signCheckoutToken(
-      { ...claims, amountCents: "12.50" },
+    const bad = signCheckoutToken({ ...claims, amountCents: "12.50" }, SECRET);
+    expect(verifyCheckoutToken(bad, SECRET, { nowMs: NOW })).toBeNull();
+  });
+
+  it("accepts a token within the TTL window", () => {
+    const token = signCheckoutToken(claims, SECRET);
+    expect(
+      verifyCheckoutToken(token, SECRET, { nowMs: NOW + CHECKOUT_TTL_MS - 1 }),
+    ).toEqual(claims);
+  });
+
+  it("rejects an expired token", () => {
+    const token = signCheckoutToken(claims, SECRET);
+    expect(
+      verifyCheckoutToken(token, SECRET, { nowMs: NOW + CHECKOUT_TTL_MS + 1 }),
+    ).toBeNull();
+  });
+
+  it("rejects an implausibly future token (beyond clock skew)", () => {
+    const future = signCheckoutToken({ ...claims, iat: NOW + 60 * 60 * 1000 }, SECRET);
+    expect(verifyCheckoutToken(future, SECRET, { nowMs: NOW })).toBeNull();
+  });
+
+  it("rejects a token with no iat", () => {
+    const noIat = signCheckoutToken(
+      { leaseId: "l", amountCents: "100", nonce: "n" } as never,
       SECRET,
     );
-    expect(verifyCheckoutToken(bad, SECRET)).toBeNull();
+    expect(verifyCheckoutToken(noIat, SECRET, { nowMs: NOW })).toBeNull();
   });
 });

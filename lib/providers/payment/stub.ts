@@ -98,7 +98,12 @@ export class StubPaymentGateway implements PaymentGateway {
     if (!secret) return null;
     const nonce = randomBytes(12).toString("hex");
     const token = signCheckoutToken(
-      { leaseId: input.leaseId, amountCents: input.amountCents.toString(), nonce },
+      {
+        leaseId: input.leaseId,
+        amountCents: input.amountCents.toString(),
+        nonce,
+        iat: Date.now(),
+      },
       secret,
     );
     return { url: `/portal/pay/${token}`, reference: `stub_${nonce}` };
