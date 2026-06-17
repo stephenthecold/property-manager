@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { PAYER_TYPES, payerTypeLabel } from "@/lib/payers/payer-type";
 import type { PayerType } from "@/lib/generated/prisma/enums";
+import { formatCurrency } from "@/lib/money";
+import { getSubsidyExpectations } from "@/lib/services/rent-shares";
 import {
   createPayerAction,
   setPayerActiveAction,
@@ -9,6 +12,7 @@ import {
 } from "./actions";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,10 +91,20 @@ function PayerFields({ defaults }: { defaults?: PayerDefaults }) {
 export default async function PayersPage() {
   await requireCapability("payers.manage");
 
-  const payers = await prisma.payer.findMany({
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    include: { _count: { select: { payments: true } } },
-  });
+  const [payers, expectations] = await Promise.all([
+    prisma.payer.findMany({
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      include: { _count: { select: { payments: true } } },
+    }),
+    getSubsidyExpectations(new Date()),
+  ]);
+
+  // Missing first (largest shortfall), then the rest, for the tracker table.
+  const tracker = [...expectations].sort(
+    (a, b) => Number(b.missingCents - a.missingCents),
+  );
+  const missingRows = tracker.filter((r) => r.missingCents > 0n);
+  const totalMissingCents = missingRows.reduce((s, r) => s + r.missingCents, 0n);
 
   return (
     <div className="space-y-6">
@@ -115,6 +129,89 @@ export default async function PayersPage() {
         </FormDialog>
       </div>
 
+      {tracker.length > 0 && (
+        <Card
+          className={`border-t-4 ${
+            totalMissingCents > 0n ? "border-t-red-500" : "border-t-emerald-500"
+          }`}
+        >
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-baseline justify-between gap-2">
+              <span>Expected subsidy payments (this month)</span>
+              {totalMissingCents > 0n ? (
+                <span className="text-sm font-normal text-red-600 dark:text-red-400">
+                  {formatCurrency(totalMissingCents)} not yet received
+                </span>
+              ) : (
+                <span className="text-sm font-normal text-emerald-600 dark:text-emerald-400">
+                  All expected payments received
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <DataTable
+              emptyMessage="No subsidized leases yet."
+              columns={[
+                { key: "tenant", label: "Tenant" },
+                { key: "unit", label: "Unit", className: "hidden sm:table-cell" },
+                { key: "payer", label: "Expected from" },
+                { key: "expected", label: "Expected", align: "right", numeric: true },
+                { key: "received", label: "Received", align: "right", numeric: true, className: "hidden md:table-cell" },
+                { key: "missing", label: "Missing", align: "right", numeric: true },
+              ]}
+              rows={tracker.map((r) => ({
+                key: `${r.leaseId}:${r.payerId ?? "tenant"}`,
+                sortValues: [
+                  r.tenantName,
+                  `${r.propertyName} · ${r.unitLabel}`,
+                  r.payerName,
+                  String(r.expectedCents),
+                  String(r.receivedCents),
+                  String(r.missingCents),
+                ],
+                cells: [
+                  <Link
+                    key="t"
+                    href={`/tenants/${r.tenantId}`}
+                    className="font-medium hover:underline"
+                  >
+                    {r.tenantName}
+                  </Link>,
+                  `${r.propertyName} · ${r.unitLabel}`,
+                  <span key="p" className={r.payerId ? "" : "text-muted-foreground"}>
+                    {r.payerName}
+                  </span>,
+                  <span key="e" className="tabular-nums">
+                    {formatCurrency(r.expectedCents, r.currency)}
+                  </span>,
+                  <span key="r" className="tabular-nums">
+                    {formatCurrency(r.receivedCents, r.currency)}
+                  </span>,
+                  <span
+                    key="m"
+                    className={`tabular-nums ${
+                      r.missingCents > 0n
+                        ? "font-medium text-red-600 dark:text-red-400"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {r.missingCents > 0n ? formatCurrency(r.missingCents, r.currency) : "—"}
+                  </span>,
+                ],
+              }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              &ldquo;Received&rdquo; is this month&apos;s posted payments attributed
+              to each payer. Set a lease&apos;s split on the tenant&apos;s page.
+              This is an expectation overlay — tenant balances always come from
+              the ledger.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <h2 className="text-lg font-semibold">Payer directory</h2>
       <DataTable
         emptyMessage="No payers yet. Add a housing authority or other third-party payer."
         columns={[

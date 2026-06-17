@@ -582,6 +582,7 @@ model Lease {
   coTenants     LeaseTenant[]
   deposits      LeaseDeposit[]
   expenses      PropertyExpense[]
+  rentShares    RentShare[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -741,9 +742,36 @@ model Payer {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  payments Payment[]
+  payments   Payment[]
+  rentShares RentShare[]
 
   @@index([isActive, name])
+}
+
+/// A line of a lease's monthly rent that a particular party is expected to pay
+/// (e.g. "$200 tenant portion" + "$800 HAP subsidy from Metro Housing
+/// Authority"). payerId null = the tenant's portion. This is an EXPECTATION
+/// overlay only: the ledger still carries the whole rent as one charge, and
+/// rent shares never post entries or affect balances/allocation. Effective-dated
+/// so a recertification supersedes prior splits (set endDate on the old rows).
+model RentShare {
+  id            String    @id @default(cuid())
+  leaseId       String
+  payerId       String? // null = tenant portion
+  label         String
+  amountCents   BigInt // expected monthly amount from this payer
+  effectiveDate DateTime @default(now())
+  endDate       DateTime? // exclusive; null = open-ended
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lease Lease  @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payer Payer? @relation(fields: [payerId], references: [id], onDelete: SetNull)
+
+  @@index([leaseId, effectiveDate])
+  @@index([payerId])
 }
 
 // ---------------------------------------------------------------------------
