@@ -1,0 +1,45 @@
+import { getAppSettings } from "@/lib/services/app-settings";
+import { getPayerSession } from "@/lib/payer-portal/session";
+import { signOutPayerAction } from "./actions";
+import { Button } from "@/components/ui/button";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/**
+ * Payer-portal shell — deliberately minimal: business name, the signed-in payer,
+ * and a sign-out button. /payer-portal is a staff-middleware PUBLIC_PREFIX;
+ * every page under it re-checks the PAYER session itself.
+ */
+export default async function PayerPortalLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const settings = await getAppSettings();
+  const identity = await getPayerSession();
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <div>
+          <div className="text-lg font-semibold">{settings.businessName}</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            Payer portal
+          </div>
+        </div>
+        {identity && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">{identity.payer.name}</span>
+            <form action={signOutPayerAction}>
+              <Button type="submit" variant="outline" size="sm">
+                Sign out
+              </Button>
+            </form>
+          </div>
+        )}
+      </header>
+      {children}
+    </div>
+  );
+}

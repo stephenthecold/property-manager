@@ -1,10 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
 import { parsePayerType } from "@/lib/payers/payer-type";
+import {
+  invitePayerPortalAccount,
+  setPayerPortalAccountActive,
+} from "@/lib/services/payer-portal-auth";
 import type { FormState } from "@/lib/forms";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -130,6 +135,33 @@ export async function updatePayerAction(
 
   revalidatePath("/payers");
   return { ok: true };
+}
+
+/** Invite a payer to (or re-send / reset) the payer portal — emails a link. */
+export async function invitePayerPortalAction(fd: FormData): Promise<void> {
+  await requireCapability("payers.manage");
+  const payerId = str(fd, "payerId");
+  if (!payerId) throw new Error("Missing payer id.");
+  const res = await invitePayerPortalAccount({ payerId, actor: await auditActor() });
+  revalidatePath("/payers");
+  if (!res.ok) {
+    redirect(`/payers?portalError=${encodeURIComponent(res.error ?? "Invite failed.")}`);
+  }
+  if (res.linkForOperator) {
+    // Nothing emailed (provider off/stub) — hand the link to the operator.
+    redirect(`/payers?portalLink=${encodeURIComponent(res.linkForOperator)}`);
+  }
+  redirect("/payers?portalSent=1");
+}
+
+/** Enable/disable a payer's portal login (disabling drops their sessions). */
+export async function setPayerPortalActiveAction(fd: FormData): Promise<void> {
+  await requireCapability("payers.manage");
+  const payerId = str(fd, "payerId");
+  const isActive = str(fd, "isActive") === "true";
+  if (!payerId) throw new Error("Missing payer id.");
+  await setPayerPortalAccountActive({ payerId, isActive, actor: await auditActor() });
+  revalidatePath("/payers");
 }
 
 export async function setPayerActiveAction(fd: FormData): Promise<void> {

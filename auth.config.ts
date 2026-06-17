@@ -21,6 +21,7 @@ const PUBLIC_PREFIXES = [
   "/sign", // tenant e-sign pages — gated by a single-use token hash, not a session
   "/portal", // tenant portal — its own local session (lib/portal/session.ts), never staff auth
   "/api/portal", // portal-scoped APIs (file downloads) — same portal session check
+  "/payer-portal", // payer portal — its own local session (lib/payer-portal/session.ts), never staff auth
   "/privacy", // public compliance page (10DLC) — operator-authored, no data
   "/terms", // public compliance page (10DLC) — operator-authored, no data
   "/apply", // public rental-application intake — module-gated at the service layer

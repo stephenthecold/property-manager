@@ -742,10 +742,60 @@ model Payer {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  payments   Payment[]
-  rentShares RentShare[]
+  payments      Payment[]
+  rentShares    RentShare[]
+  portalAccount PayerPortalAccount?
 
   @@index([isActive, name])
+}
+
+// ---------------------------------------------------------------------------
+// Payer portal — a separate LOCAL auth lane (like the tenant portal) so a
+// third-party payer (e.g. a housing authority) can sign in to see the leases
+// they pay and what's expected/received. Email + password set via an invite
+// link; sessions are opaque 256-bit cookie tokens stored only as sha-256
+// hashes. Read-only: never staff Users, never OIDC, never the tenant lane.
+// ---------------------------------------------------------------------------
+
+model PayerPortalAccount {
+  id      String @id @default(cuid())
+  payerId String @unique
+  payer   Payer  @relation(fields: [payerId], references: [id], onDelete: Cascade)
+
+  // Login identifier, copied from the payer at invite time but owned here so
+  // editing the payer record never silently changes a login.
+  email String? @unique
+
+  passwordHash String? // argon2id; null until the invite is accepted
+  isActive     Boolean @default(true)
+
+  // Invite / password-reset link (sha-256 of the raw token).
+  inviteTokenHash String?   @unique
+  inviteExpiresAt DateTime?
+
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions PayerPortalSession[]
+}
+
+model PayerPortalSession {
+  id        String             @id @default(cuid())
+  accountId String
+  account   PayerPortalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash String             @unique // sha-256 of the raw cookie token
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime           @default(now())
+
+  @@index([accountId])
+  @@index([expiresAt])
 }
 
 /// A line of a lease's monthly rent that a particular party is expected to pay

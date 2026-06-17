@@ -7,11 +7,14 @@ import { formatCurrency } from "@/lib/money";
 import { getSubsidyExpectations } from "@/lib/services/rent-shares";
 import {
   createPayerAction,
+  invitePayerPortalAction,
   setPayerActiveAction,
+  setPayerPortalActiveAction,
   updatePayerAction,
 } from "./actions";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,13 +91,28 @@ function PayerFields({ defaults }: { defaults?: PayerDefaults }) {
   );
 }
 
-export default async function PayersPage() {
+export default async function PayersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireCapability("payers.manage");
+  const sp = await searchParams;
+  const first = (k: string): string => {
+    const v = sp[k];
+    return (Array.isArray(v) ? v[0] : v) ?? "";
+  };
+  const portalLink = first("portalLink");
+  const portalSent = first("portalSent");
+  const portalError = first("portalError");
 
   const [payers, expectations] = await Promise.all([
     prisma.payer.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: { _count: { select: { payments: true } } },
+      include: {
+        _count: { select: { payments: true } },
+        portalAccount: { select: { isActive: true, passwordHash: true } },
+      },
     }),
     getSubsidyExpectations(new Date()),
   ]);
@@ -128,6 +146,26 @@ export default async function PayersPage() {
           <PayerFields />
         </FormDialog>
       </div>
+
+      {portalError && (
+        <Alert variant="destructive">
+          <AlertDescription>{portalError}</AlertDescription>
+        </Alert>
+      )}
+      {portalSent && (
+        <Alert>
+          <AlertDescription>Portal invite emailed.</AlertDescription>
+        </Alert>
+      )}
+      {portalLink && (
+        <Alert>
+          <AlertDescription>
+            Invite created, but email isn&apos;t configured — share this single-use
+            link (expires in 7 days):{" "}
+            <span className="font-mono break-all">{portalLink}</span>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {tracker.length > 0 && (
         <Card
@@ -220,9 +258,19 @@ export default async function PayersPage() {
           { key: "contact", label: "Contact", sortable: false, className: "hidden md:table-cell" },
           { key: "payments", label: "Payments", align: "right", numeric: true, className: "hidden sm:table-cell" },
           { key: "status", label: "Status" },
+          { key: "portal", label: "Portal", sortable: false, className: "hidden lg:table-cell" },
           { key: "actions", label: "", align: "right", sortable: false },
         ]}
-        rows={payers.map((p) => ({
+        rows={payers.map((p) => {
+          const acct = p.portalAccount;
+          const portalStatus = !acct
+            ? "Not invited"
+            : !acct.passwordHash
+              ? "Invited"
+              : !acct.isActive
+                ? "Disabled"
+                : "Active";
+          return {
           key: p.id,
           sortValues: [
             p.name,
@@ -230,6 +278,7 @@ export default async function PayersPage() {
             null,
             p._count.payments,
             p.isActive ? "active" : "inactive",
+            null,
             null,
           ],
           cells: [
@@ -249,6 +298,38 @@ export default async function PayersPage() {
             ) : (
               <span key="s" className="text-muted-foreground">Inactive</span>
             ),
+            <div key="portal" className="flex flex-col items-start gap-1">
+              <span
+                className={
+                  acct?.isActive && acct?.passwordHash
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground"
+                }
+              >
+                {portalStatus}
+              </span>
+              <div className="flex gap-2">
+                <form action={invitePayerPortalAction}>
+                  <input type="hidden" name="payerId" value={p.id} />
+                  <Button type="submit" variant="outline" size="xs">
+                    {acct ? "Resend" : "Invite"}
+                  </Button>
+                </form>
+                {acct && (
+                  <form action={setPayerPortalActiveAction}>
+                    <input type="hidden" name="payerId" value={p.id} />
+                    <input
+                      type="hidden"
+                      name="isActive"
+                      value={acct.isActive ? "false" : "true"}
+                    />
+                    <Button type="submit" variant="outline" size="xs">
+                      {acct.isActive ? "Disable" : "Enable"}
+                    </Button>
+                  </form>
+                )}
+              </div>
+            </div>,
             <div key="a" className="flex justify-end gap-2">
               <FormDialog
                 trigger="Edit"
@@ -278,7 +359,8 @@ export default async function PayersPage() {
               </form>
             </div>,
           ],
-        }))}
+          };
+        })}
       />
     </div>
   );
