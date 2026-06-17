@@ -46,6 +46,8 @@ export interface ModuleFlags {
   payerPortal: boolean;
   /** Formal landlord notices to tenants (late/violation/quit/non-renewal). */
   notices: boolean;
+  /** Property-condition inspections + move-out deposit disposition. */
+  inspections: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -56,6 +58,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   applications: false,
   payerPortal: false,
   notices: false,
+  inspections: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -79,6 +82,10 @@ function resolveModules(raw: unknown): ModuleFlags {
         : MODULE_DEFAULTS.payerPortal,
     notices:
       typeof obj.notices === "boolean" ? obj.notices : MODULE_DEFAULTS.notices,
+    inspections:
+      typeof obj.inspections === "boolean"
+        ? obj.inspections
+        : MODULE_DEFAULTS.inspections,
   };
 }
 

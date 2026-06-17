@@ -584,6 +584,7 @@ model Lease {
   expenses      PropertyExpense[]
   rentShares    RentShare[]
   notices       Notice[]
+  inspections   Inspection[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -868,6 +869,60 @@ model Notice {
 
   @@index([leaseId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Inspections (module "inspections") — scheduled/recorded property-condition
+// inspections (move-in / move-out / routine). A move-out inspection drives a
+// DEPOSIT DISPOSITION: itemized deductions (InspectionItem) against the lease's
+// refundable deposit → computed refund. Operating records, never ledger entries:
+// they don't touch tenant balances (deposits live on LeaseDeposit, not the ledger).
+// ---------------------------------------------------------------------------
+
+enum InspectionType {
+  move_in
+  move_out
+  routine
+  other
+}
+
+enum InspectionStatus {
+  scheduled
+  completed
+  canceled
+}
+
+model Inspection {
+  id           String           @id @default(cuid())
+  leaseId      String
+  type         InspectionType
+  status       InspectionStatus @default(scheduled)
+  scheduledFor DateTime?
+  completedAt  DateTime?
+  inspector    String?
+  summary      String?
+  createdBy    String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  lease Lease            @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  items InspectionItem[]
+
+  @@index([leaseId])
+  @@index([status])
+}
+
+/// Itemized deposit-disposition deduction on a (move-out) inspection.
+model InspectionItem {
+  id           String   @id @default(cuid())
+  inspectionId String
+  label        String
+  amountCents  BigInt   @default(0) // deduction against the refundable deposit
+  createdAt    DateTime @default(now())
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
 }
 
 // ---------------------------------------------------------------------------
