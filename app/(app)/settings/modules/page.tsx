@@ -49,6 +49,12 @@ const MODULE_INFO = [
     description:
       "Schedule and record property-condition inspections (move-in, move-out, routine). A move-out inspection drives a deposit disposition: itemize deductions against the lease's refundable deposit and the refund is computed for you. Inspections are operating records — they never touch tenant ledger balances. Turning it off hides the Inspections page; all records are kept.",
   },
+  {
+    key: "vendors" as const,
+    label: "Vendors",
+    description:
+      "A directory of contractors and service providers (plumber, electrician, HVAC, landscaper, cleaner, …) with trade, contact details, and notes. A reference list only — vendors never affect tenant balances. Turning it off hides the Vendors page; all entries are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

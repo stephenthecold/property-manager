@@ -48,6 +48,8 @@ export interface ModuleFlags {
   notices: boolean;
   /** Property-condition inspections + move-out deposit disposition. */
   inspections: boolean;
+  /** Directory of contractors/service providers (/vendors). */
+  vendors: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -59,6 +61,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   payerPortal: false,
   notices: false,
   inspections: false,
+  vendors: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -86,6 +89,8 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.inspections === "boolean"
         ? obj.inspections
         : MODULE_DEFAULTS.inspections,
+    vendors:
+      typeof obj.vendors === "boolean" ? obj.vendors : MODULE_DEFAULTS.vendors,
   };
 }
 

@@ -926,6 +926,43 @@ model InspectionItem {
 }
 
 // ---------------------------------------------------------------------------
+// Vendors (module "vendors") — a directory of contractors/service providers
+// (plumber, electrician, landscaper, …). A reference directory only; it never
+// touches the ledger. Linking a vendor to maintenance jobs / expenses is a
+// future enhancement.
+// ---------------------------------------------------------------------------
+
+enum VendorTrade {
+  general
+  plumbing
+  electrical
+  hvac
+  landscaping
+  cleaning
+  appliance
+  pest_control
+  roofing
+  other
+}
+
+model Vendor {
+  id             String      @id @default(cuid())
+  name           String
+  trade          VendorTrade @default(general)
+  contactName    String?
+  email          String?
+  phone          String?
+  mailingAddress String?
+  notes          String?
+  isActive       Boolean     @default(true)
+  createdBy      String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([isActive, name])
+}
+
+// ---------------------------------------------------------------------------
 // Phase 2 / 3 (committed now, unused in Phase 1)
 // ---------------------------------------------------------------------------
 
