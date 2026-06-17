@@ -24,6 +24,24 @@ export async function listVendors() {
   });
 }
 
+/** Active vendors for assignment pickers (maintenance jobs / expenses). */
+export async function listActiveVendors() {
+  return prisma.vendor.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, trade: true },
+  });
+}
+
+/** True iff the id is an existing, active vendor — gate before assigning. */
+export async function isActiveVendor(vendorId: string): Promise<boolean> {
+  const v = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: { isActive: true },
+  });
+  return !!v?.isActive;
+}
+
 export async function createVendor(input: {
   data: VendorInput;
   actor: AuditContext;

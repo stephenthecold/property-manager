@@ -959,6 +959,10 @@ model Vendor {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  // Loose attribution: jobs/expenses may reference a vendor (SetNull on delete).
+  jobs     MaintenanceJob[]
+  expenses PropertyExpense[]
+
   @@index([isActive, name])
 }
 
@@ -1103,6 +1107,7 @@ model PropertyExpense {
   amountCents BigInt
   incurredOn  DateTime
   description String?
+  vendorId    String? // optional vendor paid (module "vendors")
   // Cross-module seam: e.g. sourceType="maintenance_job", sourceId=MaintenanceJob.id
   sourceType  String?
   sourceId    String?
@@ -1113,10 +1118,12 @@ model PropertyExpense {
   building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
   unit     Unit?     @relation(fields: [unitId], references: [id], onDelete: SetNull)
   lease    Lease?    @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  vendor   Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
   @@index([propertyId, incurredOn])
   @@index([unitId])
   @@index([category])
+  @@index([vendorId])
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,16 +1158,19 @@ model MaintenanceJob {
   notifyDaysBefore Int     @default(2)
   completedAt DateTime?
   costCents   BigInt? // entered on completion; mirrored to PropertyExpense
+  vendorId    String? // optional assigned vendor (module "vendors")
   createdBy   String?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
   property Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   unit     Unit?               @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  vendor   Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   updates  MaintenanceUpdate[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
+  @@index([vendorId])
 }
 
 /// Threaded progress notes on a maintenance job (the "ticket" timeline). An
