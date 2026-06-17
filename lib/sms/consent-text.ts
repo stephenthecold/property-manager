@@ -1,7 +1,7 @@
 /**
  * Canonical SMS consent language + compliance copy (DB-free). The opt-in UI
  * renders SMS_CONSENT_TEXT verbatim (with the Privacy Policy / Terms phrases as
- * links); the SAME string is stored on every SmsConsentRecord so the exact text
+ * links); the SAME string is stored on every SMS ConsentRecord so the exact text
  * a person agreed to is provable. Bump SMS_CONSENT_VERSION whenever the wording
  * changes.
  */
@@ -41,7 +41,7 @@ export const SMS_START_REPLY =
   "You are now opted in to tenant SMS notifications. Reply HELP for help, " +
   "STOP to opt out.";
 
-/** The valid sources for an SmsConsentRecord. */
+/** The valid sources for an SMS ConsentRecord. */
 export type SmsConsentSource =
   | "public_sms_opt_in_form"
   | "rental_application"
