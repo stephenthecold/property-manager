@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApplyForm } from "./apply-form";
 
@@ -53,6 +54,7 @@ export default async function ApplyPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-10">
+      <BrandColorStyle color={settings.brandColor} />
       <div className="space-y-1 text-center">
         <div className="text-lg font-semibold">{settings.businessName}</div>
         <h1 className="text-2xl font-semibold tracking-wide">Rental application</h1>

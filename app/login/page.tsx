@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAuthSettings } from "@/lib/auth/settings";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { needsSetup } from "@/lib/auth/setup";
 import { signInWithAuthentik } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export default async function LoginPage() {
 
   return (
     <div className="flex flex-1 items-center justify-center p-6">
+      <BrandColorStyle color={app.brandColor} />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">{app.businessName}</CardTitle>

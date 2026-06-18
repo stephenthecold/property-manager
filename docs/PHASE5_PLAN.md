@@ -144,9 +144,10 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   preserved automatically (only the tint changes; greys are rejected). A `<BrandColorStyle>`
   server component injects the override into the staff app + tenant/payer portal shells; blank →
   the shipped theme. Unit-tested (`lib/config/brand.test.ts`).
-- Still pending: **letter-tile fallback colour** for the favicon/avatar in
-  [`app/icon.tsx`](../app/icon.tsx) — fold into the same brand colour. Public `/apply` + `/login`
-  could also pick up the override (they aren't under the three branded layouts).
+- ✅ **Done — favicon + public pages.** The favicon letter tile (`app/icon.tsx`) now tints to the
+  brand colour with a contrast-correct letter (`readableTextColor`), and the public `/login` +
+  `/apply` pages inject `<BrandColorStyle>` too — so the whole surface (staff, portals, public)
+  carries the brand colour.
 
 ### H2. Display & locale (Settings → Organization)
 - **Currency / number / date locale.** [`lib/money.ts`](../lib/money.ts) `formatCurrency` defaults

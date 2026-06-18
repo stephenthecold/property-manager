@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/db";
 import { getFileStorage } from "@/lib/providers/storage";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { isValidHexColor, readableTextColor } from "@/lib/config/brand";
 
 /**
  * Dynamic favicon: the uploaded business logo (Settings → Organization) when
@@ -64,6 +65,10 @@ export default async function Icon() {
   }
 
   const initial = (app.businessName?.trim()?.[0] ?? "P").toUpperCase();
+  // Tint the letter tile with the brand colour (contrast-correct letter), else
+  // the default navy gradient.
+  const brand =
+    app.brandColor && isValidHexColor(app.brandColor) ? app.brandColor : null;
   return new ImageResponse(
     (
       <div
@@ -74,10 +79,10 @@ export default async function Icon() {
           alignItems: "center",
           justifyContent: "center",
           borderRadius: 12,
-          color: "#f1f5f9",
+          color: brand ? readableTextColor(brand) : "#f1f5f9",
           fontSize: 40,
           fontWeight: 700,
-          background: "linear-gradient(160deg, #31415e 0%, #1d2a45 100%)",
+          background: brand ?? "linear-gradient(160deg, #31415e 0%, #1d2a45 100%)",
         }}
       >
         {initial}

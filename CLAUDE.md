@@ -92,8 +92,7 @@ docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
   S3 should use bucket SSE instead (presigned URLs bypass the app).
 - Batch accounting reads with `batchLeaseSnapshots()` (2 queries for N leases) instead of
   calling `leaseSnapshot()` in a loop; both share the same pure compute.
-- One known lint error pre-exists in `record-payment-dialog.tsx`
-  (react-hooks/set-state-in-effect); everything else lints clean.
+- `npm run lint` is clean (zero errors); keep it that way.
 
 When extending (Phases 2–5), attach to existing seams (`sourceType/sourceId`, provider
 interfaces, `AuditLog`) rather than reshaping the schema. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
