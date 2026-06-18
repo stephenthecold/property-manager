@@ -11,6 +11,7 @@ import {
   snapshotFromAccounting,
 } from "@/lib/services/accounting";
 import { listDocuments } from "@/lib/services/documents";
+import { listInboundForTenant } from "@/lib/services/inbound-messages";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
@@ -168,7 +169,7 @@ export default async function TenantDetail({
   );
 
   // Independent reads for this tenant — run them together instead of serially.
-  const [ledger, payments, documents, reminders] = await Promise.all([
+  const [ledger, payments, documents, reminders, inboundMessages] = await Promise.all([
     activeLease
       ? prisma.ledgerEntry.findMany({
           where: { leaseId: activeLease.id },
@@ -187,7 +188,9 @@ export default async function TenantDetail({
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
+    listInboundForTenant(tenant.id),
   ]);
+  const recentInbound = inboundMessages.slice(0, 5);
 
   const currency = activeLease?.unit.property.currency ?? "USD";
 
@@ -1210,6 +1213,46 @@ export default async function TenantDetail({
         </CardHeader>
         <CardContent>
           <ActivityTimeline events={activity} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Messages</CardTitle>
+          <Link href="/messages" className="text-sm font-medium hover:underline">
+            Open inbox
+          </Link>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            emptyMessage="No inbound messages from this tenant."
+            columns={[
+              { key: "received", label: "Received" },
+              { key: "body", label: "Message", sortable: false },
+            ]}
+            rows={recentInbound.map((m) => ({
+              key: m.id,
+              sortValues: [m.receivedAt.toISOString(), null],
+              cells: [
+                <span key="r" className="whitespace-nowrap text-sm">
+                  {m.receivedAt.toLocaleDateString()}
+                  {!m.readAt && (
+                    <Badge
+                      variant="outline"
+                      className="ml-2 border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                    >
+                      New
+                    </Badge>
+                  )}
+                </span>,
+                <span key="b" className="whitespace-pre-wrap break-words">
+                  {m.body || (
+                    <span className="text-muted-foreground">(empty)</span>
+                  )}
+                </span>,
+              ],
+            }))}
+          />
         </CardContent>
       </Card>
 
