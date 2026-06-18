@@ -1253,9 +1253,29 @@ model RecurringTask {
   notifyDaysBefore Int     @default(2)
   createdAt  DateTime  @default(now())
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property   Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  executions RecurringTaskExecution[]
 
   @@index([propertyId, active])
+}
+
+// One completion record per task per property-timezone month. Re-marking a task
+// in the same month updates the existing row (upsert on [taskId, periodKey]), so
+// `periodKey` is the "YYYY-MM" of the month the task was done FOR. This is the
+// per-occurrence execution log; it never touches tenant balances.
+model RecurringTaskExecution {
+  id           String   @id @default(cuid())
+  taskId       String
+  periodKey    String // "YYYY-MM" in the property timezone
+  doneOn       DateTime @default(now())
+  doneByUserId String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  task RecurringTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, periodKey])
+  @@index([taskId])
 }
 
 // ---------------------------------------------------------------------------
