@@ -53,6 +53,10 @@ export default async function LeaseAbstractPage({
     DateTime.fromJSDate(d, { zone: tz })
       .setLocale("en-US")
       .toLocaleString(DateTime.DATE_FULL);
+  // Single source of truth for the end-of-term display: a month-to-month lease
+  // reads "month-to-month" even when an original endDate lingers (e.g. a fixed
+  // term that rolled to MTM), so the term row never contradicts the flag/note.
+  const endDisplay = monthToMonth ? "month-to-month" : vars.end_date;
 
   let logoUrl: string | null = null;
   if (app.logoDocumentId) {
@@ -161,7 +165,7 @@ export default async function LeaseAbstractPage({
             </h2>
             <dl>
               {termRow("Lease start", vars.start_date)}
-              {termRow("Lease end", vars.end_date)}
+              {termRow("Lease end", endDisplay)}
             </dl>
             {monthToMonth && (
               <p className="mt-2 text-xs text-muted-foreground">
