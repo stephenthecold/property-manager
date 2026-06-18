@@ -55,6 +55,7 @@ export default async function UsersSettingsPage({
             yourself.
           </p>
           <DataTable
+            emptyMessage="No staff users yet."
             columns={[
               { key: "email", label: "Email" },
               { key: "name", label: "Name", className: "hidden sm:table-cell" },
