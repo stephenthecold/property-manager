@@ -70,6 +70,9 @@ export default async function AppLayout({
           ...(app.modules.maintenance && can("maintenance.manage")
             ? [{ href: "/maintenance", label: "Maintenance" }]
             : []),
+          ...(app.modules.maintenance && can("maintenance.manage")
+            ? [{ href: "/assets", label: "Assets" }]
+            : []),
           ...(app.modules.inspections && can("inspections.manage")
             ? [{ href: "/inspections", label: "Inspections" }]
             : []),
