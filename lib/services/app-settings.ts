@@ -104,6 +104,8 @@ export interface ResolvedAppSettings {
   businessPhone: string | null;
   businessEmail: string | null;
   logoDocumentId: string | null;
+  /** H1 brand accent colour (hex); null -> the shipped theme. */
+  brandColor: string | null;
   receiptFooter: string | null;
   /** Receipt-number prefix; null/blank -> "RCT" (sanitized at use). */
   receiptPrefix: string | null;
@@ -243,6 +245,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     businessPhone: row?.businessPhone ?? null,
     businessEmail: row?.businessEmail ?? null,
     logoDocumentId: row?.logoDocumentId ?? null,
+    brandColor: row?.brandColor ?? null,
     receiptFooter: row?.receiptFooter ?? null,
     receiptPrefix: row?.receiptPrefix ?? null,
     portalWelcomeText: row?.portalWelcomeText ?? null,
@@ -738,6 +741,7 @@ export interface OrganizationSettingsInput {
   businessPhone: string | null;
   businessEmail: string | null;
   logoDocumentId?: string | null; // undefined = leave unchanged
+  brandColor: string | null;
   receiptFooter: string | null;
   receiptPrefix: string | null;
   portalWelcomeText: string | null;
@@ -764,6 +768,7 @@ export async function saveOrganizationSettings(
     ...(input.logoDocumentId !== undefined
       ? { logoDocumentId: input.logoDocumentId }
       : {}),
+    brandColor: input.brandColor,
     receiptFooter: input.receiptFooter,
     receiptPrefix: input.receiptPrefix,
     portalWelcomeText: input.portalWelcomeText,

@@ -17,6 +17,7 @@ export interface OrganizationInitial {
   businessAddress: string;
   businessPhone: string;
   businessEmail: string;
+  brandColor: string;
   receiptFooter: string;
   receiptPrefix: string;
   portalWelcomeText: string;
@@ -35,6 +36,10 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024; // keep in sync with actions.ts
 export function OrganizationForm({ initial }: { initial: OrganizationInitial }) {
   const router = useRouter();
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [brandColor, setBrandColor] = useState(initial.brandColor);
+  const brandSwatch = /^#[0-9a-fA-F]{6}$/.test(brandColor.trim())
+    ? brandColor.trim()
+    : "#2563eb";
   const [state, formAction, pending] = useActionState<OrganizationState, FormData>(
     async (prev, fd) => {
       const next = await saveOrganizationAction(prev, fd);
@@ -144,6 +149,42 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
         {logoError && <p className="text-sm text-destructive">{logoError}</p>}
         <p className="text-xs text-muted-foreground">
           PNG, JPEG, or WebP, max 2 MB. Appears on printable receipts.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="brandColor">Brand colour</Label>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            aria-label="Brand colour picker"
+            value={brandSwatch}
+            onChange={(e) => setBrandColor(e.target.value)}
+            className="h-9 w-12 cursor-pointer rounded border p-1"
+          />
+          <Input
+            id="brandColor"
+            name="brandColor"
+            value={brandColor}
+            onChange={(e) => setBrandColor(e.target.value)}
+            placeholder="#2563eb"
+            className="w-40"
+          />
+          {brandColor.trim() !== "" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setBrandColor("")}
+            >
+              Reset
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Recolours buttons, links, and highlights — the colour&rsquo;s hue is
+          applied to both light and dark themes (contrast is preserved). Blank
+          uses the default theme.
         </p>
       </div>
 

@@ -7,6 +7,7 @@ import { doSignOut } from "@/app/login/actions";
 import { exitViewAs } from "@/app/(app)/settings/users/actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { NavLinks, type NavEntry } from "@/components/app/nav-links";
+import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { TablePageSizeProvider } from "@/components/app/data-table";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
+      <BrandColorStyle color={app.brandColor} />
       <header className="print-hidden border-b bg-card">
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 xl:px-8">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

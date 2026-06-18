@@ -50,6 +50,7 @@ export default async function OrganizationSettingsPage() {
               businessAddress: row?.businessAddress ?? "",
               businessPhone: row?.businessPhone ?? "",
               businessEmail: row?.businessEmail ?? "",
+              brandColor: row?.brandColor ?? "",
               receiptFooter: row?.receiptFooter ?? "",
               receiptPrefix: row?.receiptPrefix ?? "",
               portalWelcomeText: row?.portalWelcomeText ?? "",

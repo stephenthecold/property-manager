@@ -7,6 +7,7 @@ import {
   saveStorageConfig,
 } from "@/lib/services/app-settings";
 import { sanitizeReceiptPrefix } from "@/lib/accounting/receipts";
+import { isValidHexColor } from "@/lib/config/brand";
 import { createUploadedDocument } from "@/lib/services/documents";
 
 export interface OrganizationState {
@@ -68,6 +69,10 @@ export async function saveOrganizationAction(
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Enter a valid contact email." };
   }
+  const brandColor = str(fd, "brandColor");
+  if (brandColor && !isValidHexColor(brandColor)) {
+    return { error: "Brand colour must be a hex value like #2563eb." };
+  }
   const timezone = str(fd, "defaultTimezone");
   if (timezone) {
     try {
@@ -86,6 +91,7 @@ export async function saveOrganizationAction(
         businessPhone: str(fd, "businessPhone"),
         businessEmail: email,
         logoDocumentId,
+        brandColor: brandColor ? brandColor.toLowerCase() : null,
         receiptFooter: str(fd, "receiptFooter"),
         // Stored raw-ish; sanitized to A-Z/0-9 (max 8) at use, but normalize
         // here too so the saved value reflects what will actually print.
