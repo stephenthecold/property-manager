@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import { buildAuditWhere } from "@/lib/services/audit-export";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,30 +42,7 @@ export default async function AuditPage({
   const pageRaw = Number.parseInt(first("page"), 10);
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
 
-  const where: Prisma.AuditLogWhereInput = {};
-  if (filters.action) {
-    where.action = { contains: filters.action, mode: "insensitive" };
-  }
-  if (filters.entityType) {
-    where.entityType = { contains: filters.entityType, mode: "insensitive" };
-  }
-  if (filters.entityId) {
-    where.entityId = { contains: filters.entityId, mode: "insensitive" };
-  }
-  if (filters.actorEmail) {
-    where.actorEmail = { contains: filters.actorEmail, mode: "insensitive" };
-  }
-  const createdAt: { gte?: Date; lte?: Date } = {};
-  if (filters.from) {
-    const d = new Date(`${filters.from}T00:00:00`);
-    if (!Number.isNaN(d.getTime())) createdAt.gte = d;
-  }
-  if (filters.to) {
-    // Inclusive "to": end of that day.
-    const d = new Date(`${filters.to}T23:59:59.999`);
-    if (!Number.isNaN(d.getTime())) createdAt.lte = d;
-  }
-  if (createdAt.gte || createdAt.lte) where.createdAt = createdAt;
+  const where = buildAuditWhere(filters);
 
   // Fetch one extra row to know whether a next page exists.
   const rows = await prisma.auditLog.findMany({
@@ -85,13 +62,26 @@ export default async function AuditPage({
     return s ? `/audit?${s}` : "/audit";
   };
 
+  // CSV export of the current filter set (same filters, no page bound).
+  const exportHref = (() => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v);
+    const s = qs.toString();
+    return s ? `/api/audit/export?${s}` : "/api/audit/export";
+  })();
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Audit log</h1>
-        <p className="text-sm text-muted-foreground">
-          Append-only record of every mutation. Newest first.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Audit log</h1>
+          <p className="text-sm text-muted-foreground">
+            Append-only record of every mutation. Newest first.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" render={<Link href={exportHref} />}>
+          Export CSV
+        </Button>
       </div>
 
       <Card>
