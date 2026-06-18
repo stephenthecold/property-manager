@@ -193,6 +193,12 @@ export default async function LeaseAgreementPage({
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="print-hidden flex flex-wrap items-center gap-2">
         <PrintButton />
+        <Button
+          variant="ghost"
+          render={<Link href={`/leases/${lease.id}/abstract`} />}
+        >
+          Lease abstract
+        </Button>
         <Button variant="ghost" render={<Link href="/leases" />}>
           Back to leases
         </Button>
