@@ -123,10 +123,11 @@ export default async function MaintenanceJobPage({
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: { id: true, name: true, email: true },
   });
+  const assignee = job.assignedToUserId
+    ? staff.find((u) => u.id === job.assignedToUserId)
+    : null;
   const assigneeName = job.assignedToUserId
-    ? (staff.find((u) => u.id === job.assignedToUserId)?.name?.trim() ||
-        staff.find((u) => u.id === job.assignedToUserId)?.email ||
-        "Former staff")
+    ? assignee?.name?.trim() || assignee?.email || "Former staff"
     : null;
   const open = isOpenStatus(job.status);
   const sla = slaState({ status: job.status, dueDate: job.dueDate, now: new Date() });

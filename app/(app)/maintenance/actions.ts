@@ -466,7 +466,8 @@ export async function assignJobAction(
 /**
  * Reopen a canceled job back to `pending` (plain-form variant for the row
  * button). Completed jobs go through reopenJobAction instead — that path also
- * clears completedAt and restores the originating request.
+ * clears completedAt. Like reopen, this restores the originating tenant request
+ * to in-progress, since cancelling resolved it (mirrors reopenJobAction).
  */
 export async function uncancelJobAction(fd: FormData): Promise<void> {
   await requireCapability("maintenance.manage");
@@ -475,9 +476,10 @@ export async function uncancelJobAction(fd: FormData): Promise<void> {
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job || job.status !== "canceled") return;
 
+  const actor = await auditActor();
   await withAudit(
     {
-      ...(await auditActor()),
+      ...actor,
       action: "maintenance.status_changed",
       entityType: "MaintenanceJob",
       entityId: job.id,
@@ -488,10 +490,16 @@ export async function uncancelJobAction(fd: FormData): Promise<void> {
         where: { id: job.id },
         data: { status: "pending" },
       });
+      await syncTenantRequestForJob(tx, {
+        jobId: job.id,
+        jobStatus: "reopened",
+        actor,
+      });
       return { result: updated, after: { status: "pending" } };
     },
   );
   revalidate(job.unitId);
+  revalidatePath("/requests");
 }
 
 /** Attach a photo/invoice (image or PDF) to a maintenance job. */
