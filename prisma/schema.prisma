@@ -543,6 +543,7 @@ model Tenant {
   portalAccount TenantPortalAccount?
   requests      TenantRequest[]
   trialTokens   TenantPortalTrialToken[]
+  inboundMessages InboundMessage[]
 
   @@index([lastName, firstName])
 }
@@ -1081,6 +1082,7 @@ model InboundMessage {
   fromPhone   String
   body        String
   tenantId    String? // matched tenant by phone; null when unknown
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   providerSid String? // Twilio MessageSid (for dedup/traceability)
   receivedAt  DateTime @default(now())
   readAt      DateTime?

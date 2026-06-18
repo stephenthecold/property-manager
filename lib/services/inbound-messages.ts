@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { writeAudit } from "@/lib/audit/audit";
 import { phoneKey } from "@/lib/portal/identity";
 
@@ -96,6 +97,8 @@ export interface InboundMessageRow {
   tenant: { id: string; firstName: string; lastName: string } | null;
 }
 
+// Typed against InboundMessageSelect so an invalid field (e.g. a relation that
+// doesn't exist) is a compile error here, not a runtime Prisma throw.
 const INBOUND_SELECT = {
   id: true,
   fromPhone: true,
@@ -105,7 +108,7 @@ const INBOUND_SELECT = {
   receivedAt: true,
   readAt: true,
   tenant: { select: { id: true, firstName: true, lastName: true } },
-} as const;
+} satisfies Prisma.InboundMessageSelect;
 
 /** Inbound messages newest-first, optionally only unread, for the staff inbox. */
 export async function listInboundMessages(

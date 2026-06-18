@@ -18,3 +18,12 @@ CREATE TABLE IF NOT EXISTS "InboundMessage" (
 CREATE INDEX IF NOT EXISTS "InboundMessage_tenantId_idx" ON "InboundMessage" ("tenantId");
 CREATE INDEX IF NOT EXISTS "InboundMessage_readAt_idx" ON "InboundMessage" ("readAt");
 CREATE INDEX IF NOT EXISTS "InboundMessage_receivedAt_idx" ON "InboundMessage" ("receivedAt");
+
+-- Tenant FK: a captured message keeps its history if the tenant is later removed
+-- (SET NULL), matching the model's onDelete: SetNull. Guard so it's re-runnable.
+DO $$ BEGIN
+  ALTER TABLE "InboundMessage"
+    ADD CONSTRAINT "InboundMessage_tenantId_fkey"
+    FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id")
+    ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null; END $$;
