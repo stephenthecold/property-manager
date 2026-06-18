@@ -6,6 +6,37 @@ SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) �
 [`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. This file is the working
 guide; [`docs/`](docs/) has the details.
 
+## Working agreement
+
+- **State the verification plan first.** Before starting any task, say how you'll verify it —
+  which checks/skills from [Verification](#verification), and for user-visible work how you'll
+  render and observe it. No work begins without a verification plan.
+- **Verify and report after.** When done, actually run that verification and report results: what
+  passed, and what you couldn't check and why. "It typechecks" is not proof the behaviour works.
+- **Hot zones — ask first.** Before changing any code in a hot zone (below), STOP and ask, and
+  explain the **blast radius** (what breaks, who's affected, whether it's reversible). Don't touch
+  it until the user says go. Hot zones — money, auth, and anything irreversible:
+  - **Money & ledger** — [`lib/money.ts`](lib/money.ts), [`lib/accounting/`](lib/accounting/),
+    and ledger writes / `postPayment` / reversals in [`lib/services/`](lib/services/). *A bug
+    corrupts balances for every lease.*
+  - **Payments** — [`app/(app)/payments/`](app/(app)/payments), payment providers in
+    [`lib/providers/payment/`](lib/providers/payment), the gateway webhook
+    [`app/api/payments/webhook`](app/api/payments/webhook), idempotency keys. *Double charges,
+    lost or duplicated payments.*
+  - **Auth & capabilities** — `proxy.ts`, `auth.ts`, `auth.config.ts`,
+    [`lib/auth/permissions.ts`](lib/auth/permissions.ts), [`lib/auth/session.ts`](lib/auth/session.ts),
+    break-glass. *App-wide lockout or privilege escalation.*
+  - **Portal/payer auth lanes** — [`lib/portal/session.ts`](lib/portal/session.ts),
+    [`lib/payer-portal/session.ts`](lib/payer-portal/session.ts),
+    [`lib/services/portal-auth.ts`](lib/services/portal-auth.ts). *A tenant/payer seeing another's
+    data.*
+  - **Schema & migrations** — [`prisma/schema.prisma`](prisma/schema.prisma) +
+    [`prisma/migrations/`](prisma/migrations). *Irreversible data change on deploy; migrations only
+    run forward.*
+  - **Audit & billing worker** — [`lib/audit/`](lib/audit) (append-only) and
+    [`lib/services/billing.ts`](lib/services/billing.ts) + the charge/late-fee idempotency indexes.
+    *A weakened audit trail, or duplicate/missed charges across all active leases.*
+
 ## Commands
 
 ```bash
