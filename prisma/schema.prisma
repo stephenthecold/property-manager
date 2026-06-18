@@ -454,6 +454,35 @@ model Property {
   maintenanceJobs MaintenanceJob[]
   recurringTasks  RecurringTask[]
   rentalApplications RentalApplication[]
+  assets          Asset[]
+}
+
+// Asset / equipment registry (module "maintenance"): physical equipment
+// (water heaters, HVAC, appliances) tracked per property/unit with warranty
+// awareness. An operating record — never a ledger entry, never touches tenant
+// balances. Standalone from MaintenanceJob (no job link in this model).
+model Asset {
+  id                String    @id @default(cuid())
+  name              String
+  category          String? // free text, e.g. "HVAC", "Appliance"
+  propertyId        String
+  unitId            String?
+  make              String?
+  model             String?
+  serialNumber      String?
+  installedOn       DateTime?
+  warrantyExpiresOn DateTime?
+  notes             String?
+  active            Boolean   @default(true)
+  createdBy         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId])
+  @@index([unitId])
 }
 
 model Building {
@@ -506,6 +535,7 @@ model Unit {
   expenses        PropertyExpense[]
   maintenanceJobs MaintenanceJob[]
   rentalApplications RentalApplication[]
+  assets          Asset[]
 
   @@index([propertyId])
   @@index([buildingId])
