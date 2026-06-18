@@ -8,6 +8,7 @@ import { PaymentMethod } from "@/lib/generated/prisma/enums";
 import { destroyPortalSession, requirePortalSession } from "@/lib/portal/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { createTenantRequest } from "@/lib/services/tenant-requests";
+import { saveMaintenancePhotos } from "@/lib/services/maintenance-photos";
 import { setTenantSmsConsent } from "@/lib/services/sms-consent";
 
 /**
@@ -145,9 +146,28 @@ export async function submitMaintenanceRequestAction(
     message,
   });
   if (!result.ok) return { error: result.error };
+
+  // Attach any photos to the request the tenant just created (their own).
+  // Best-effort: a storage problem still leaves the request submitted.
+  const photos = fd.getAll("photos").filter((f): f is File => f instanceof File);
+  let photoNote = "";
+  if (photos.length > 0) {
+    const res = await saveMaintenancePhotos({
+      files: photos,
+      tenantRequestId: result.requestId,
+      tenantId: tenant.id,
+      note: "Tenant photo",
+      uploadType: "tenant_document",
+      actor: { actorType: "system", actorEmail: "portal (tenant)" },
+    });
+    if (res.saved > 0) photoNote = ` ${res.saved} photo${res.saved === 1 ? "" : "s"} attached.`;
+    else if (res.storageError) photoNote = " (Photos couldn't be saved, but your request went through.)";
+    else if (photos.length > 0) photoNote = " (Photos were skipped — use JPG/PNG/WebP under 10 MB.)";
+  }
+
   revalidatePath("/portal");
   return {
     ok: true,
-    message: "Request submitted — you can track its status below.",
+    message: `Request submitted — you can track its status below.${photoNote}`,
   };
 }

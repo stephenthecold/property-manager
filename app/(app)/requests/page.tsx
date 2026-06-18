@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,34 @@ export default async function RequestsPage({
       })
     : [];
   const leaseById = new Map(leases.map((l) => [l.id, l]));
+
+  // Tenant-attached photos for the visible requests (bounded by photo count,
+  // not request count). Signed URLs are best-effort — a storage outage just
+  // hides the thumbnails.
+  const photoDocs = requests.length
+    ? await prisma.uploadedDocument.findMany({
+        where: {
+          tenantRequestId: { in: requests.map((r) => r.id) },
+          fileType: { startsWith: "image/" },
+        },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+  const photosByRequest = new Map<string, { id: string; url: string | null; fileName: string | null }[]>();
+  await Promise.all(
+    photoDocs.map(async (d) => {
+      if (!d.tenantRequestId) return;
+      let url: string | null = null;
+      try {
+        url = (await getDocumentDownloadUrl(d.id))?.url ?? null;
+      } catch {
+        url = null;
+      }
+      const list = photosByRequest.get(d.tenantRequestId) ?? [];
+      list.push({ id: d.id, url, fileName: d.fileName });
+      photosByRequest.set(d.tenantRequestId, list);
+    }),
+  );
 
   const statusBadge = (status: string) => (
     <Badge
@@ -96,6 +125,7 @@ export default async function RequestsPage({
           { key: "type", label: "Type" },
           { key: "where", label: "Unit", className: "hidden md:table-cell" },
           { key: "message", label: "Message", sortable: false },
+          { key: "photos", label: "Photos", sortable: false, className: "hidden lg:table-cell" },
           { key: "status", label: "Status" },
           { key: "actions", label: "Actions", align: "right", sortable: false },
         ]}
@@ -109,6 +139,7 @@ export default async function RequestsPage({
               `${r.tenant.lastName}, ${r.tenant.firstName}`,
               r.type,
               lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : "",
+              null,
               null,
               r.status,
               null,
@@ -129,6 +160,36 @@ export default async function RequestsPage({
               <span key="m" className="block max-w-[20rem] truncate text-sm" title={r.message ?? ""}>
                 {r.message || "—"}
               </span>,
+              (() => {
+                const ph = photosByRequest.get(r.id) ?? [];
+                if (ph.length === 0)
+                  return (
+                    <span key="ph" className="text-xs text-muted-foreground">
+                      —
+                    </span>
+                  );
+                return (
+                  <div key="ph" className="flex flex-wrap gap-1">
+                    {ph.slice(0, 4).map((p) =>
+                      p.url ? (
+                        <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL */}
+                          <img
+                            src={p.url}
+                            alt={p.fileName ?? "Tenant photo"}
+                            className="h-10 w-10 rounded border object-cover hover:opacity-90"
+                          />
+                        </a>
+                      ) : null,
+                    )}
+                    {ph.length > 4 && (
+                      <span className="self-center text-xs text-muted-foreground">
+                        +{ph.length - 4}
+                      </span>
+                    )}
+                  </div>
+                );
+              })(),
               <span key="s">{statusBadge(r.status)}</span>,
               open ? (
                 <div key="a" className="flex flex-wrap justify-end gap-2">

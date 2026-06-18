@@ -23,6 +23,7 @@ export interface CreateDocumentInput {
   paymentId?: string | null;
   receiptId?: string | null;
   maintenanceJobId?: string | null;
+  tenantRequestId?: string | null;
   notes?: string | null;
   actor: AuditContext;
 }
@@ -66,6 +67,7 @@ export async function createUploadedDocument(
           paymentId: input.paymentId ?? null,
           receiptId: input.receiptId ?? null,
           maintenanceJobId: input.maintenanceJobId ?? null,
+          tenantRequestId: input.tenantRequestId ?? null,
           notes: input.notes ?? null,
           createdBy: input.actor.actorId ?? null,
         },
@@ -116,6 +118,7 @@ export async function listDocuments(
     paymentId?: string;
     receiptId?: string;
     maintenanceJobId?: string;
+    tenantRequestId?: string;
     uploadType?: UploadType;
   } = {},
 ): Promise<UploadedDocument[]> {
@@ -125,9 +128,26 @@ export async function listDocuments(
       ...(filter.paymentId ? { paymentId: filter.paymentId } : {}),
       ...(filter.receiptId ? { receiptId: filter.receiptId } : {}),
       ...(filter.maintenanceJobId ? { maintenanceJobId: filter.maintenanceJobId } : {}),
+      ...(filter.tenantRequestId ? { tenantRequestId: filter.tenantRequestId } : {}),
       ...(filter.uploadType ? { uploadType: filter.uploadType } : {}),
     },
     orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Image documents attached to a maintenance request and/or its converted job,
+ *  newest first. Used by the staff requests + maintenance-job views. */
+export async function listMaintenancePhotos(filter: {
+  tenantRequestId?: string;
+  maintenanceJobId?: string;
+}): Promise<UploadedDocument[]> {
+  const or: { tenantRequestId?: string; maintenanceJobId?: string }[] = [];
+  if (filter.tenantRequestId) or.push({ tenantRequestId: filter.tenantRequestId });
+  if (filter.maintenanceJobId) or.push({ maintenanceJobId: filter.maintenanceJobId });
+  if (or.length === 0) return [];
+  return prisma.uploadedDocument.findMany({
+    where: { OR: or, fileType: { startsWith: "image/" } },
+    orderBy: { createdAt: "asc" },
   });
 }
 
