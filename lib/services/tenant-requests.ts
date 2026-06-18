@@ -227,6 +227,12 @@ export async function convertRequestToJob(i: {
         handledAt: new Date(),
       },
     });
+    // Carry the tenant's request photos onto the job so they show on the work
+    // order (the loose tenantRequestId ref stays for provenance).
+    await tx.uploadedDocument.updateMany({
+      where: { tenantRequestId: request.id, maintenanceJobId: null },
+      data: { maintenanceJobId: job.id },
+    });
     await writeAudit(tx, {
       ...i.actor,
       action: "tenant_request.converted_to_job",

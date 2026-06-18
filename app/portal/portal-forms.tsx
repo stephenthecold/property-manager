@@ -148,6 +148,20 @@ export function MaintenanceRequestForm({ leaseId }: { leaseId: string | null }) 
           required
         />
       </div>
+      <div className="space-y-1">
+        <Label htmlFor="maintenance-photos">Photos (optional)</Label>
+        <input
+          id="maintenance-photos"
+          name="photos"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/70"
+        />
+        <p className="text-xs text-muted-foreground">
+          Up to 5 images (JPG/PNG/WebP, 10 MB each). A picture helps staff fix it faster.
+        </p>
+      </div>
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Submitting…" : "Submit request"}
       </Button>

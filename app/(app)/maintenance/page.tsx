@@ -343,7 +343,9 @@ export default async function MaintenancePage({
                   j.property.name,
                   j.unit?.unitNumber ?? "—",
                   <span key="t" title={j.details ?? undefined} className="font-medium">
-                    {j.title}
+                    <Link href={`/maintenance/${j.id}`} className="hover:underline">
+                      {j.title}
+                    </Link>
                     {j.vendor && (
                       <span className="block text-xs font-normal text-muted-foreground">
                         Vendor: {j.vendor.name}
