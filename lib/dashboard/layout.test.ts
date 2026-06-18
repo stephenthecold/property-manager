@@ -25,14 +25,17 @@ describe("resolveLayout", () => {
     });
     expect(r.bubbleOrder.slice(0, 2)).toEqual(["overdue", "net_month"]);
     expect(r.bubbleOrder).toHaveLength(DASHBOARD_BUBBLE_IDS.length);
-    expect(r.sectionOrder).toEqual(["payments", "vacancy", "tenants"]);
+    // saved order first, then any not-yet-saved known sections appended
+    expect(r.sectionOrder).toEqual(["payments", "vacancy", "lease_expirations", "tenants"]);
+    expect(r.sectionOrder).toHaveLength(DASHBOARD_SECTION_IDS.length);
     expect(r.collapsed).toEqual({ tenants: true });
     expect(r.hidden).toEqual({ collected_today: true, tenants: true });
   });
 
   it("migrates the legacy { order } (with a dropped 'stats') into sectionOrder", () => {
     const r = resolveLayout({ order: ["stats", "payments", "vacancy", "tenants"], collapsed: { vacancy: true } });
-    expect(r.sectionOrder).toEqual(["payments", "vacancy", "tenants"]);
+    // dropped "stats", legacy order kept, then the newer "lease_expirations" appended
+    expect(r.sectionOrder).toEqual(["payments", "vacancy", "tenants", "lease_expirations"]);
     expect(r.collapsed).toEqual({ vacancy: true });
     expect(r.bubbleOrder).toEqual([...DASHBOARD_BUBBLE_IDS]); // bubbles default on
     expect(r.hidden).toEqual({});
