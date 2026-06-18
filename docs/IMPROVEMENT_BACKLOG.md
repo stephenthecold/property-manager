@@ -11,15 +11,34 @@ refresh it anytime with the **`/competitive-audit`** skill; turn any item into a
   money; skip enterprise-only complexity.
 
 Tags: `[GAP|POLISH|COHESION]` · **V**alue H/M/L · **E**ffort S/M/L · 🔥 = touches a CLAUDE.md hot zone
-(ask first + blast radius before building).
+(ask first + blast radius before building) · ✅ = shipped (PR #).
 
 ---
 
-## Focus areas (chosen)
+## ✅ Shipped this session
+
+Built across parallel worktree-agent batches (each through the verification gate + `/code-review`,
+`/security-review` where it applied):
+
+- **E** — Maintenance-request photos (#71) · **I** — Per-tenant activity timeline (#73) + inbound-SMS
+  source (#78) · **I** — ⌘K global search (#74) · **H** — Two-way SMS inbox (#75) · **G** — Work-order
+  lifecycle + assignee + SLA (#77) · **G** — Preventive-maintenance execution log (#79) · **G** —
+  Asset/warranty registry (#80) · **D** — Lease-expiration alerts (#81) · **E** — Portal notices inbox
+  (#82) · **I** — Audit-log CSV export (#83).
+- Plus tooling: the `/competitive-audit` + `/feature-intake` skills (#70) and the CLAUDE.md
+  "parallelize with agents" clause (#72).
+
+Already present in `main` before this pass (don't rebuild): **Inspections** (lease-scoped, with items),
+**reports CSV export** (`/api/reports/[type]`), **audit-log filters**, and partial reminder delivery
+status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
+
+---
+
+## Focus areas — what's left
 
 ### D. Leasing lifecycle
-- `[GAP] V:H E:S` — **Lease-expiration pipeline + alerts** — dashboard card + weekly digest 60 days
-  out (`AppSettings.leaseExpirationAlertDays`). Seam: `lib/services/reminders.ts`, dashboard.
+- ✅ **#81** Lease-expiration alerts — *shipped as a dashboard section.* Follow-up: the weekly **digest**
+  + a configurable window (`AppSettings.leaseExpirationAlertDays`) are still open.
 - `[GAP] V:H E:M` — **Renewal offer→acceptance** — staff mints an offer (new rent/term), tenant
   accepts + e-signs. New `LeaseRenewalOffer`; reuse e-sign token/signature path (`SigningRequest.kind`).
 - `[COHESION] V:H E:M` — 🔥 **Deposit→ledger move-out statement** — itemize deductions, post refund or
@@ -30,46 +49,38 @@ Tags: `[GAP|POLISH|COHESION]` · **V**alue H/M/L · **E**ffort S/M/L · 🔥 = t
 - `[GAP] V:M E:L` — Guarantor/co-signer; bulk lease term actions.
 
 ### E. Resident portal
-- `[GAP] V:H E:M` — **Maintenance-request photos** — tenant attaches ≤3 images from the portal; staff +
-  tenant see them. Reuse `createUploadedDocument`; store ids on `TenantRequest`. *(First-batch quick win.)*
-- `[GAP] V:M E:M` — **Notices inbox** — tenant-scoped `/portal/notices` over the existing `Notice` model;
-  mark-viewed. 
+- ✅ **#71** Maintenance-request photos. ✅ **#82** Notices inbox.
 - `[GAP] V:H E:M` — In-portal **autopay enrollment** *(depends on a real payment gateway — see C)*.
 - `[GAP] V:H E:S` — **Renewal acceptance in portal** (pairs with D renewal flow).
-- `[POLISH] V:M E:S` — Ledger date/type filters + tenant CSV download; payment-method hint on Pay-now.
+- `[POLISH] V:M E:S` — Ledger date/type filters + **tenant CSV download** of their ledger; payment-method
+  hint on Pay-now.
 - `[GAP] V:M E:L` — PWA/offline.
 
 ### G. Maintenance & ops
-- `[GAP] V:H E:M` — **Work-order lifecycle + assignment + SLA** — status enum (draft/assigned/in_progress/
-  on_hold/completed/canceled), `assignedTo`, due/overdue via pure `lib/maintenance/sla.ts`.
-- `[POLISH] V:M E:M` — **Inspection templates + photos + report** — standardized move-in/out forms with
-  photo capture and a printable report (`lib/inspections/templates.ts`, pure + tested).
-- `[GAP] V:H E:M` — **Preventive-maintenance schedules with per-occurrence tracking** —
-  `RecurringTaskExecution` (taskId, month, status); pure `lib/maintenance/schedules.ts`.
-- `[POLISH] V:M E:S` — **Asset/equipment + warranty registry** — `Asset` (make/model/serial/warranty),
-  optional `MaintenanceJob.assetId`.
+- ✅ **#77** Work-order lifecycle + assignment + SLA. ✅ **#79** Preventive-maintenance execution log.
+  ✅ **#80** Asset/warranty registry.
+- `[POLISH] V:M E:M` — **Inspection templates + photos + report** — *Inspections exist;* the gap is
+  reusable templates (predefined item lists), photo capture on items, and a printable report.
 - `[COHESION] V:M E:S` — 🔥 **Damage chargeback** from a move-out inspection item → ledger (with D).
-- `[COHESION] V:M E:S` — Turnover/make-ready Kanban board; parts/inventory tags.
+- `[COHESION] V:M E:S` — Turnover/make-ready checklist/Kanban; parts/inventory tags.
+- `[POLISH] V:M E:S` — Link an `Asset` to a `MaintenanceJob` (`MaintenanceJob.assetId`) — deferred out
+  of #80 to keep it standalone.
 - `[GAP] V:H E:L` — Vendor portal + dispatch *(deferred — small operators usually text their contractor).*
 
 ### H. Comms & automation
-- `[GAP] V:H E:M` — **Two-way SMS/email inbox** — capture inbound replies (extend `/api/sms/inbound`
-  beyond STOP/START) into a per-tenant `InboundMessage` thread visible to staff.
-- `[GAP] V:H E:S` — **Notification center / message log** — read-only unified view over existing
-  `Reminder`/`Notice`/`AuditLog` rows (overlaps Initiative I's activity timeline).
-- `[GAP] V:M E:M` — **Delivery/read + bounce tracking** — `deliveredAt`/`readAt`/`bounceReason` on
-  `Reminder`/`Notice`; reuse `/api/sms/status`.
+- ✅ **#75** Two-way SMS inbox. (Notification center / message log is largely covered by the activity
+  timeline + the inbox.)
+- `[GAP] V:M E:M` — **Delivery/read + bounce tracking** — `ReminderStatus` already has delivered/failed +
+  `recordDeliveryStatus`; the gap is `deliveredAt`/`failedReason` timestamps + surfacing status in the
+  reminders view.
 - `[POLISH] V:M E:S` — Per-event reminder preferences; bulk audience segmentation.
 - `[GAP] V:M E:L` — Trigger→action **workflow engine** *(deferred — enterprise-heavy for a small operator).*
 
 ### I. Platform cohesion
-- `[COHESION] V:H E:S–M` — **⌘K global search / command palette** across tenants/leases/properties/
-  payments. New `lib/services/search.ts` + `app/api/search` (capability-gated) + client palette.
-- `[COHESION] V:M E:M` — **Unified activity timeline** on detail pages — aggregate `AuditLog` +
-  `Reminder` + payments + `TenantRequest` + `Notice` keyed by `sourceType/sourceId`. *(First-batch.)*
+- ✅ **#74** ⌘K global search. ✅ **#73**+**#78** Unified activity timeline. ✅ **#83** Audit-log CSV export.
 - `[GAP] V:L E:M` — **CSV import + onboarding wizard** — templated bulk load (properties/tenants/leases).
 - `[GAP] V:M E:M` — 🔥 Staff **2FA/TOTP** (touches auth).
-- `[POLISH] V:M E:S` — Saved filters/named views; report **PDF/Excel export** + scheduled delivery +
+- `[POLISH] V:M E:S` — Saved filters/named views; report **PDF/Excel** (CSV exists) + scheduled delivery +
   period-over-period + occupancy/turnover KPIs; empty/loading/error + a11y polish.
 - `[GAP] V:H E:L` — Public **REST API + keys** + integrations (QuickBooks/Plaid/Zillow) *(deferred).*
 
@@ -77,29 +88,29 @@ Tags: `[GAP|POLISH|COHESION]` · **V**alue H/M/L · **E**ffort S/M/L · 🔥 = t
 
 ## Deferred initiatives (deliberate — don't re-litigate without a new decision)
 
-- **A. Owner / portfolio layer** (owners entity, statements, distributions, management fees, owner
-  portal, 1099s) — deferred: operator runs their *own* properties. Revisit if they start managing for
-  third-party owners.
-- **B. Accounting depth** (chart of accounts/GL, A/P + bill pay, bank reconciliation, accrual P&L,
-  budget-vs-actual) — mostly enterprise-grade bookkeeping; deferred under the small-operator lens.
-  *(Exception: the deposit→ledger bridge in D is in scope.)*
-- **C. Payments & collections depth** (real ACH, NSF/returns, payment plans, convenience-fee
-  pass-through, delinquency workflow) — not selected. *Note:* in-portal **autopay** (E) depends on a
-  real payment gateway, so a Stripe card/ACH adapter is a prerequisite if autopay is pursued.
-- **F. Leasing funnel** (public listings/syndication, applicant pipeline/ATS, screening, application
-  fees, adverse-action) — not selected.
+- **A. Owner / portfolio layer** — deferred: operator runs their *own* properties. Revisit if they start
+  managing for third-party owners.
+- **B. Accounting depth** (GL, A/P + bill pay, bank rec, accrual P&L, budget-vs-actual) — enterprise
+  bookkeeping; deferred. *(Exception: the deposit→ledger bridge in D is in scope.)*
+- **C. Payments & collections depth** (real ACH, NSF/returns, payment plans, fee pass-through,
+  delinquency workflow) — not selected. In-portal **autopay** (E) needs a real gateway first.
+- **F. Leasing funnel** (listings/syndication, ATS, screening, application fees) — not selected.
 
 ---
 
-## Current build plan — "quick wins across bundles" first
+## Next up — recommended order
 
-The owner chose to knock out the smallest high-ROI slice of several bundles before deepening:
+**Clean (no hot zone), good for parallel worktree agents** — best done once the open PRs merge, so
+schema additions don't cascade-conflict:
+1. **Renewal offer→acceptance** (D + E) — the biggest remaining small-operator win; new `LeaseRenewalOffer`,
+   reuse the e-sign path.
+2. **Delivery/read tracking finish** (H) — timestamps + surface status in the reminders view.
+3. **Turnover/make-ready checklist** (G) and **Asset↔Job link** (G).
+4. **Lease-expiration digest** (D follow-up) and **tenant ledger CSV** (E).
 
-1. **Maintenance-request photos** (E) — tenant attaches photos; staff + tenant see them.
-2. **Per-tenant/lease activity timeline** (I) — one feed of payments, reminders/notices, requests, lease
-   events on the detail pages (also delivers the Messaging-hub "see all communication" need).
-3. **⌘K global search** (I) — fast cross-entity find.
+**Hot zones — need an explicit go-ahead + blast-radius writeup first** (CLAUDE.md):
+- 🔥 **Deposit→ledger move-out statement** (D) — posts real ledger entries; blast radius = tenant balances.
+- 🔥 **Damage chargeback → ledger** (G, pairs with the above).
+- 🔥 **Staff 2FA/TOTP** (I) — touches the auth/session lane.
 
-Then deepen: two-way inbox (H), work-order lifecycle (G), inspection photos (G). Move-out & renewals (D)
-is queued but not in the first batch. Build each with `/feature-intake`; pause with a blast-radius
-writeup before any 🔥 item.
+Build each with `/feature-intake`; refresh this file with `/competitive-audit` as the app evolves.
