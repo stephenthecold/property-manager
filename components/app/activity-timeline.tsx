@@ -19,6 +19,7 @@ const DOT: Record<ActivityKind, string> = {
   request: "bg-violet-500 dark:bg-violet-400",
   maintenance: "bg-orange-500 dark:bg-orange-400",
   audit: "bg-slate-400 dark:bg-slate-500",
+  message: "bg-teal-500 dark:bg-teal-400",
 };
 
 function formatAt(at: Date): string {

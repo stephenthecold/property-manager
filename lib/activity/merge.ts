@@ -15,7 +15,8 @@ export type ActivityKind =
   | "notice"
   | "request"
   | "maintenance"
-  | "audit";
+  | "audit"
+  | "message";
 
 export interface ActivityEvent {
   /** Stable, source-prefixed id (e.g. "payment:ckxyz") — unique across groups. */
