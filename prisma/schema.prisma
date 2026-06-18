@@ -1070,6 +1070,26 @@ model ConsentRecord {
   @@index([channel, consent])
 }
 
+/// Inbound (non-keyword) SMS replies captured into a per-tenant thread staff can
+/// read. STOP/START/HELP keywords are handled by the consent flow and are NOT
+/// stored here. `tenantId` is matched by phone (last-10-digit key) at capture and
+/// is null when no tenant matches. Operational record only — never a ledger entry,
+/// never affects balances. Capture is best-effort so the webhook always 200s.
+model InboundMessage {
+  id          String   @id @default(cuid())
+  channel     String   @default("sms")
+  fromPhone   String
+  body        String
+  tenantId    String? // matched tenant by phone; null when unknown
+  providerSid String? // Twilio MessageSid (for dedup/traceability)
+  receivedAt  DateTime @default(now())
+  readAt      DateTime?
+
+  @@index([tenantId])
+  @@index([readAt])
+  @@index([receivedAt])
+}
+
 model Reminder {
   id                String         @id @default(cuid())
   tenantId          String

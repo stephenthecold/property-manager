@@ -84,6 +84,7 @@ export default async function AppLayout({
         label: "Comms",
         items: [
           { href: "/reminders", label: "Reminders" },
+          ...(can("tenants.manage") ? [{ href: "/messages", label: "Messages" }] : []),
           ...(can("tenants.manage") ? [{ href: "/sms-consents", label: "SMS consent" }] : []),
           ...(app.modules.notices && can("notices.manage")
             ? [{ href: "/notices", label: "Notices" }]

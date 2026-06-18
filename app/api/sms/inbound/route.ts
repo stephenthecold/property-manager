@@ -3,6 +3,7 @@ import { getEnv } from "@/lib/config/env";
 import { verifyTwilioSignature } from "@/lib/reminders/twilio-signature";
 import { getEffectiveTwilioAuthToken } from "@/lib/services/app-settings";
 import { setSmsConsentByPhone } from "@/lib/services/sms-consent";
+import { recordInboundSms } from "@/lib/services/inbound-messages";
 import { classifyKeyword } from "@/lib/sms/keywords";
 import {
   SMS_HELP_REPLY,
@@ -62,7 +63,16 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const from = params["From"] ?? "";
     const keyword = classifyKeyword(params["Body"] ?? "");
-    if (keyword === "none") return twiml(null);
+    if (keyword === "none") {
+      // Two-way SMS inbox: capture the reply for staff. Best-effort (never throws);
+      // we do NOT auto-reply to inbound messages to avoid loops/cost.
+      await recordInboundSms({
+        fromPhone: params["From"] ?? "",
+        body: params["Body"] ?? "",
+        providerSid: params["MessageSid"],
+      });
+      return twiml(null);
+    }
 
     const actor = { actorType: "system" as const, actorEmail: "inbound SMS (opt-out)" };
 
