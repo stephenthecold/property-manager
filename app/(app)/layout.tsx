@@ -9,11 +9,17 @@ import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { NavLinks, type NavEntry } from "@/components/app/nav-links";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { TablePageSizeProvider } from "@/components/app/data-table";
+import { brandedLayoutMetadata } from "@/lib/config/metadata";
 import { ThemeToggle } from "@/components/app/theme-toggle";
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export const runtime = "nodejs";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return brandedLayoutMetadata((await getAppSettings()).businessName);
+}
 
 export default async function AppLayout({
   children,

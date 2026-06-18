@@ -3,6 +3,8 @@ import {
   brandColorStyles,
   hexToOklchHue,
   isValidHexColor,
+  readableTextColor,
+  relativeLuminance,
 } from "@/lib/config/brand";
 
 describe("isValidHexColor", () => {
@@ -58,5 +60,26 @@ describe("brandColorStyles", () => {
   it("is null for unusable colours so the shipped palette stays", () => {
     expect(brandColorStyles("#808080")).toBeNull();
     expect(brandColorStyles("not-a-color")).toBeNull();
+  });
+});
+
+describe("relativeLuminance / readableTextColor", () => {
+  it("ranks black < mid < white", () => {
+    expect(relativeLuminance("#000000")).toBeCloseTo(0, 5);
+    expect(relativeLuminance("#ffffff")).toBeCloseTo(1, 5);
+    const mid = relativeLuminance("#2563eb")!;
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+  });
+
+  it("picks a light letter on dark brands and a dark letter on light brands", () => {
+    expect(readableTextColor("#1d2a45")).toBe("#f1f5f9"); // navy → light text
+    expect(readableTextColor("#2563eb")).toBe("#f1f5f9"); // blue-600 → light text
+    expect(readableTextColor("#fde047")).toBe("#0b1220"); // yellow → dark text
+    expect(readableTextColor("#ffffff")).toBe("#0b1220");
+  });
+
+  it("falls back to a light letter for an invalid colour", () => {
+    expect(readableTextColor("nope")).toBe("#f1f5f9");
   });
 });

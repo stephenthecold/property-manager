@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Leases" };
 
 const LEASE_STATUSES = ["draft", "active", "month_to_month", "ended", "eviction"] as const;
 

@@ -80,21 +80,25 @@ export function RecordPaymentDialog({
   }
 
   useEffect(() => {
-    if (state.ok) {
-      router.refresh();
-      // When a receipt link is shown, stay open so it can be clicked; the user
-      // closes the dialog manually. The form stays live, so mint the next
-      // payment's key NOW — a blank key would fail any further submit.
-      if (state.receiptId) {
-        setIdemKey(crypto.randomUUID());
-        return;
-      }
-      const t = setTimeout(() => {
-        setOpen(false);
-        setIdemKey(""); // fresh key for the next payment
-      }, 900);
-      return () => clearTimeout(t);
-    }
+    if (!state.ok) return;
+    router.refresh();
+    // Defer the state updates out of the effect body (no synchronous setState
+    // in an effect — it can cascade renders). With a receipt link we keep the
+    // dialog open so it can be clicked, but mint the next payment's key right
+    // away (a blank key would fail any further submit); otherwise auto-close
+    // after a beat and clear the key for the next open.
+    const t = setTimeout(
+      () => {
+        if (state.receiptId) {
+          setIdemKey(crypto.randomUUID());
+        } else {
+          setOpen(false);
+          setIdemKey("");
+        }
+      },
+      state.receiptId ? 0 : 900,
+    );
+    return () => clearTimeout(t);
   }, [state.ok, state.receiptId, router]);
 
   return (

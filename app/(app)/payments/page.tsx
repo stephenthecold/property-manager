@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Payments" };
 
 const METHODS = ["cash", "check", "money_order", "card", "ach", "online", "cash_app", "other"] as const;
 const STATUSES = ["posted", "voided"] as const;

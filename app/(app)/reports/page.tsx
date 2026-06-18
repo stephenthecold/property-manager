@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Reports" };
 
 function money(v: string) {
   return `$${v}`;

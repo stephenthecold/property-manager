@@ -52,6 +52,20 @@ function hexToRgb01(hex: string): { r: number; g: number; b: number } | null {
 const linearize = (c: number) =>
   c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 
+/** WCAG relative luminance (0 = black, 1 = white) of an sRGB hex, or null. */
+export function relativeLuminance(hex: string): number | null {
+  const rgb = hexToRgb01(hex);
+  if (!rgb) return null;
+  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map(linearize);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** A legible near-dark or near-white text colour for text placed ON `hex`. */
+export function readableTextColor(hex: string): string {
+  const lum = relativeLuminance(hex);
+  return lum != null && lum > 0.42 ? "#0b1220" : "#f1f5f9";
+}
+
 /**
  * OKLCH hue (0–360°) of an sRGB hex, or null when the colour is invalid or so
  * desaturated that its hue is meaningless (chroma below a small threshold).

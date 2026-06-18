@@ -1,12 +1,18 @@
 import { getAppSettings } from "@/lib/services/app-settings";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
+import { brandedPageMetadata } from "@/lib/config/metadata";
 import { getPayerSession } from "@/lib/payer-portal/session";
+import type { Metadata } from "next";
 import { signOutPayerAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return brandedPageMetadata((await getAppSettings()).businessName, "Payer portal");
+}
 
 /**
  * Payer-portal shell — deliberately minimal: business name, the signed-in payer,

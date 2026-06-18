@@ -1,6 +1,8 @@
 import { getAppSettings } from "@/lib/services/app-settings";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
+import { brandedPageMetadata } from "@/lib/config/metadata";
 import { resolveComplianceLinks } from "@/lib/config/compliance";
+import type { Metadata } from "next";
 import { getPortalSession } from "@/lib/portal/session";
 import { signOutPortalAction } from "./actions";
 import { exitImpersonationAction } from "./impersonation";
@@ -9,6 +11,10 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return brandedPageMetadata((await getAppSettings()).businessName, "Tenant portal");
+}
 
 /**
  * Tenant-portal shell — deliberately minimal and chrome-free: business name,

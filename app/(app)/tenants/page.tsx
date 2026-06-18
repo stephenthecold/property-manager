@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Tenants" };
 
 function balanceClass(cents: bigint): string {
   if (cents > 0n) return "text-red-600 dark:text-red-400";
