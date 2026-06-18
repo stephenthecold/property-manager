@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePortalSession } from "@/lib/portal/session";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { listServedNoticesForTenant } from "@/lib/services/notices";
 import { noticeTypeLabel } from "@/lib/notices/templates";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,12 @@ export const dynamic = "force-dynamic";
  * staff-middleware PUBLIC_PREFIX), and the query is scoped to THIS tenant's id
  * (status "served" + non-null servedAt) so drafts/void notices and other
  * tenants' notices are never reachable. Read-only — no mutations, no downloads.
+ * Gated on the `notices` module too: disabling it hides this UI (data is kept).
  */
 export default async function PortalNoticesPage() {
   const { tenant } = await requirePortalSession();
+  const settings = await getAppSettings();
+  if (!settings.modules.notices) redirect("/portal");
   const notices = await listServedNoticesForTenant(tenant.id);
 
   const fmtDate = (d: Date) =>

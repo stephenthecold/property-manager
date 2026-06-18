@@ -123,7 +123,9 @@ export default async function PortalHomePage({
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
-    countServedNoticesForTenant(tenant.id),
+    settings.modules.notices
+      ? countServedNoticesForTenant(tenant.id)
+      : Promise.resolve(0),
   ]);
 
   const fmtDate = (d: Date) =>
@@ -244,26 +246,28 @@ export default async function PortalHomePage({
       </div>
 
       {/* Notices inbox */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div className="space-y-0.5">
-            <div className="text-base font-medium">Notices</div>
-            <div className="text-sm text-muted-foreground">
-              {noticeCount > 0
-                ? `${noticeCount} notice${noticeCount === 1 ? "" : "s"} from your property manager`
-                : "No notices right now."}
+      {settings.modules.notices && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="space-y-0.5">
+              <div className="text-base font-medium">Notices</div>
+              <div className="text-sm text-muted-foreground">
+                {noticeCount > 0
+                  ? `${noticeCount} notice${noticeCount === 1 ? "" : "s"} from your property manager`
+                  : "No notices right now."}
+              </div>
             </div>
-          </div>
-          <Button variant="outline" size="sm" render={<Link href="/portal/notices" />}>
-            View notices
-            {noticeCount > 0 && (
-              <Badge variant="secondary" className="ml-2 tabular-nums">
-                {noticeCount}
-              </Badge>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+            <Button variant="outline" size="sm" render={<Link href="/portal/notices" />}>
+              View notices
+              {noticeCount > 0 && (
+                <Badge variant="secondary" className="ml-2 tabular-nums">
+                  {noticeCount}
+                </Badge>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* How to pay */}
       <Card>
