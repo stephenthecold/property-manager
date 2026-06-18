@@ -356,7 +356,7 @@ export default async function DashboardPage() {
             { key: "unit", label: "Unit" },
             { key: "property", label: "Property", className: "hidden md:table-cell" },
             { key: "endDate", label: "End date" },
-            { key: "daysLeft", label: "Days left", align: "right" },
+            { key: "daysLeft", label: "Days left", align: "right", numeric: true },
           ]}
           rows={expirations.map((r) => ({
             key: r.leaseId,
