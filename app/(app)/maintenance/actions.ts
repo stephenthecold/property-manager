@@ -12,6 +12,7 @@ import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
 import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
+import { periodKeyFor } from "@/lib/maintenance/recurring";
 import {
   isOpenStatus,
   parseMaintenanceStatus,
@@ -640,12 +641,21 @@ export async function markTaskDoneAction(fd: FormData): Promise<void> {
   await requireCapability("maintenance.manage");
   await assertModuleEnabled("maintenance");
   const id = str(fd, "taskId");
-  const task = await prisma.recurringTask.findUnique({ where: { id } });
+  const task = await prisma.recurringTask.findUnique({
+    where: { id },
+    include: { property: { select: { timezone: true } } },
+  });
   if (!task) return;
+
+  const actor = await auditActor();
+  // The completion belongs to the property-timezone civil month — the same key
+  // the maintenance page uses for its "done this month" indicator.
+  const doneOn = new Date();
+  const periodKey = periodKeyFor(doneOn, task.property.timezone);
 
   await withAudit(
     {
-      ...(await auditActor()),
+      ...actor,
       action: "maintenance.task_done",
       entityType: "RecurringTask",
       entityId: task.id,
@@ -654,9 +664,25 @@ export async function markTaskDoneAction(fd: FormData): Promise<void> {
     async (tx) => {
       const updated = await tx.recurringTask.update({
         where: { id: task.id },
-        data: { lastDoneOn: new Date() },
+        data: { lastDoneOn: doneOn },
       });
-      return { result: updated, after: { lastDoneOn: updated.lastDoneOn } };
+      // Log the per-occurrence execution. Re-marking the same month updates the
+      // existing row (one record per task per month). Operating record only —
+      // it never touches tenant balances.
+      await tx.recurringTaskExecution.upsert({
+        where: { taskId_periodKey: { taskId: task.id, periodKey } },
+        create: {
+          taskId: task.id,
+          periodKey,
+          doneOn,
+          doneByUserId: actor.actorId,
+        },
+        update: { doneOn, doneByUserId: actor.actorId },
+      });
+      return {
+        result: updated,
+        after: { lastDoneOn: updated.lastDoneOn, periodKey },
+      };
     },
   );
   revalidate();

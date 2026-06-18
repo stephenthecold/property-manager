@@ -99,6 +99,12 @@ function SlaChip({
   return null;
 }
 
+/** "2026-06" -> "Jun 2026" (the property-tz month a task was done for). */
+function monthLabel(periodKey: string): string {
+  const dt = DateTime.fromFormat(periodKey, "yyyy-MM");
+  return dt.isValid ? dt.toFormat("MMM yyyy") : periodKey;
+}
+
 /** 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd" … */
 function ordinal(n: number): string {
   const mod100 = n % 100;
@@ -196,6 +202,29 @@ export default async function MaintenancePage({
     const arr = attachmentsByJob.get(d.maintenanceJobId) ?? [];
     arr.push({ id: d.id, fileName: d.fileName ?? "file", url });
     attachmentsByJob.set(d.maintenanceJobId, arr);
+  }
+
+  // Recent completion history for the visible tasks (one batched query). Shown
+  // in a per-task "History" dialog; the most recent 12 are kept per task.
+  const taskIds = tasks.map((t) => t.id);
+  const executions = taskIds.length
+    ? await prisma.recurringTaskExecution.findMany({
+        where: { taskId: { in: taskIds } },
+        orderBy: { doneOn: "desc" },
+        select: {
+          id: true,
+          taskId: true,
+          periodKey: true,
+          doneOn: true,
+          doneByUserId: true,
+        },
+      })
+    : [];
+  const executionsByTask = new Map<string, typeof executions>();
+  for (const e of executions) {
+    const arr = executionsByTask.get(e.taskId) ?? [];
+    if (arr.length < 12) arr.push(e);
+    executionsByTask.set(e.taskId, arr);
   }
 
   const now = new Date();
@@ -836,6 +865,45 @@ export default async function MaintenancePage({
                       </Button>
                     </form>
                   )}
+                  {(() => {
+                    const history = executionsByTask.get(t.id) ?? [];
+                    return (
+                      <FormDialog
+                        trigger={`History (${history.length})`}
+                        triggerVariant="ghost"
+                        triggerSize="xs"
+                        title="Completion history"
+                        description={t.title}
+                        staticContent
+                      >
+                        {history.length > 0 ? (
+                          <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+                            {history.map((e) => {
+                              const who = e.doneByUserId
+                                ? staffById.get(e.doneByUserId) ?? "Former staff"
+                                : null;
+                              return (
+                                <li key={e.id} className="rounded-md border p-2">
+                                  <div className="font-medium">
+                                    {monthLabel(e.periodKey)}
+                                  </div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    Done {e.doneOn.toLocaleDateString()}
+                                    {who ? ` · ${who}` : ""}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No completions logged yet. “Mark done” records each
+                            month here.
+                          </p>
+                        )}
+                      </FormDialog>
+                    );
+                  })()}
                   <FormDialog
                     trigger="Schedule"
                     triggerSize="xs"
