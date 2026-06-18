@@ -204,8 +204,9 @@ export default async function MaintenancePage({
     attachmentsByJob.set(d.maintenanceJobId, arr);
   }
 
-  // Recent completion history for the visible tasks (one batched query). Shown
-  // in a per-task "History" dialog; the most recent 12 are kept per task.
+  // Recent completion history for the visible tasks (one batched query). The
+  // dialog shows the most recent 12 per task; `total` keeps the trigger count
+  // honest even when a long-running task has more than 12 logged months.
   const taskIds = tasks.map((t) => t.id);
   const executions = taskIds.length
     ? await prisma.recurringTaskExecution.findMany({
@@ -220,11 +221,13 @@ export default async function MaintenancePage({
         },
       })
     : [];
-  const executionsByTask = new Map<string, typeof executions>();
+  type TaskHistory = { rows: typeof executions; total: number };
+  const historyByTask = new Map<string, TaskHistory>();
   for (const e of executions) {
-    const arr = executionsByTask.get(e.taskId) ?? [];
-    if (arr.length < 12) arr.push(e);
-    executionsByTask.set(e.taskId, arr);
+    const h = historyByTask.get(e.taskId) ?? { rows: [], total: 0 };
+    if (h.rows.length < 12) h.rows.push(e);
+    h.total += 1;
+    historyByTask.set(e.taskId, h);
   }
 
   const now = new Date();
@@ -866,35 +869,52 @@ export default async function MaintenancePage({
                     </form>
                   )}
                   {(() => {
-                    const history = executionsByTask.get(t.id) ?? [];
+                    const history = historyByTask.get(t.id) ?? {
+                      rows: [],
+                      total: 0,
+                    };
                     return (
                       <FormDialog
-                        trigger={`History (${history.length})`}
+                        trigger={`History (${history.total})`}
                         triggerVariant="ghost"
                         triggerSize="xs"
                         title="Completion history"
                         description={t.title}
                         staticContent
                       >
-                        {history.length > 0 ? (
-                          <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
-                            {history.map((e) => {
-                              const who = e.doneByUserId
-                                ? staffById.get(e.doneByUserId) ?? "Former staff"
-                                : null;
-                              return (
-                                <li key={e.id} className="rounded-md border p-2">
-                                  <div className="font-medium">
-                                    {monthLabel(e.periodKey)}
-                                  </div>
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    Done {e.doneOn.toLocaleDateString()}
-                                    {who ? ` · ${who}` : ""}
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ul>
+                        {history.rows.length > 0 ? (
+                          <>
+                            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+                              {history.rows.map((e) => {
+                                const who = e.doneByUserId
+                                  ? staffById.get(e.doneByUserId) ??
+                                    "Former staff"
+                                  : null;
+                                // Render the completion DATE in the property
+                                // timezone so it agrees with the month label.
+                                const doneLabel = DateTime.fromJSDate(e.doneOn, {
+                                  zone: t.property.timezone,
+                                }).toLocaleString(DateTime.DATE_MED);
+                                return (
+                                  <li key={e.id} className="rounded-md border p-2">
+                                    <div className="font-medium">
+                                      {monthLabel(e.periodKey)}
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      Done {doneLabel}
+                                      {who ? ` · ${who}` : ""}
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                            {history.total > history.rows.length && (
+                              <p className="text-xs text-muted-foreground">
+                                Showing the most recent {history.rows.length} of{" "}
+                                {history.total}.
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <p className="text-sm text-muted-foreground">
                             No completions logged yet. “Mark done” records each

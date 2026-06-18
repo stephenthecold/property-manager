@@ -12,7 +12,7 @@ import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
 import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
-import { periodKeyFor } from "@/lib/maintenance/recurring";
+import { monthKeyFor } from "@/lib/maintenance/recurring";
 import {
   isOpenStatus,
   parseMaintenanceStatus,
@@ -651,7 +651,7 @@ export async function markTaskDoneAction(fd: FormData): Promise<void> {
   // The completion belongs to the property-timezone civil month — the same key
   // the maintenance page uses for its "done this month" indicator.
   const doneOn = new Date();
-  const periodKey = periodKeyFor(doneOn, task.property.timezone);
+  const periodKey = monthKeyFor(doneOn, task.property.timezone);
 
   await withAudit(
     {
