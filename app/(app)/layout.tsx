@@ -7,6 +7,7 @@ import { doSignOut } from "@/app/login/actions";
 import { exitViewAs } from "@/app/(app)/settings/users/actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { NavLinks, type NavEntry } from "@/components/app/nav-links";
+import { TablePageSizeProvider } from "@/components/app/data-table";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -177,7 +178,9 @@ export default async function AppLayout({
       )}
 
       <main className="mx-auto w-full max-w-[100rem] flex-1 px-4 py-6 sm:px-6 xl:px-8">
-        {children}
+        <TablePageSizeProvider value={app.defaultTablePageSize ?? 10}>
+          {children}
+        </TablePageSizeProvider>
       </main>
     </div>
   );

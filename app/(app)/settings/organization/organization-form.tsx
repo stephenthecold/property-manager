@@ -21,6 +21,10 @@ export interface OrganizationInitial {
   receiptPrefix: string;
   portalWelcomeText: string;
   applyIntroText: string;
+  portalPaymentHelpText: string;
+  applyConfirmationText: string;
+  reportHeaderText: string;
+  defaultTablePageSize: number;
   defaultTimezone: string;
   defaultCurrency: string;
   logoUrl: string | null;
@@ -198,6 +202,71 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
         />
         <p className="text-xs text-muted-foreground">
           Shown atop the public application form. Blank uses the default copy.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="applyConfirmationText">Application confirmation text</Label>
+        <textarea
+          id="applyConfirmationText"
+          name="applyConfirmationText"
+          defaultValue={initial.applyConfirmationText}
+          rows={2}
+          className="w-full rounded-md border p-2 text-sm"
+          placeholder="Thanks! Your application has been submitted. We'll be in touch."
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown after an applicant submits the public form. Blank uses the default copy.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="portalPaymentHelpText">Tenant portal &ldquo;how to pay&rdquo; text</Label>
+        <textarea
+          id="portalPaymentHelpText"
+          name="portalPaymentHelpText"
+          defaultValue={initial.portalPaymentHelpText}
+          rows={2}
+          className="w-full rounded-md border p-2 text-sm"
+          placeholder="Pay rent by bank transfer to… or in person at…"
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown on the tenant portal home. Blank hides the panel.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="reportHeaderText">Report &amp; receipt header text</Label>
+        <textarea
+          id="reportHeaderText"
+          name="reportHeaderText"
+          defaultValue={initial.reportHeaderText}
+          rows={2}
+          className="w-full rounded-md border p-2 text-sm"
+          placeholder="Remit to: 123 Main St · Questions? billing@example.com"
+        />
+        <p className="text-xs text-muted-foreground">
+          Printed atop reports and receipts (e.g. a &ldquo;remit to&rdquo; block). Blank shows nothing.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="defaultTablePageSize">Default rows per page</Label>
+        <select
+          id="defaultTablePageSize"
+          name="defaultTablePageSize"
+          defaultValue={String(initial.defaultTablePageSize)}
+          className="h-9 w-full rounded-md border px-2 text-sm md:w-40"
+        >
+          {[10, 20, 50].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Initial page size for tables across the app. Each table&rsquo;s own
+          selector still overrides it per view.
         </p>
       </div>
 

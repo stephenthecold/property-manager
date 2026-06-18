@@ -140,6 +140,12 @@ export default async function ReceiptPage({
             )}
           </div>
 
+          {app.reportHeaderText && (
+            <div className="whitespace-pre-line text-center text-xs text-muted-foreground">
+              {app.reportHeaderText}
+            </div>
+          )}
+
           <div className="space-y-1 text-center">
             <h1 className="text-2xl font-semibold tracking-wide">RENT RECEIPT</h1>
             <p className="text-sm text-muted-foreground">{receipt.receiptNumber}</p>

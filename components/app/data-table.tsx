@@ -18,6 +18,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+  sanitizeTablePageSize,
+} from "@/lib/config/table";
 
 /**
  * Client-side sortable + paginated table over rows that were fully rendered
@@ -50,7 +55,29 @@ export type DataTableRow = {
   sortValues: SortValue[];
 };
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const PAGE_SIZE_OPTIONS = TABLE_PAGE_SIZE_OPTIONS;
+
+/**
+ * The org-configurable default page size (Settings → Organization), supplied
+ * once at the app shell so every DataTable picks it up without each page
+ * threading the value. A DataTable with an explicit `defaultPageSize` prop
+ * still wins.
+ */
+const TablePageSizeContext = React.createContext<number>(DEFAULT_TABLE_PAGE_SIZE);
+
+export function TablePageSizeProvider({
+  value,
+  children,
+}: {
+  value: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <TablePageSizeContext.Provider value={sanitizeTablePageSize(value)}>
+      {children}
+    </TablePageSizeContext.Provider>
+  );
+}
 
 /** Exact comparison for integer strings of any length (e.g. bigint cents). */
 function compareIntStrings(a: string, b: string): number {
@@ -82,21 +109,23 @@ export function DataTable({
   columns,
   rows,
   defaultSort,
-  defaultPageSize = 10,
+  defaultPageSize,
   emptyMessage = "No results.",
   className,
 }: {
   columns: DataTableColumn[];
   rows: DataTableRow[];
   defaultSort?: { key: string; dir: "asc" | "desc" };
+  /** Explicit override; when omitted, the org default (context) is used. */
   defaultPageSize?: number;
   emptyMessage?: string;
   className?: string;
 }) {
+  const orgDefault = React.useContext(TablePageSizeContext);
   const [sort, setSort] = React.useState<{ key: string; dir: "asc" | "desc" } | null>(
     defaultSort ?? null,
   );
-  const [pageSize, setPageSize] = React.useState(defaultPageSize);
+  const [pageSize, setPageSize] = React.useState(defaultPageSize ?? orgDefault);
   const [page, setPage] = React.useState(0);
 
   const sorted = React.useMemo(() => {

@@ -248,6 +248,15 @@ model AppSettings {
   // Tenant-facing free text (branded, whitespace-pre-wrap), null -> shipped copy.
   portalWelcomeText String? // shown on the tenant portal home
   applyIntroText    String? // shown atop the public /apply form
+  // H5: tenant-facing "how to pay" copy (portal home) + the post-submit
+  // confirmation shown on the public /apply form. null/blank -> shipped copy.
+  portalPaymentHelpText String?
+  applyConfirmationText String?
+  // H3: free-text header block printed atop reports and receipts (e.g. a report
+  // subtitle or a "remit to" address); null/blank -> nothing rendered.
+  reportHeaderText String?
+  // H2: default DataTable page size (one of 10/20/50); null/invalid -> 10.
+  defaultTablePageSize Int?
   // File storage — NON-SECRET config, DB-over-env (mirrors the SMS pattern).
   // null/blank on each -> the env value. Secrets (S3 keys, STORAGE_ENC_KEY) and
   // the local dir / encrypt flag stay env-only. See lib/services/storage-config.ts.
@@ -268,6 +277,9 @@ model AppSettings {
   smsAuthTokenTag         String?
   smsFromNumber           String?
   reminderDueSoonDays     Int? // null -> env REMINDER_DUE_SOON_DAYS
+  // H4: hour of day (0-23, server local) the worker runs the daily reminder +
+  // digest sweeps; null -> env REMINDER_CRON (default 09:00).
+  reminderSendHour        Int?
   dueSoonRemindersEnabled Boolean @default(true)
   overdueRemindersEnabled Boolean @default(true)
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }

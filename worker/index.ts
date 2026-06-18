@@ -1,6 +1,8 @@
 import "dotenv/config";
 import cron from "node-cron";
 import { runBilling } from "@/lib/services/billing";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { reminderCron } from "@/lib/reminders/schedule";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import { runScheduledReminders } from "@/lib/services/reminders";
 import {
@@ -17,8 +19,9 @@ import {
  */
 
 const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
-const REMINDER_SCHEDULE = process.env.REMINDER_CRON ?? "0 9 * * *"; // 09:00 daily
 const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
+// Reminder schedule is resolved at startup: Settings → Messaging "send hour"
+// (DB) wins, else REMINDER_CRON env, else 09:00 daily (lib/reminders/schedule).
 
 async function runOnce(): Promise<void> {
   try {
@@ -74,15 +77,29 @@ async function runStaffDigestOnce(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // DB-over-env: the saved send hour wins over REMINDER_CRON. Read once at
+  // startup; changing it in Settings takes effect on the next worker restart.
+  // A settings-read failure (e.g. DB not ready yet) must not stop the worker
+  // from scheduling — fall back to the env/default cron.
+  let reminderSendHour: number | null = null;
+  try {
+    reminderSendHour = (await getAppSettings()).reminderSendHour;
+  } catch (e) {
+    console.error(
+      "[worker] could not read reminder send hour from settings; using env/default:",
+      e,
+    );
+  }
+  const reminderSchedule = reminderCron(reminderSendHour, process.env.REMINDER_CRON);
   console.log(
-    `[worker] starting (billing="${SCHEDULE}", reminders="${REMINDER_SCHEDULE}", staffDigest="${STAFF_DIGEST_SCHEDULE}")`,
+    `[worker] starting (billing="${SCHEDULE}", reminders="${reminderSchedule}", staffDigest="${STAFF_DIGEST_SCHEDULE}")`,
   );
   await runOnce(); // startup back-fill
   await runRemindersOnce(); // startup catch-up (idempotent, duplicates skip)
   cron.schedule(SCHEDULE, () => {
     void runOnce();
   });
-  cron.schedule(REMINDER_SCHEDULE, () => {
+  cron.schedule(reminderSchedule, () => {
     void runRemindersOnce();
   });
   // Cron-only (no startup run): the digest has no per-send idempotency row,

@@ -22,11 +22,14 @@ export function ApplyForm({
   businessName,
   config,
   customSections,
+  confirmationText,
 }: {
   unitId: string | null;
   businessName: string;
   config: ApplicationFormConfig;
   customSections: CustomSection[];
+  /** Org-customized post-submit copy; blank -> the default sentence. */
+  confirmationText?: string;
 }) {
   const [state, action, pending] = useActionState<ApplyState, FormData>(
     submitApplicationAction,
@@ -41,9 +44,10 @@ export function ApplyForm({
   if (state.ok) {
     return (
       <Alert>
-        <AlertDescription>
-          Thanks! Your application has been submitted to {businessName}. We will
-          be in touch using the contact details you provided.
+        <AlertDescription className="whitespace-pre-wrap">
+          {confirmationText?.trim()
+            ? confirmationText
+            : `Thanks! Your application has been submitted to ${businessName}. We will be in touch using the contact details you provided.`}
         </AlertDescription>
       </Alert>
     );
