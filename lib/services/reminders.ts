@@ -711,19 +711,26 @@ export async function recordDeliveryStatus(
   const mapped = DELIVERY_STATUS_MAP[providerStatus.toLowerCase()];
   if (!mapped) return false;
 
-  // A delivered row is terminal: never let a late/out-of-order callback (e.g.
-  // "sent" arriving after "delivered") regress its status, deliveredAt, or
-  // clear it. "delivered" itself stays idempotent (re-applying is a no-op write).
-  const where =
-    mapped === "delivered"
-      ? { providerMessageId }
-      : { providerMessageId, status: { not: "delivered" as const } };
+  // A delivered row is terminal: never let a late/out-of-order callback regress
+  // it. Scoping every branch to status != delivered means a duplicate "delivered"
+  // callback is a true no-op (deliveredAt is stamped exactly once, never bumped
+  // forward) and a stale "sent"/"failed" arriving after delivery is ignored.
+  const where = { providerMessageId, status: { not: "delivered" as const } };
 
   const data: Prisma.ReminderUpdateManyMutationInput = { status: mapped };
   if (mapped === "delivered") {
+    // First terminal delivery: stamp the time and drop any earlier failure note.
     data.deliveredAt = now;
+    data.failedReason = null;
   } else if (mapped === "failed") {
-    data.failedReason = buildFailedReason(detail);
+    // Only overwrite the reason when this callback carries one — a later
+    // detail-less failure must not erase a diagnostic an earlier one captured.
+    const reason = buildFailedReason(detail);
+    if (reason) data.failedReason = reason;
+  } else {
+    // sent/queued/accepted: the message is back in flight, so a stale failure
+    // note from a prior failed attempt no longer applies.
+    data.failedReason = null;
   }
 
   const res = await prisma.reminder.updateMany({ where, data });
