@@ -255,6 +255,34 @@ export async function listNotices(filter: {
   });
 }
 
+/**
+ * Tenant-portal read: the formal notices SERVED to a single tenant, newest
+ * first. Scoped to the addressed tenant id (`tenantId`) AND `status: "served"`
+ * with a non-null `servedAt` — so drafts and void notices are never exposed,
+ * and another tenant's notices are unreachable. Read-only; no body mutation.
+ */
+export async function listServedNoticesForTenant(tenantId: string) {
+  return prisma.notice.findMany({
+    where: { tenantId, status: "served", servedAt: { not: null } },
+    orderBy: { servedAt: "desc" },
+    take: 200,
+    select: {
+      id: true,
+      type: true,
+      subject: true,
+      body: true,
+      servedAt: true,
+    },
+  });
+}
+
+/** Count of served notices for a tenant (portal home link badge). */
+export async function countServedNoticesForTenant(tenantId: string): Promise<number> {
+  return prisma.notice.count({
+    where: { tenantId, status: "served", servedAt: { not: null } },
+  });
+}
+
 export async function getNoticeForPrint(id: string) {
   return prisma.notice.findUnique({
     where: { id },
