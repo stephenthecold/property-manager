@@ -8,12 +8,21 @@ import {
   listMaintenancePhotos,
 } from "@/lib/services/documents";
 import { priorityLabel } from "@/lib/maintenance/priority";
+import {
+  OPEN_STATUSES,
+  isOpenStatus,
+  statusBadgeClass,
+  statusLabel,
+} from "@/lib/maintenance/status";
+import { slaState } from "@/lib/maintenance/sla";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormDialog } from "@/components/app/form-dialog";
 import { Label } from "@/components/ui/label";
 import { addMaintenancePhotosAction } from "./actions";
+import { assignJobAction, setJobStatusAction } from "../actions";
 
 export const runtime = "nodejs";
 export const metadata = { title: "Maintenance job" };
@@ -108,6 +117,20 @@ export default async function MaintenanceJobPage({
     (p) => !["Tenant photo", "Before", "After"].includes(p.note ?? ""),
   );
 
+  // Active staff for the assignee picker (loose ref — no relation).
+  const staff = await prisma.user.findMany({
+    where: { isActive: true },
+    orderBy: [{ name: "asc" }, { email: "asc" }],
+    select: { id: true, name: true, email: true },
+  });
+  const assigneeName = job.assignedToUserId
+    ? (staff.find((u) => u.id === job.assignedToUserId)?.name?.trim() ||
+        staff.find((u) => u.id === job.assignedToUserId)?.email ||
+        "Former staff")
+    : null;
+  const open = isOpenStatus(job.status);
+  const sla = slaState({ status: job.status, dueDate: job.dueDate, now: new Date() });
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -121,8 +144,11 @@ export default async function MaintenanceJobPage({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>{job.title}</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="capitalize">
-                {job.status.replace(/_/g, " ")}
+              <Badge
+                variant="outline"
+                className={`font-medium ${statusBadgeClass(job.status)}`}
+              >
+                {statusLabel(job.status)}
               </Badge>
               <Badge variant="outline" className="capitalize">
                 {priorityLabel(job.priority)}
@@ -130,7 +156,7 @@ export default async function MaintenanceJobPage({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
               <div className="text-xs text-muted-foreground">Property</div>
@@ -142,13 +168,114 @@ export default async function MaintenanceJobPage({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Due</div>
-              <div className="font-medium">
-                {job.dueDate ? job.dueDate.toLocaleDateString() : "—"}
+              <div className="flex flex-wrap items-center gap-1 font-medium">
+                <span
+                  className={
+                    sla.state === "overdue"
+                      ? "text-red-600 dark:text-red-400"
+                      : undefined
+                  }
+                >
+                  {job.dueDate
+                    ? job.dueDate.toLocaleDateString("en-US", { timeZone: "UTC" })
+                    : "—"}
+                </span>
+                {sla.state === "overdue" && (
+                  <Badge
+                    variant="outline"
+                    className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
+                  >
+                    Overdue {sla.daysUntilDue != null ? Math.abs(sla.daysUntilDue) : 0}d
+                  </Badge>
+                )}
+                {sla.state === "due_soon" && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                  >
+                    {sla.daysUntilDue === 0 ? "Due today" : `Due in ${sla.daysUntilDue}d`}
+                  </Badge>
+                )}
               </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Vendor</div>
               <div className="font-medium">{job.vendor?.name ?? "—"}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Status</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{statusLabel(job.status)}</span>
+                {open && (
+                  <FormDialog
+                    trigger="Change"
+                    triggerVariant="ghost"
+                    triggerSize="xs"
+                    title="Change status"
+                    description={job.title}
+                    action={setJobStatusAction}
+                    submitLabel="Save status"
+                  >
+                    <input type="hidden" name="jobId" value={job.id} />
+                    <div className="space-y-2">
+                      <Label htmlFor="detailStatus">Status</Label>
+                      <select
+                        id="detailStatus"
+                        name="status"
+                        defaultValue={job.status}
+                        className="h-9 w-full rounded-md border px-3 text-sm"
+                      >
+                        {OPEN_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {statusLabel(s)}
+                          </option>
+                        ))}
+                        <option value="canceled">{statusLabel("canceled")}</option>
+                      </select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Complete a job from the Maintenance list to record its cost.
+                    </p>
+                  </FormDialog>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Assignee</div>
+              <div className="flex items-center gap-2">
+                <span className={assigneeName ? "font-medium" : "text-muted-foreground"}>
+                  {assigneeName ?? "Unassigned"}
+                </span>
+                {open && (
+                  <FormDialog
+                    trigger="Assign"
+                    triggerVariant="ghost"
+                    triggerSize="xs"
+                    title="Assign job"
+                    description={job.title}
+                    action={assignJobAction}
+                    submitLabel="Save assignee"
+                  >
+                    <input type="hidden" name="jobId" value={job.id} />
+                    <div className="space-y-2">
+                      <Label htmlFor="detailAssignee">Assignee</Label>
+                      <select
+                        id="detailAssignee"
+                        name="assignedToUserId"
+                        defaultValue={job.assignedToUserId ?? ""}
+                        className="h-9 w-full rounded-md border px-3 text-sm"
+                      >
+                        <option value="">— unassigned —</option>
+                        {staff.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name?.trim() || u.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </FormDialog>
+                )}
+              </div>
             </div>
           </div>
           {job.details && (

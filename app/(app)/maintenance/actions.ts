@@ -12,6 +12,10 @@ import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
 import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { parseMaintenancePriority } from "@/lib/maintenance/priority";
+import {
+  isOpenStatus,
+  parseMaintenanceStatus,
+} from "@/lib/maintenance/status";
 import type { FormState } from "@/lib/forms";
 
 const ATTACH_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -355,6 +359,139 @@ export async function setJobPriorityAction(
   );
   revalidate(job.unitId);
   return { ok: true };
+}
+
+/**
+ * Move a job between OPEN lifecycle states (pending / assigned / in_progress /
+ * on_hold) or to `canceled`. Completion + reopen stay in their own actions so
+ * the costCents -> PropertyExpense money flow is untouched; this action refuses
+ * to set or leave `completed`. Audited; no-op when unchanged.
+ */
+export async function setJobStatusAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const jobId = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+
+  const status = parseMaintenanceStatus(str(fd, "status"));
+  // Only open states or `canceled` are reachable here.
+  if (status == null || !(isOpenStatus(status) || status === "canceled")) {
+    return { error: "Pick a valid status." };
+  }
+  // Completed jobs carry a cost + expense record; route those through reopen.
+  if (job.status === "completed") {
+    return { error: "Reopen the job before changing its status." };
+  }
+  if (status === job.status) return { ok: true }; // no-op resubmit
+
+  const actor = await auditActor();
+  await withAudit(
+    {
+      ...actor,
+      action: "maintenance.status_changed",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+      before: { status: job.status },
+    },
+    async (tx) => {
+      const updated = await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { status },
+      });
+      // Cohesion: cancelling a job resolves its originating tenant request the
+      // same way completion does (it's no longer open work).
+      if (status === "canceled") {
+        await syncTenantRequestForJob(tx, {
+          jobId: job.id,
+          jobStatus: "completed",
+          actor,
+        });
+      }
+      return { result: updated, after: { status } };
+    },
+  );
+  revalidate(job.unitId);
+  revalidatePath("/requests");
+  return { ok: true };
+}
+
+/**
+ * Assign (or clear) the staff member responsible for a job. The user id is a
+ * loose ref — validated against active staff Users. Audited; no-op unchanged.
+ */
+export async function assignJobAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const jobId = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+
+  const assignedToUserId = str(fd, "assignedToUserId") || null;
+  if (assignedToUserId) {
+    const user = await prisma.user.findFirst({
+      where: { id: assignedToUserId, isActive: true },
+      select: { id: true },
+    });
+    if (!user) return { error: "Pick an active staff member." };
+  }
+  if (assignedToUserId === job.assignedToUserId) return { ok: true }; // no-op
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.assignee_changed",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+      before: { assignedToUserId: job.assignedToUserId },
+    },
+    async (tx) => {
+      const updated = await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { assignedToUserId },
+      });
+      return { result: updated, after: { assignedToUserId } };
+    },
+  );
+  revalidate(job.unitId);
+  return { ok: true };
+}
+
+/**
+ * Reopen a canceled job back to `pending` (plain-form variant for the row
+ * button). Completed jobs go through reopenJobAction instead — that path also
+ * clears completedAt and restores the originating request.
+ */
+export async function uncancelJobAction(fd: FormData): Promise<void> {
+  await requireCapability("maintenance.manage");
+  await assertModuleEnabled("maintenance");
+  const id = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id } });
+  if (!job || job.status !== "canceled") return;
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.status_changed",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+      before: { status: job.status },
+    },
+    async (tx) => {
+      const updated = await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { status: "pending" },
+      });
+      return { result: updated, after: { status: "pending" } };
+    },
+  );
+  revalidate(job.unitId);
 }
 
 /** Attach a photo/invoice (image or PDF) to a maintenance job. */

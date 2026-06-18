@@ -5,6 +5,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { sendReminder } from "@/lib/services/reminders";
 import { buildMaintenanceVars, renderTemplate } from "@/lib/reminders/templates";
 import { nextOccurrenceISO, notifyWindow } from "@/lib/maintenance/schedule";
+import { OPEN_STATUSES } from "@/lib/maintenance/status";
 
 /**
  * Daily maintenance-reminder sweep (worker, same cron as rent reminders).
@@ -52,7 +53,11 @@ export async function runMaintenanceReminders(
       include: { property: { select: { name: true, timezone: true } } },
     }),
     prisma.maintenanceJob.findMany({
-      where: { status: "pending", notifyTenants: true, dueDate: { not: null } },
+      where: {
+        status: { in: OPEN_STATUSES },
+        notifyTenants: true,
+        dueDate: { not: null },
+      },
       include: {
         property: { select: { name: true, timezone: true } },
         unit: { select: { id: true } },

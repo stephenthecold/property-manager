@@ -9,6 +9,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import {
   addJobAttachmentAction,
   addJobUpdateAction,
+  assignJobAction,
   completeJobAction,
   createJobAction,
   createTaskAction,
@@ -18,6 +19,8 @@ import {
   removeTaskAction,
   reopenJobAction,
   setJobPriorityAction,
+  setJobStatusAction,
+  uncancelJobAction,
 } from "./actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { listActiveVendors } from "@/lib/services/vendors";
@@ -25,6 +28,14 @@ import {
   MAINTENANCE_PRIORITIES,
   priorityLabel,
 } from "@/lib/maintenance/priority";
+import {
+  OPEN_STATUSES,
+  isOpenStatus,
+  MAINTENANCE_STATUSES,
+  statusBadgeClass,
+  statusLabel,
+} from "@/lib/maintenance/status";
+import { slaState } from "@/lib/maintenance/sla";
 import type { MaintenancePriority } from "@/lib/generated/prisma/enums";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
@@ -48,6 +59,45 @@ const PRIORITY_BADGE: Record<MaintenancePriority, string> = {
     "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
   low: "border-muted bg-muted text-muted-foreground",
 };
+
+/**
+ * Small overdue / due-soon chip next to a due date. Renders nothing for
+ * on-track or terminal jobs (state "on_track"/"none").
+ */
+function SlaChip({
+  state,
+  daysUntilDue,
+}: {
+  state: "overdue" | "due_soon" | "on_track" | "none";
+  daysUntilDue: number | null;
+}) {
+  if (state === "overdue") {
+    const days = daysUntilDue != null ? Math.abs(daysUntilDue) : 0;
+    return (
+      <Badge
+        variant="outline"
+        className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
+      >
+        Overdue {days}d
+      </Badge>
+    );
+  }
+  if (state === "due_soon") {
+    const label =
+      daysUntilDue === 0
+        ? "Due today"
+        : `Due in ${daysUntilDue}d`;
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+      >
+        {label}
+      </Badge>
+    );
+  }
+  return null;
+}
 
 /** 1 -> "1st", 2 -> "2nd", 11 -> "11th", 23 -> "23rd" … */
 function ordinal(n: number): string {
@@ -73,13 +123,22 @@ export default async function MaintenancePage({
   };
   const error = first("error") || null;
   const filterPropertyId = first("propertyId") || undefined;
-  const filterStatus = first("status") === "completed" ? "completed" : first("status") === "pending" ? "pending" : undefined;
+  // "open" = any non-terminal state; otherwise a single lifecycle status.
+  const rawStatus = first("status");
+  const filterStatus =
+    rawStatus === "open" || MAINTENANCE_STATUSES.includes(rawStatus as never)
+      ? rawStatus
+      : undefined;
 
   const jobWhere: Prisma.MaintenanceJobWhereInput = {};
   if (filterPropertyId) jobWhere.propertyId = filterPropertyId;
-  if (filterStatus) jobWhere.status = filterStatus;
+  if (filterStatus === "open") {
+    jobWhere.status = { in: OPEN_STATUSES };
+  } else if (filterStatus) {
+    jobWhere.status = filterStatus as Prisma.MaintenanceJobWhereInput["status"];
+  }
 
-  const [jobs, tasks, properties, units, vendors] = await Promise.all([
+  const [jobs, tasks, properties, units, vendors, staff] = await Promise.all([
     prisma.maintenanceJob.findMany({
       where: jobWhere,
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
@@ -102,7 +161,16 @@ export default async function MaintenancePage({
       select: { id: true, unitNumber: true, property: { select: { name: true } } },
     }),
     settings.modules.vendors ? listActiveVendors() : Promise.resolve([]),
+    // Active staff for the assignee picker; loose ref so no relation is needed.
+    prisma.user.findMany({
+      where: { isActive: true },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
+      select: { id: true, name: true, email: true },
+    }),
   ]);
+
+  // Resolve an assignee's display label by id (covers historical/inactive ids).
+  const staffById = new Map(staff.map((u) => [u.id, u.name?.trim() || u.email]));
 
   // Attachments (loose ref) for the visible jobs, with signed download URLs.
   const jobIds = jobs.map((j) => j.id);
@@ -138,7 +206,7 @@ export default async function MaintenancePage({
       "month",
     );
 
-  const openJobs = jobs.filter((j) => j.status === "pending").length;
+  const openJobs = jobs.filter((j) => isOpenStatus(j.status)).length;
 
   return (
     <div className="space-y-6">
@@ -291,8 +359,12 @@ export default async function MaintenancePage({
                 className="h-9 w-36 rounded-md border px-3 text-sm capitalize"
               >
                 <option value="">All</option>
-                <option value="pending">Pending</option>
-                <option value="completed">Completed</option>
+                <option value="open">Open (any)</option>
+                {MAINTENANCE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
               </select>
             </div>
             <Button type="submit" size="sm">
@@ -313,6 +385,7 @@ export default async function MaintenancePage({
               { key: "unit", label: "Unit" },
               { key: "title", label: "Job" },
               { key: "priority", label: "Priority" },
+              { key: "assignee", label: "Assignee", className: "hidden md:table-cell" },
               { key: "due", label: "Due" },
               { key: "status", label: "Status" },
               { key: "notes", label: "Notes", align: "right", sortable: false, className: "hidden sm:table-cell" },
@@ -321,8 +394,11 @@ export default async function MaintenancePage({
               { key: "actions", label: "", align: "right", sortable: false },
             ]}
             rows={jobs.map((j) => {
-              const overdue =
-                j.status === "pending" && j.dueDate != null && j.dueDate.getTime() < now.getTime();
+              const sla = slaState({ status: j.status, dueDate: j.dueDate, now });
+              const overdue = sla.state === "overdue";
+              const assigneeName = j.assignedToUserId
+                ? staffById.get(j.assignedToUserId) ?? "Former staff"
+                : null;
               return {
                 key: j.id,
                 sortValues: [
@@ -331,6 +407,7 @@ export default async function MaintenancePage({
                   j.unit?.unitNumber ?? null,
                   j.title,
                   j.priority,
+                  assigneeName,
                   j.dueDate?.toISOString() ?? null,
                   j.status,
                   j.updates.length,
@@ -386,33 +463,92 @@ export default async function MaintenancePage({
                       </div>
                     </FormDialog>
                   </span>,
+                  <span key="asg" className="inline-flex items-center gap-1">
+                    <span className={assigneeName ? "text-sm" : "text-sm text-muted-foreground"}>
+                      {assigneeName ?? "Unassigned"}
+                    </span>
+                    {isOpenStatus(j.status) && (
+                      <FormDialog
+                        trigger="Assign"
+                        triggerVariant="ghost"
+                        triggerSize="xs"
+                        title="Assign job"
+                        description={j.title}
+                        action={assignJobAction}
+                        submitLabel="Save assignee"
+                      >
+                        <input type="hidden" name="jobId" value={j.id} />
+                        <div className="space-y-2">
+                          <Label htmlFor={`asg-${j.id}`}>Assignee</Label>
+                          <select
+                            id={`asg-${j.id}`}
+                            name="assignedToUserId"
+                            defaultValue={j.assignedToUserId ?? ""}
+                            className="h-9 w-full rounded-md border px-3 text-sm"
+                          >
+                            <option value="">— unassigned —</option>
+                            {staff.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name?.trim() || u.email}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </FormDialog>
+                    )}
+                  </span>,
                   j.dueDate ? (
-                    <span
-                      key="due"
-                      className={overdue ? "font-medium text-red-600 dark:text-red-400" : undefined}
-                    >
-                      {j.dueDate.toLocaleDateString("en-US", { timeZone: "UTC" })}
+                    <span key="due" className="inline-flex items-center gap-1">
+                      <span
+                        className={overdue ? "font-medium text-red-600 dark:text-red-400" : undefined}
+                      >
+                        {j.dueDate.toLocaleDateString("en-US", { timeZone: "UTC" })}
+                      </span>
+                      <SlaChip state={sla.state} daysUntilDue={sla.daysUntilDue} />
                     </span>
                   ) : (
                     "—"
                   ),
-                  j.status === "completed" ? (
+                  <span key="s" className="inline-flex items-center gap-1">
                     <Badge
-                      key="s"
                       variant="outline"
-                      className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                      className={`font-medium ${statusBadgeClass(j.status)}`}
                     >
-                      Completed
+                      {statusLabel(j.status)}
                     </Badge>
-                  ) : (
-                    <Badge
-                      key="s"
-                      variant="outline"
-                      className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                    >
-                      Pending
-                    </Badge>
-                  ),
+                    {isOpenStatus(j.status) && (
+                      <FormDialog
+                        trigger="Change"
+                        triggerVariant="ghost"
+                        triggerSize="xs"
+                        title="Change status"
+                        description={j.title}
+                        action={setJobStatusAction}
+                        submitLabel="Save status"
+                      >
+                        <input type="hidden" name="jobId" value={j.id} />
+                        <div className="space-y-2">
+                          <Label htmlFor={`st-${j.id}`}>Status</Label>
+                          <select
+                            id={`st-${j.id}`}
+                            name="status"
+                            defaultValue={j.status}
+                            className="h-9 w-full rounded-md border px-3 text-sm"
+                          >
+                            {OPEN_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {statusLabel(s)}
+                              </option>
+                            ))}
+                            <option value="canceled">{statusLabel("canceled")}</option>
+                          </select>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Use “Complete” to close a job with a cost.
+                        </p>
+                      </FormDialog>
+                    )}
+                  </span>,
                   <FormDialog
                     key="notes"
                     trigger={`Notes (${j.updates.length})`}
@@ -498,7 +634,7 @@ export default async function MaintenancePage({
                   <span key="c" className="tabular-nums">
                     {j.costCents != null ? formatCurrency(j.costCents, j.property.currency) : "—"}
                   </span>,
-                  j.status === "pending" ? (
+                  isOpenStatus(j.status) ? (
                     <span key="a" className="inline-flex justify-end gap-1">
                       <FormDialog
                         trigger="Complete"
@@ -532,13 +668,33 @@ export default async function MaintenancePage({
                         </ConfirmSubmitButton>
                       </form>
                     </span>
-                  ) : (
+                  ) : j.status === "completed" ? (
                     <form key="a" action={reopenJobAction} className="inline">
                       <input type="hidden" name="jobId" value={j.id} />
                       <Button type="submit" variant="outline" size="xs">
                         Reopen
                       </Button>
                     </form>
+                  ) : (
+                    // Canceled: reopen back to pending, or delete (it's not history).
+                    <span key="a" className="inline-flex justify-end gap-1">
+                      <form action={uncancelJobAction} className="inline">
+                        <input type="hidden" name="jobId" value={j.id} />
+                        <Button type="submit" variant="outline" size="xs">
+                          Reopen
+                        </Button>
+                      </form>
+                      <form action={deleteJobAction} className="inline">
+                        <input type="hidden" name="jobId" value={j.id} />
+                        <ConfirmSubmitButton
+                          variant="ghost"
+                          size="xs"
+                          confirmMessage="Delete this maintenance job? It is removed permanently and cannot be recovered."
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    </span>
                   ),
                 ],
               };

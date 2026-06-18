@@ -17,6 +17,7 @@ import {
   type OverdueDigestRow,
 } from "@/lib/reminders/digest";
 import { nextOccurrenceISO } from "@/lib/maintenance/schedule";
+import { OPEN_STATUSES } from "@/lib/maintenance/status";
 import type { EmailProvider } from "@/lib/providers/email/types";
 
 /**
@@ -166,7 +167,7 @@ export async function runWeeklyMaintenanceDigest(
 
   const [jobs, tasks] = await Promise.all([
     prisma.maintenanceJob.findMany({
-      where: { status: "pending", dueDate: { not: null } },
+      where: { status: { in: OPEN_STATUSES }, dueDate: { not: null } },
       include: {
         property: { select: { name: true, timezone: true } },
         unit: { select: { unitNumber: true } },
