@@ -1,11 +1,20 @@
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
+import { brandedPageMetadata } from "@/lib/config/metadata";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApplyForm } from "./apply-form";
+import type { Metadata } from "next";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return brandedPageMetadata(
+    (await getAppSettings()).businessName,
+    "Rental application",
+  );
+}
 
 /**
  * Public rental-application form — NO session ("/apply" is a PUBLIC_PREFIX).

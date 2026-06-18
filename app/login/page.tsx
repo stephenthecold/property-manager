@@ -2,7 +2,9 @@ import Link from "next/link";
 import { getAuthSettings } from "@/lib/auth/settings";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
+import { brandedPageMetadata } from "@/lib/config/metadata";
 import { needsSetup } from "@/lib/auth/setup";
+import type { Metadata } from "next";
 import { signInWithAuthentik } from "./actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +18,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return brandedPageMetadata((await getAppSettings()).businessName, "Sign in");
+}
 
 export default async function LoginPage() {
   const [settings, setup, app] = await Promise.all([

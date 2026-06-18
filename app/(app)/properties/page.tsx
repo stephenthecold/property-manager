@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Properties" };
 
 export default async function PropertiesPage() {
   const properties = await prisma.property.findMany({

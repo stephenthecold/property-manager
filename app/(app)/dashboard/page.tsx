@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
+export const metadata = { title: "Dashboard" };
 
 type Tone = "sky" | "emerald" | "red" | "violet" | "indigo" | "amber";
 
