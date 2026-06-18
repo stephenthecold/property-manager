@@ -43,6 +43,8 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { ChangeHistory } from "@/components/app/change-history";
+import { ActivityTimeline } from "@/components/app/activity-timeline";
+import { tenantActivity } from "@/lib/services/activity";
 import { FormDialog } from "@/components/app/form-dialog";
 import { ActionForm } from "@/components/app/action-form";
 import { StatusBadge } from "@/components/status-badge";
@@ -188,6 +190,10 @@ export default async function TenantDetail({
   ]);
 
   const currency = activeLease?.unit.property.currency ?? "USD";
+
+  // Unified activity feed (read-only aggregation of existing rows for this
+  // tenant across all their leases/units). Self-contained batched reads.
+  const activity = await tenantActivity(tenant.id);
 
   // Pre-render the default SMS template bodies server-side (the dialog is a
   // client component and must not import lib/reminders). With no active lease,
@@ -1195,6 +1201,15 @@ export default async function TenantDetail({
               ],
             }))}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ActivityTimeline events={activity} />
         </CardContent>
       </Card>
 
