@@ -207,6 +207,13 @@ export default async function LeasesPage({
                 <Button
                   variant="ghost"
                   size="sm"
+                  render={<Link href={`/leases/${l.id}/abstract`} />}
+                >
+                  Abstract
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   render={<Link href={`/leases/${l.id}/agreement`} />}
                 >
                   Agreement
