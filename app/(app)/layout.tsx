@@ -11,6 +11,7 @@ import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { TablePageSizeProvider } from "@/components/app/data-table";
 import { brandedLayoutMetadata } from "@/lib/config/metadata";
 import { ThemeToggle } from "@/components/app/theme-toggle";
+import { CommandPalette } from "@/components/app/command-palette";
 import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -129,6 +130,10 @@ export default async function AppLayout({
             <NavLinks items={navEntries} />
           </div>
           <div className="flex items-center gap-3 text-sm">
+            {/* ⌘K palette searches operating records; gate on the acting role's
+                tenants.manage (the cap /api/search requires) like every nav link
+                above, so it only shows to users who can actually use it. */}
+            {can("tenants.manage") && <CommandPalette />}
             {can("audit.view") && (
               <Link href="/audit" className="text-muted-foreground hover:underline">
                 Audit
