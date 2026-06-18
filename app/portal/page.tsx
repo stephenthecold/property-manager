@@ -10,6 +10,7 @@ import { cashAppLink } from "@/lib/payments/cash-app";
 import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { onlinePaymentsConfigured } from "@/lib/services/gateway-checkout";
+import { countServedNoticesForTenant } from "@/lib/services/notices";
 import { startPortalCheckoutAction } from "./pay/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +87,7 @@ export default async function PortalHomePage({
         ? fromCents(snap.currentPeriodOutstandingCents)
         : "";
 
-  const [ledger, payments, receipts, documents, requests] = await Promise.all([
+  const [ledger, payments, receipts, documents, requests, noticeCount] = await Promise.all([
     activeLease
       ? prisma.ledgerEntry.findMany({
           where: { leaseId: activeLease.id },
@@ -122,6 +123,9 @@ export default async function PortalHomePage({
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    settings.modules.notices
+      ? countServedNoticesForTenant(tenant.id)
+      : Promise.resolve(0),
   ]);
 
   const fmtDate = (d: Date) =>
@@ -240,6 +244,30 @@ export default async function PortalHomePage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Notices inbox */}
+      {settings.modules.notices && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="space-y-0.5">
+              <div className="text-base font-medium">Notices</div>
+              <div className="text-sm text-muted-foreground">
+                {noticeCount > 0
+                  ? `${noticeCount} notice${noticeCount === 1 ? "" : "s"} from your property manager`
+                  : "No notices right now."}
+              </div>
+            </div>
+            <Button variant="outline" size="sm" render={<Link href="/portal/notices" />}>
+              View notices
+              {noticeCount > 0 && (
+                <Badge variant="secondary" className="ml-2 tabular-nums">
+                  {noticeCount}
+                </Badge>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* How to pay */}
       <Card>
