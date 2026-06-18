@@ -20,6 +20,36 @@ npm run breakglass issue|rotate|disable
 docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
 ```
 
+## Verification
+
+Every change must clear this gate before commit/push — never skip it:
+
+```bash
+npm run typecheck        # tsc --noEmit — zero errors
+npm test                 # Vitest pure-logic suite — all green
+npm run lint             # ESLint — zero errors (keep it clean)
+npm run prisma:generate  # after ANY prisma/schema.prisma edit (runs offline, no DB)
+```
+
+Then reach for the skill that matches the change — these are the verification tools, use them rather than eyeballing the diff:
+
+- **`/code-review`** — review the current diff for correctness bugs + reuse/simplification cleanups. Run on every non-trivial diff (`--fix` applies findings, `--comment` posts them inline on the PR).
+- **`/simplify`** — quality-only pass (reuse/simplification/efficiency) when you don't need bug-hunting.
+- **`/security-review`** — required for anything touching auth/capabilities, portal/payer sessions, file serving, webhooks, money, or any new external surface.
+- **`/run`** — launch and drive the app to confirm a change works for real (and to screenshot UI work).
+- **`/verify`** — run the app and observe behaviour to prove a user-visible/behavioural change actually does what it should. Use before claiming any such change works.
+
+**Types + unit tests do NOT cover rendered pages, migrations, or the worker schedule** — those need a live DB + a session. Stand one up, then drive it with `/run` or `/verify`:
+
+```bash
+docker compose up -d db   # Postgres (or the full stack: docker compose up -d)
+npm run prisma:deploy     # apply migrations    npm run db:seed   # seed data
+npm run breakglass issue  # one-time owner login when no OIDC is configured
+npm run dev               # open the app / let /run drive it
+```
+
+UI/visual and behavioural changes are not "done" until rendered and observed. If no DB/browser is available in the environment, say so explicitly and flag the change for a visual check — never report it verified on types alone.
+
 ## Non-negotiable conventions
 
 - **Money is integer cents (`bigint`)**, only ever touched through [`lib/money.ts`](lib/money.ts).
