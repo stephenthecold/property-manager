@@ -5,8 +5,8 @@ import { mergeActivity, type ActivityEvent } from "@/lib/activity/merge";
 /**
  * Per-tenant unified activity timeline (read-only). Aggregates EXISTING rows
  * for a tenant — payments, ledger charges, reminders, notices, requests,
- * maintenance jobs on their unit(s), and audit-log entries — into one
- * newest-first feed via the pure {@link mergeActivity}.
+ * maintenance jobs on their unit(s), audit-log entries, and inbound SMS replies
+ * — into one newest-first feed via the pure {@link mergeActivity}.
  *
  * Read-only by construction: it never writes and never re-implements balance
  * math — money is taken straight off existing rows and only ever formatted for
@@ -59,7 +59,7 @@ export async function tenantActivity(
   // practice, so the first resolved currency wins (USD when they have no lease).
   const currency = leaseRows[0]?.unit.property.currency ?? "USD";
 
-  const [payments, charges, reminders, notices, requests, maintenance, audits] =
+  const [payments, charges, reminders, notices, requests, maintenance, audits, inbound] =
     await Promise.all([
       // Payments on any of the tenant's leases.
       leaseIds.length
@@ -171,6 +171,13 @@ export async function tenantActivity(
           createdAt: true,
         },
       }),
+      // Inbound SMS replies the tenant texted in (two-way inbox).
+      prisma.inboundMessage.findMany({
+        where: { tenantId },
+        orderBy: { receivedAt: "desc" },
+        take: PER_SOURCE,
+        select: { id: true, body: true, fromPhone: true, receivedAt: true },
+      }),
     ]);
 
   const groups: ActivityEvent[][] = [
@@ -230,6 +237,14 @@ export async function tenantActivity(
       kind: "audit" as const,
       title: auditTitle(a.action, a.entityType),
       detail: a.actorEmail ?? undefined,
+    })),
+    inbound.map((m) => ({
+      id: `message:${m.id}`,
+      at: m.receivedAt,
+      kind: "message" as const,
+      title: "Reply received",
+      detail: m.body.trim() ? m.body.trim() : m.fromPhone,
+      href: `/messages`,
     })),
   ];
 
