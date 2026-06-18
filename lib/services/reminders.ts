@@ -675,25 +675,57 @@ const DELIVERY_STATUS_MAP: Record<string, ReminderStatus> = {
   accepted: "sent",
 };
 
+/** Cap the stored failure detail so a chatty provider can't bloat the row. */
+const FAILED_REASON_MAX = 280;
+
+/** Optional provider failure detail accompanying a delivery-status callback. */
+export interface DeliveryStatusDetail {
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+/** Build the truncated "code: message" failure reason, or null if neither present. */
+function buildFailedReason(detail?: DeliveryStatusDetail): string | null {
+  const code = detail?.errorCode?.trim();
+  const message = detail?.errorMessage?.trim();
+  const reason = [code, message].filter(Boolean).join(": ");
+  if (!reason) return null;
+  return reason.length > FAILED_REASON_MAX
+    ? reason.slice(0, FAILED_REASON_MAX)
+    : reason;
+}
+
 /**
  * Apply a provider delivery-status callback. Idempotent, never downgrades a
  * delivered row, and writes no audit rows (webhook noise, not a user action).
+ * On terminal delivery sets deliveredAt; on failure records failedReason from
+ * the provider's error code/message (truncated).
  */
 export async function recordDeliveryStatus(
   providerMessageId: string,
   providerStatus: string,
+  detail?: DeliveryStatusDetail,
+  now: Date = new Date(),
 ): Promise<boolean> {
   if (!providerMessageId) return false;
   const mapped = DELIVERY_STATUS_MAP[providerStatus.toLowerCase()];
   if (!mapped) return false;
 
+  // A delivered row is terminal: never let a late/out-of-order callback (e.g.
+  // "sent" arriving after "delivered") regress its status, deliveredAt, or
+  // clear it. "delivered" itself stays idempotent (re-applying is a no-op write).
   const where =
     mapped === "delivered"
       ? { providerMessageId }
       : { providerMessageId, status: { not: "delivered" as const } };
-  const res = await prisma.reminder.updateMany({
-    where,
-    data: { status: mapped },
-  });
+
+  const data: Prisma.ReminderUpdateManyMutationInput = { status: mapped };
+  if (mapped === "delivered") {
+    data.deliveredAt = now;
+  } else if (mapped === "failed") {
+    data.failedReason = buildFailedReason(detail);
+  }
+
+  const res = await prisma.reminder.updateMany({ where, data });
   return res.count > 0;
 }

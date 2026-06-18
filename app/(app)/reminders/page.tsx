@@ -193,13 +193,29 @@ export default async function RemindersPage({
             <span key="d" className="tabular-nums">
               {maskPhone(r.destinationPhone)}
             </span>,
-            <Badge
-              key="s"
-              variant="outline"
-              className={`font-medium capitalize ${STATUS_CLASS[r.status]}`}
-            >
-              {r.status}
-            </Badge>,
+            <div key="s" className="space-y-0.5">
+              <Badge
+                variant="outline"
+                className={`font-medium capitalize ${STATUS_CLASS[r.status]}`}
+                title={
+                  r.status === "delivered" && r.deliveredAt
+                    ? `Delivered ${r.deliveredAt.toLocaleString()}`
+                    : r.status === "failed" && r.failedReason
+                      ? r.failedReason
+                      : undefined
+                }
+              >
+                {r.status}
+              </Badge>
+              {r.status === "failed" && r.failedReason && (
+                <span
+                  className="block max-w-[14rem] truncate text-xs text-red-700 dark:text-red-300"
+                  title={r.failedReason}
+                >
+                  {r.failedReason}
+                </span>
+              )}
+            </div>,
             r.provider ?? "—",
             <span key="m" className="text-muted-foreground" title={r.messageBody}>
               {truncate(r.messageBody)}
