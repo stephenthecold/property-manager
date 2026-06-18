@@ -675,25 +675,64 @@ const DELIVERY_STATUS_MAP: Record<string, ReminderStatus> = {
   accepted: "sent",
 };
 
+/** Cap the stored failure detail so a chatty provider can't bloat the row. */
+const FAILED_REASON_MAX = 280;
+
+/** Optional provider failure detail accompanying a delivery-status callback. */
+export interface DeliveryStatusDetail {
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+/** Build the truncated "code: message" failure reason, or null if neither present. */
+function buildFailedReason(detail?: DeliveryStatusDetail): string | null {
+  const code = detail?.errorCode?.trim();
+  const message = detail?.errorMessage?.trim();
+  const reason = [code, message].filter(Boolean).join(": ");
+  if (!reason) return null;
+  return reason.length > FAILED_REASON_MAX
+    ? reason.slice(0, FAILED_REASON_MAX)
+    : reason;
+}
+
 /**
  * Apply a provider delivery-status callback. Idempotent, never downgrades a
  * delivered row, and writes no audit rows (webhook noise, not a user action).
+ * On terminal delivery sets deliveredAt; on failure records failedReason from
+ * the provider's error code/message (truncated).
  */
 export async function recordDeliveryStatus(
   providerMessageId: string,
   providerStatus: string,
+  detail?: DeliveryStatusDetail,
+  now: Date = new Date(),
 ): Promise<boolean> {
   if (!providerMessageId) return false;
   const mapped = DELIVERY_STATUS_MAP[providerStatus.toLowerCase()];
   if (!mapped) return false;
 
-  const where =
-    mapped === "delivered"
-      ? { providerMessageId }
-      : { providerMessageId, status: { not: "delivered" as const } };
-  const res = await prisma.reminder.updateMany({
-    where,
-    data: { status: mapped },
-  });
+  // A delivered row is terminal: never let a late/out-of-order callback regress
+  // it. Scoping every branch to status != delivered means a duplicate "delivered"
+  // callback is a true no-op (deliveredAt is stamped exactly once, never bumped
+  // forward) and a stale "sent"/"failed" arriving after delivery is ignored.
+  const where = { providerMessageId, status: { not: "delivered" as const } };
+
+  const data: Prisma.ReminderUpdateManyMutationInput = { status: mapped };
+  if (mapped === "delivered") {
+    // First terminal delivery: stamp the time and drop any earlier failure note.
+    data.deliveredAt = now;
+    data.failedReason = null;
+  } else if (mapped === "failed") {
+    // Only overwrite the reason when this callback carries one — a later
+    // detail-less failure must not erase a diagnostic an earlier one captured.
+    const reason = buildFailedReason(detail);
+    if (reason) data.failedReason = reason;
+  } else {
+    // sent/queued/accepted: the message is back in flight, so a stale failure
+    // note from a prior failed attempt no longer applies.
+    data.failedReason = null;
+  }
+
+  const res = await prisma.reminder.updateMany({ where, data });
   return res.count > 0;
 }

@@ -40,7 +40,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     const messageSid = params["MessageSid"];
     const messageStatus = params["MessageStatus"];
     if (messageSid && messageStatus) {
-      await recordDeliveryStatus(messageSid, messageStatus);
+      await recordDeliveryStatus(messageSid, messageStatus, {
+        errorCode: params["ErrorCode"],
+        errorMessage: params["ErrorMessage"],
+      });
     }
     return new NextResponse(null, { status: 204 });
   } catch (e) {

@@ -1144,6 +1144,10 @@ model Reminder {
   providerMessageId String?
   sentBy            String?
   sentAt            DateTime?
+  // Set when the provider reports terminal delivery (Twilio MessageStatus=delivered).
+  deliveredAt       DateTime?
+  // Provider failure detail (Twilio ErrorCode/ErrorMessage), truncated; null unless failed.
+  failedReason      String?
   createdAt         DateTime       @default(now())
 
   // Composite covers the plain tenantId lookup (leading-column prefix) AND the
