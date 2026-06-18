@@ -3,7 +3,9 @@
 Rental property-management platform. Phases 1–4.7 are built and deployed (core app, receipts,
 SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) — see
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what exists and
-[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. This file is the working
+[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. The prioritized enterprise-gap
+backlog lives in [`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md) (refresh it with
+`/competitive-audit`; turn an item into a build with `/feature-intake`). This file is the working
 guide; [`docs/`](docs/) has the details.
 
 ## Working agreement
