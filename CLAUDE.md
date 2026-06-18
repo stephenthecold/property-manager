@@ -20,6 +20,30 @@ npm run breakglass issue|rotate|disable
 docker compose up -d   # app + db + worker  (profiles: idp, storage, proxy)
 ```
 
+## Verification
+
+Run this gate before treating a change as done (and before pushing / opening a PR). The first
+line is non-negotiable and must pass; the skills automate the deeper review. A change is
+"verified" only when **typecheck + tests + lint pass**, **`/verify` confirms runtime behavior**,
+and **`/code-review` (plus `/security-review` where it applies) comes back clean**.
+
+- **Static + unit gates (must be green):** `npm run typecheck` (tsc --noEmit), `npm test`
+  (Vitest accounting units), and `npm run lint` (keep it zero-error). Any money/period/status
+  change needs new/extended pure-module tests in [`lib/accounting/`](lib/accounting/).
+- **`/verify`** — runs the app and exercises the change end-to-end to confirm it actually
+  behaves as intended, not just that it compiles. Use **`/run`** when you only need to launch
+  or drive the app (e.g. to capture a screenshot).
+- **`/code-review`** — reviews the current diff for correctness bugs and reuse/simplification/
+  efficiency issues. Add `--fix` to apply findings to the working tree, or `--comment` to post
+  them inline on the PR.
+- **`/security-review`** — required whenever a change touches auth/capabilities, the ledger,
+  money handling, the tenant portal, file storage, or audit logging (i.e. most of the
+  Non-negotiable conventions below). Reviews the pending changes on the branch.
+- **`/simplify`** — optional quality pass for reuse/altitude cleanups once the change is
+  correct; it does not hunt for bugs (use `/code-review` for that).
+- **`/review`** — review an existing pull request when verifying someone else's PR rather than
+  your own working-tree diff.
+
 ## Non-negotiable conventions
 
 - **Money is integer cents (`bigint`)**, only ever touched through [`lib/money.ts`](lib/money.ts).
