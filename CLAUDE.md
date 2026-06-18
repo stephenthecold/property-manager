@@ -15,6 +15,12 @@ guide; [`docs/`](docs/) has the details.
   render and observe it. No work begins without a verification plan.
 - **Verify and report after.** When done, actually run that verification and report results: what
   passed, and what you couldn't check and why. "It typechecks" is not proof the behaviour works.
+- **Parallelize with agents.** Independent work should run concurrently, not serially. Fan out
+  subagents — one per feature/area for **development** (use `isolation: "worktree"` when they edit
+  the tree at the same time so branches don't collide), and run **verification** in parallel too
+  (`/code-review`, `/security-review`, and the typecheck/test/lint gate as separate agents). Hand
+  each a crisp spec + the [Verification](#verification) gate, launch them in one batch, then
+  reconcile their results before pushing. Same fan-out for research (`/competitive-audit`).
 - **Hot zones — ask first.** Before changing any code in a hot zone (below), STOP and ask, and
   explain the **blast radius** (what breaks, who's affected, whether it's reversible). Don't touch
   it until the user says go. Hot zones — money, auth, and anything irreversible:
