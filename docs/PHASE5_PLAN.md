@@ -137,13 +137,16 @@ still flows through `lib/money.ts`, the ledger stays the source of truth, and an
 the accounting core stays in a clock-injected, unit-tested pure module.
 
 ### H1. Branding & theme (Settings → Organization)
-- **Brand / accent colour.** The two palettes are fixed `oklch(...)` literals in
-  [`app/globals.css`](../app/globals.css) (`--primary`, `--accent`, `--ring`, …). Let the org
-  pick a brand colour (or derive it from the logo) and emit it as a CSS-variable override on the
-  app shell. Must keep both light/dark contrast and the **print-forces-light** rule intact, and
-  carry `dark:` variants for any tinted surface.
-- **Letter-tile fallback colour** for the favicon/avatar in [`app/icon.tsx`](../app/icon.tsx)
-  (today derived/static) — fold into the same brand colour.
+- ✅ **Done — brand / accent colour.** `AppSettings.brandColor` (a hex) re-tints the app shell.
+  The pure [`lib/config/brand.ts`](../lib/config/brand.ts) takes only the colour's **OKLCH hue**
+  (`hexToOklchHue`) and re-emits `--primary`/`--ring` (+ sidebar twins) with each variable's
+  *shipped* lightness/chroma — so light/dark contrast and the print-forces-light rule are
+  preserved automatically (only the tint changes; greys are rejected). A `<BrandColorStyle>`
+  server component injects the override into the staff app + tenant/payer portal shells; blank →
+  the shipped theme. Unit-tested (`lib/config/brand.test.ts`).
+- Still pending: **letter-tile fallback colour** for the favicon/avatar in
+  [`app/icon.tsx`](../app/icon.tsx) — fold into the same brand colour. Public `/apply` + `/login`
+  could also pick up the override (they aren't under the three branded layouts).
 
 ### H2. Display & locale (Settings → Organization)
 - **Currency / number / date locale.** [`lib/money.ts`](../lib/money.ts) `formatCurrency` defaults

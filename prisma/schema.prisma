@@ -241,6 +241,9 @@ model AppSettings {
   businessPhone     String?
   businessEmail     String?
   logoDocumentId    String? // UploadedDocument.id (loose ref)
+  // H1: brand accent colour (hex). Only its OKLCH hue is used — the app shell
+  // re-tints --primary/--ring (lib/config/brand.ts); null/blank -> shipped theme.
+  brandColor        String?
   receiptFooter     String? // free text printed at the bottom of receipts
   // Receipt number prefix ("RCT-YYYYMMDD-NNNN"); null/blank -> "RCT".
   // Sanitized to A-Z/0-9, max 8 (lib/accounting/receipts.ts).

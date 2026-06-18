@@ -1,4 +1,5 @@
 import { getAppSettings } from "@/lib/services/app-settings";
+import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { getPayerSession } from "@/lib/payer-portal/session";
 import { signOutPayerAction } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default async function PayerPortalLayout({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
+      <BrandColorStyle color={settings.brandColor} />
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
           <div className="text-lg font-semibold">{settings.businessName}</div>

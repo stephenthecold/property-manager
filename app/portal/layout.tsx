@@ -1,4 +1,5 @@
 import { getAppSettings } from "@/lib/services/app-settings";
+import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { getPortalSession } from "@/lib/portal/session";
 import { signOutPortalAction } from "./actions";
@@ -44,6 +45,7 @@ export default async function PortalLayout({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
+      <BrandColorStyle color={settings.brandColor} />
       {identity?.impersonatedByUserId && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
           <span>
