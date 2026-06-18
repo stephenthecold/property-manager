@@ -1171,7 +1171,11 @@ model PropertyExpense {
 
 enum MaintenanceJobStatus {
   pending
+  assigned
+  in_progress
+  on_hold
   completed
+  canceled
 }
 
 /// Triage priority for maintenance jobs (display/sort only — never gates work).
@@ -1198,6 +1202,9 @@ model MaintenanceJob {
   completedAt DateTime?
   costCents   BigInt? // entered on completion; mirrored to PropertyExpense
   vendorId    String? // optional assigned vendor (module "vendors")
+  // Loose ref to a staff User (no FK relation — keep the schema additive and
+  // avoid a back-relation on User). Cleared in the app when a user is removed.
+  assignedToUserId String?
   createdBy   String?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
@@ -1210,6 +1217,7 @@ model MaintenanceJob {
   @@index([propertyId, status])
   @@index([unitId, status])
   @@index([vendorId])
+  @@index([assignedToUserId])
 }
 
 /// Threaded progress notes on a maintenance job (the "ticket" timeline). An

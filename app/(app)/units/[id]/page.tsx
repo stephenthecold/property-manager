@@ -5,6 +5,11 @@ import { formatCurrency, fromCents } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
 import { computeVacancy } from "@/lib/units/vacancy";
 import { getAppSettings } from "@/lib/services/app-settings";
+import {
+  OPEN_STATUSES,
+  statusBadgeClass,
+  statusLabel,
+} from "@/lib/maintenance/status";
 import { Badge } from "@/components/ui/badge";
 import { updateUnit, deleteUnit } from "../actions";
 import { StatusBadge } from "@/components/status-badge";
@@ -103,7 +108,7 @@ export default async function UnitDetail({
   const { modules } = await getAppSettings();
   const openJobs = modules.maintenance
     ? await prisma.maintenanceJob.findMany({
-        where: { unitId: unit.id, status: "pending" },
+        where: { unitId: unit.id, status: { in: OPEN_STATUSES } },
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       })
     : [];
@@ -378,9 +383,9 @@ export default async function UnitDetail({
                   <li key={j.id} className="flex flex-wrap items-center gap-2">
                     <Badge
                       variant="outline"
-                      className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                      className={`font-medium ${statusBadgeClass(j.status)}`}
                     >
-                      Pending
+                      {statusLabel(j.status)}
                     </Badge>
                     <span className="font-medium">{j.title}</span>
                     {j.dueDate && (
