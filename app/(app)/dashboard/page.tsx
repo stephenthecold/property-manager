@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getDashboard, getVacancyOutlook } from "@/lib/services/dashboard";
+import { expiringLeases } from "@/lib/services/lease-expirations";
+import {
+  expirationBadgeClass,
+  daysUntilLabel,
+} from "@/lib/leases/expiration";
 import { getProfitSnapshot } from "@/lib/services/financials";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole, getSessionUser } from "@/lib/auth/session";
@@ -96,10 +101,11 @@ export default async function DashboardPage() {
   const canCollect = hasCapability(actingRole, "payments.manage", settings.rolePermissions);
   const showProfit = canFinance && settings.modules.financials;
 
-  const [d, profit, vacancies] = await Promise.all([
+  const [d, profit, vacancies, expirations] = await Promise.all([
     getDashboard(now),
     showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
     getVacancyOutlook(now),
+    expiringLeases({ now }),
   ]);
   // Fixed monthly costs = mortgage + insurance + taxes (yearly figures /12).
   const fixedCostsMonthlyCents = profit
@@ -328,6 +334,66 @@ export default async function DashboardPage() {
                 ],
               };
             })}
+        />
+      ),
+    },
+    {
+      id: "lease_expirations",
+      label: "Lease expirations",
+      title: (
+        <span className="flex items-center gap-2">
+          Lease expirations
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+            {expirations.length}
+          </span>
+        </span>
+      ),
+      content: (
+        <DataTable
+          emptyMessage="No leases expiring in the next 60 days."
+          columns={[
+            { key: "tenant", label: "Tenant" },
+            { key: "unit", label: "Unit" },
+            { key: "property", label: "Property", className: "hidden md:table-cell" },
+            { key: "endDate", label: "End date" },
+            { key: "daysLeft", label: "Days left", align: "right", numeric: true },
+          ]}
+          rows={expirations.map((r) => ({
+            key: r.leaseId,
+            sortValues: [
+              r.tenantName,
+              r.unitLabel,
+              r.propertyName,
+              r.endDate.getTime(),
+              r.daysUntilExpiry,
+            ],
+            cells: [
+              <Link
+                key="t"
+                href={`/tenants/${r.tenantId}`}
+                className="font-medium hover:underline"
+              >
+                {r.tenantName}
+              </Link>,
+              r.unitLabel,
+              <span key="p" className="text-muted-foreground">
+                {r.propertyName}
+              </span>,
+              <span key="e" className="tabular-nums">
+                {r.endDate.toLocaleDateString("en-US", {
+                  timeZone: r.timezone,
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>,
+              <span key="d" className="flex justify-end">
+                <Badge variant="outline" className={expirationBadgeClass(r.state)}>
+                  {daysUntilLabel(r.daysUntilExpiry)}
+                </Badge>
+              </span>,
+            ],
+          }))}
         />
       ),
     },

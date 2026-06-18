@@ -24,7 +24,12 @@ export const DASHBOARD_BUBBLE_IDS = [
   "net_month",
 ] as const;
 
-export const DASHBOARD_SECTION_IDS = ["vacancy", "tenants", "payments"] as const;
+export const DASHBOARD_SECTION_IDS = [
+  "vacancy",
+  "lease_expirations",
+  "tenants",
+  "payments",
+] as const;
 
 export type DashboardBubbleId = (typeof DASHBOARD_BUBBLE_IDS)[number];
 export type DashboardSectionId = (typeof DASHBOARD_SECTION_IDS)[number];
