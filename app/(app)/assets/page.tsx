@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DateTime } from "luxon";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { prisma } from "@/lib/db";
@@ -20,14 +21,19 @@ import { Textarea } from "@/components/ui/textarea";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Date-only values are stored at start-of-day; render at UTC for stability. */
-function fmtDate(d: Date | null): string {
-  return d ? d.toLocaleDateString("en-US", { timeZone: "UTC" }) : "—";
+/**
+ * Date-only values are persisted at start-of-day in the property timezone (via
+ * parseDateOnlyInZone), so render + edit-prefill them in that SAME zone — UTC
+ * formatting would drift a day for properties east of UTC. Mirrors the
+ * properties page (DateTime.fromJSDate(..., { zone }).toFormat(...)).
+ */
+function fmtDate(d: Date | null, tz: string): string {
+  return d ? DateTime.fromJSDate(d, { zone: tz }).toFormat("M/d/yyyy") : "—";
 }
 
-/** YYYY-MM-DD for a date input default (UTC, matching how it was stored). */
-function dateInputValue(d: Date | null): string {
-  return d ? d.toISOString().slice(0, 10) : "";
+/** YYYY-MM-DD for a date input default, in the property timezone. */
+function dateInputValue(d: Date | null, tz: string): string {
+  return d ? DateTime.fromJSDate(d, { zone: tz }).toFormat("yyyy-MM-dd") : "";
 }
 
 interface AssetDefaults {
@@ -42,6 +48,8 @@ interface AssetDefaults {
   installedOn: Date | null;
   warrantyExpiresOn: Date | null;
   notes: string | null;
+  /** Timezone of the asset's current property — date prefill renders in it. */
+  tz: string;
 }
 
 function AssetFields({
@@ -139,7 +147,7 @@ function AssetFields({
             id={`installed-${k}`}
             name="installedOn"
             type="date"
-            defaultValue={dateInputValue(defaults?.installedOn ?? null)}
+            defaultValue={dateInputValue(defaults?.installedOn ?? null, defaults?.tz ?? "UTC")}
           />
         </div>
         <div className="space-y-2">
@@ -148,7 +156,7 @@ function AssetFields({
             id={`warranty-${k}`}
             name="warrantyExpiresOn"
             type="date"
-            defaultValue={dateInputValue(defaults?.warrantyExpiresOn ?? null)}
+            defaultValue={dateInputValue(defaults?.warrantyExpiresOn ?? null, defaults?.tz ?? "UTC")}
           />
         </div>
       </div>
@@ -212,7 +220,12 @@ export default async function AssetsPage() {
           { key: "actions", label: "", align: "right", sortable: false },
         ]}
         rows={assets.map((a) => {
-          const wState = warrantyState({ warrantyExpiresOn: a.warrantyExpiresOn, now });
+          const tz = a.property.timezone;
+          const wState = warrantyState({
+            warrantyExpiresOn: a.warrantyExpiresOn,
+            now,
+            tz,
+          });
           const makeModel = [a.make, a.model].filter(Boolean).join(" ");
           return {
             key: a.id,
@@ -246,14 +259,14 @@ export default async function AssetsPage() {
               </span>,
               makeModel || "—",
               a.serialNumber ?? "—",
-              fmtDate(a.installedOn),
+              fmtDate(a.installedOn, tz),
               <span key="w" className="inline-flex items-center gap-1">
                 <Badge variant="outline" className={`font-medium ${warrantyBadgeClass(wState)}`}>
                   {warrantyLabel(wState)}
                 </Badge>
                 {a.warrantyExpiresOn && wState !== "none" && (
                   <span className="text-xs text-muted-foreground">
-                    {fmtDate(a.warrantyExpiresOn)}
+                    {fmtDate(a.warrantyExpiresOn, tz)}
                   </span>
                 )}
               </span>,
@@ -289,6 +302,7 @@ export default async function AssetsPage() {
                       installedOn: a.installedOn,
                       warrantyExpiresOn: a.warrantyExpiresOn,
                       notes: a.notes,
+                      tz,
                     }}
                   />
                 </FormDialog>

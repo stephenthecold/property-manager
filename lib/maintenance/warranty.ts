@@ -1,11 +1,14 @@
+import { daysBetween } from "@/lib/accounting/periods";
+
 /**
  * Pure warranty classification for registered assets. Clock-injected (`now`)
  * and DB-free — it decides only how to *display* an asset's warranty relative
  * to today. No money, no ledger, no side effects.
  *
- * warrantyExpiresOn is a date-only value stored at start-of-day (the page
- * renders it with timeZone:"UTC"), so we compare whole UTC days to keep the
- * boundary stable regardless of the server's local zone — mirroring slaState.
+ * warrantyExpiresOn is a date-only value persisted at start-of-day in the
+ * PROPERTY timezone (via parseDateOnlyInZone), so the day math runs in that
+ * same zone — reusing daysBetween (lib/accounting/periods.ts). `tz` defaults
+ * to UTC, which is correct when the stored instant is UTC midnight.
  */
 
 export type WarrantyState = "expired" | "expiring_soon" | "active" | "none";
@@ -13,28 +16,21 @@ export type WarrantyState = "expired" | "expiring_soon" | "active" | "none";
 /** A warranty is "expiring soon" when it ends within this many days (inclusive). */
 const EXPIRING_SOON_DAYS = 30;
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/** Start-of-UTC-day epoch ms for a Date. */
-function utcDayStart(d: Date): number {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-}
-
 /**
  * Classify an asset's warranty standing.
  * - No warranty date -> "none".
- * - Expiry in the past (by whole UTC days) -> "expired".
+ * - Expiry in the past (by whole days in `tz`) -> "expired".
  * - Expiring within EXPIRING_SOON_DAYS days -> "expiring_soon".
  * - Otherwise -> "active".
  */
 export function warrantyState(i: {
   warrantyExpiresOn: Date | null;
   now: Date;
+  tz?: string;
 }): WarrantyState {
   if (i.warrantyExpiresOn == null) return "none";
-  const daysUntil = Math.round(
-    (utcDayStart(i.warrantyExpiresOn) - utcDayStart(i.now)) / MS_PER_DAY,
-  );
+  const tz = i.tz ?? "UTC";
+  const daysUntil = daysBetween(i.now, i.warrantyExpiresOn, tz);
   if (daysUntil < 0) return "expired";
   if (daysUntil <= EXPIRING_SOON_DAYS) return "expiring_soon";
   return "active";

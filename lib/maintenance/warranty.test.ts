@@ -45,6 +45,21 @@ describe("warrantyState", () => {
       "active",
     );
   });
+
+  it("does the day math in the property timezone, not UTC", () => {
+    // parseDateOnlyInZone("2026-07-19", "Asia/Tokyo") stores this instant —
+    // 15:00 the previous UTC day. In Tokyo it is exactly 31 days out (just past
+    // the 30-day window) -> "active". Judging the SAME instant in UTC counts
+    // only 30 days and would wrongly read "expiring_soon"; the tz argument is
+    // what keeps the boundary correct for properties east of UTC.
+    const tokyoExpiry = new Date("2026-07-18T15:00:00.000Z");
+    expect(
+      warrantyState({ warrantyExpiresOn: tokyoExpiry, now, tz: "Asia/Tokyo" }),
+    ).toBe("active");
+    expect(warrantyState({ warrantyExpiresOn: tokyoExpiry, now })).toBe(
+      "expiring_soon",
+    );
+  });
 });
 
 describe("warranty display helpers", () => {

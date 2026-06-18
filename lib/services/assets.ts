@@ -29,7 +29,8 @@ export async function listAssets() {
   return prisma.asset.findMany({
     orderBy: [{ active: "desc" }, { name: "asc" }],
     include: {
-      property: { select: { name: true } },
+      // timezone drives date-only render + warranty math (property-tz, not UTC).
+      property: { select: { name: true, timezone: true } },
       unit: { select: { unitNumber: true } },
     },
   });
