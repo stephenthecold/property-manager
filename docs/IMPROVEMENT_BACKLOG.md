@@ -24,13 +24,21 @@ Built across parallel worktree-agent batches (each through the verification gate
   source (#78) · **I** — ⌘K global search (#74) · **H** — Two-way SMS inbox (#75) · **G** — Work-order
   lifecycle + assignee + SLA (#77) · **G** — Preventive-maintenance execution log (#79) · **G** —
   Asset/warranty registry (#80) · **D** — Lease-expiration alerts (#81) · **E** — Portal notices inbox
-  (#82) · **I** — Audit-log CSV export (#83).
+  (#82) · **I** — Audit-log CSV export (#83) · **D** — Printable lease abstract (#85) · **H** —
+  Reminder delivery tracking (#86).
 - Plus tooling: the `/competitive-audit` + `/feature-intake` skills (#70) and the CLAUDE.md
   "parallelize with agents" clause (#72).
 
 Already present in `main` before this pass (don't rebuild): **Inspections** (lease-scoped, with items),
 **reports CSV export** (`/api/reports/[type]`), **audit-log filters**, and partial reminder delivery
 status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
+
+> **Verification status (top open task).** Every shipped PR cleared typecheck + unit tests + lint +
+> `/code-review` (+ `/security-review` on webhook/portal/new-surface changes), each independently
+> re-verified before merge. They were **not** exercised against a live DB/browser in the build
+> environment, so the 4 new migrations (#79/#80/#86 add tables/columns), the rendered pages, and the
+> worker flows still need a one-time pass: `docker compose up -d db` → `npm run prisma:deploy` →
+> `npm run db:seed` → drive with `/run` or `/verify` (check both themes + that the migrations apply).
 
 ---
 
@@ -43,7 +51,7 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
   accepts + e-signs. New `LeaseRenewalOffer`; reuse e-sign token/signature path (`SigningRequest.kind`).
 - `[COHESION] V:H E:M` — 🔥 **Deposit→ledger move-out statement** — itemize deductions, post refund or
   balance-owed as ledger entries (`sourceType="inspection_disposition"`). Touches `postPayment`/ledger.
-- `[POLISH] V:M E:S` — **Lease abstract** — one-page printable summary from `AgreementContext`.
+- ✅ **#85** **Lease abstract** — one-page printable summary (links from the agreement page + leases list).
 - `[GAP] V:M E:M` — **Amendments/addenda** — rider text + signature (`SigningRequest.kind="amendment"`).
 - `[POLISH] V:M E:S` — **Prorate-first-period UI** — `Lease.prorateFirstPeriod` exists; expose at create.
 - `[GAP] V:M E:L` — Guarantor/co-signer; bulk lease term actions.
@@ -70,9 +78,8 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
 ### H. Comms & automation
 - ✅ **#75** Two-way SMS inbox. (Notification center / message log is largely covered by the activity
   timeline + the inbox.)
-- `[GAP] V:M E:M` — **Delivery/read + bounce tracking** — `ReminderStatus` already has delivered/failed +
-  `recordDeliveryStatus`; the gap is `deliveredAt`/`failedReason` timestamps + surfacing status in the
-  reminders view.
+- ✅ **#86** **Delivery tracking** — `deliveredAt` + `failedReason` added; status surfaced in the
+  reminders view. (Read receipts / bounce categorization remain a possible extension.)
 - `[POLISH] V:M E:S` — Per-event reminder preferences; bulk audience segmentation.
 - `[GAP] V:M E:L` — Trigger→action **workflow engine** *(deferred — enterprise-heavy for a small operator).*
 
@@ -104,9 +111,8 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
 schema additions don't cascade-conflict:
 1. **Renewal offer→acceptance** (D + E) — the biggest remaining small-operator win; new `LeaseRenewalOffer`,
    reuse the e-sign path.
-2. **Delivery/read tracking finish** (H) — timestamps + surface status in the reminders view.
-3. **Turnover/make-ready checklist** (G) and **Asset↔Job link** (G).
-4. **Lease-expiration digest** (D follow-up) and **tenant ledger CSV** (E).
+2. **Turnover/make-ready checklist** (G) and **Asset↔Job link** (`MaintenanceJob.assetId`, G).
+3. **Lease-expiration digest** (D follow-up) and **tenant ledger CSV** (E).
 
 **Hot zones — need an explicit go-ahead + blast-radius writeup first** (CLAUDE.md):
 - 🔥 **Deposit→ledger move-out statement** (D) — posts real ledger entries; blast radius = tenant balances.
