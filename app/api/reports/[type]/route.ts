@@ -4,7 +4,9 @@ import { authorizeApiCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { prisma } from "@/lib/db";
 import {
+  BACK_RENT_HEADERS,
   EXPIRATION_HEADERS,
+  getBackRent,
   getIncomeSummary,
   getLeaseExpirations,
   getOverdue,
@@ -74,6 +76,9 @@ export async function GET(
   } else if (type === "overdue") {
     rows = (await getOverdue(now)) as unknown as Record<string, string>[];
     headers = RENT_ROLL_HEADERS;
+  } else if (type === "back-rent") {
+    rows = (await getBackRent(now)) as unknown as Record<string, string>[];
+    headers = BACK_RENT_HEADERS;
   } else if (type === "tenant-ledger") {
     const tenantId = q.get("tenantId");
     if (!tenantId || !isLikelyId(tenantId)) {

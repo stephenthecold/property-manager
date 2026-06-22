@@ -227,7 +227,7 @@ export async function createLease(
   const [selectedTenants, occupiedPrimary, occupiedCo] = await Promise.all([
     prisma.tenant.findMany({
       where: { id: { in: selectedIds } },
-      select: { id: true },
+      select: { id: true, isActive: true },
     }),
     prisma.lease.findMany({
       where: {
@@ -246,6 +246,9 @@ export async function createLease(
   ]);
   if (selectedTenants.length !== selectedIds.length) {
     return { error: "One or more selected tenants no longer exist." };
+  }
+  if (selectedTenants.some((t) => !t.isActive)) {
+    return { error: "One or more selected tenants are archived — unarchive them first." };
   }
   const occupied = new Set(
     [...occupiedPrimary, ...occupiedCo].map((r) => r.tenantId),

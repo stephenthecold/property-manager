@@ -4,6 +4,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { sendBulkOverdueRemindersAction } from "@/app/(app)/reminders/actions";
 import {
+  getBackRent,
   getIncomeSummary,
   getLeaseExpirations,
   getOverdue,
@@ -76,10 +77,11 @@ export default async function ReportsPage({
   const windowDays = /^\d+$/.test(windowRaw) ? Number(windowRaw) : 90;
 
   const now = new Date();
-  const [rentRoll, overdue, income, expirations, methods, properties, tenants, units] =
+  const [rentRoll, overdue, backRent, income, expirations, methods, properties, tenants, units] =
     await Promise.all([
       getRentRoll(now),
       getOverdue(now),
+      getBackRent(now),
       getIncomeSummary({ from, to, propertyId: propertyId || undefined }, now),
       getLeaseExpirations({ windowDays }, now),
       getPaymentMethodSummary({ from, to }),
@@ -269,6 +271,59 @@ export default async function ReportsPage({
                 </span>,
                 <span key="d" className="tabular-nums">
                   {r.lastPaidDays || "—"}
+                </span>,
+              ],
+            }))}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="border-t-4 border-t-orange-500">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Back rent (terminated leases)</CardTitle>
+          <Button render={<Link href="/api/reports/back-rent" />} variant="outline" size="sm">
+            Export CSV
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            emptyMessage="No terminated leases owe a balance."
+            columns={[
+              { key: "tenant", label: "Tenant" },
+              { key: "unit", label: "Unit" },
+              { key: "status", label: "Status", className: "hidden sm:table-cell" },
+              { key: "endDate", label: "Ended", className: "hidden md:table-cell" },
+              { key: "owed", label: "Owed", align: "right", numeric: true },
+              {
+                key: "pastDue90",
+                label: "90+ days",
+                align: "right",
+                numeric: true,
+                className: "hidden lg:table-cell",
+              },
+            ]}
+            rows={backRent.map((r, i) => ({
+              key: String(i),
+              sortValues: [
+                r.tenant,
+                `${r.property} · ${r.unit}`,
+                r.status,
+                r.endDate || null,
+                r.owed,
+                r.pastDue90,
+              ],
+              cells: [
+                r.tenant,
+                `${r.property} · ${r.unit}`,
+                <span key="s" className="capitalize">
+                  {r.status.replace(/_/g, " ")}
+                </span>,
+                r.endDate || "—",
+                <span key="o" className={cn("tabular-nums", amountClass(r.owed))}>
+                  {money(r.owed)}
+                </span>,
+                <span key="p" className={cn("tabular-nums", amountClass(r.pastDue90))}>
+                  {money(r.pastDue90)}
                 </span>,
               ],
             }))}

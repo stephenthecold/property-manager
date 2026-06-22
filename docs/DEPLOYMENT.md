@@ -98,7 +98,16 @@ and `TRUSTED_PROXY_COUNT=1` are already the compose defaults). Three options:
   [`Caddyfile`](../Caddyfile).
 
 Session cookies are `HttpOnly`/`SameSite` and become `Secure` over HTTPS; do not run a real
-deployment over plain HTTP.
+deployment over plain HTTP. The app sends baseline security headers (HSTS in production, plus
+`X-Frame-Options`/`X-Content-Type-Options`/`Referrer-Policy`/`Permissions-Policy`/a conservative
+CSP) from [`next.config.ts`](../next.config.ts).
+
+> **Chrome shows a red "Dangerous"/"Deceptive site" warning?** That's Google Safe Browsing, a
+> reputation verdict that headers alone can't clear — see [`SAFE_BROWSING.md`](SAFE_BROWSING.md)
+> for how to find the cause (Search Console) and request a review. A red **"Your connection is
+> not private" (`NET::ERR_CERT_*`)** page instead means an untrusted/self-signed certificate —
+> use a real cert on a real domain (the options above), not the bundled Caddy's `localhost`
+> default.
 
 ## Secrets & key rotation
 

@@ -83,11 +83,46 @@ export default async function PaymentsPage({
       },
     },
   });
-  const leaseOptions = activeLeases.map((l) => ({
-    id: l.id,
-    label: `Unit ${l.unit.unitNumber} — ${l.tenant.lastName}, ${l.tenant.firstName}`,
-    group: l.unit.property.name,
-  }));
+  // Terminated leases that still owe back rent — collectible too (postPayment
+  // has no status guard). Balance = SUM(amountCents) (the ledger invariant), so
+  // one aggregate finds the owing ones — cheap even as ended leases accumulate,
+  // unlike snapshotting every terminated lease on each page load.
+  const endedBalances = await prisma.ledgerEntry.groupBy({
+    by: ["leaseId"],
+    where: { lease: { status: { in: ["ended", "eviction"] } } },
+    _sum: { amountCents: true },
+  });
+  const owingEndedIds = endedBalances
+    .filter((g) => (g._sum.amountCents ?? 0n) > 0n)
+    .map((g) => g.leaseId);
+  const endedLeases = owingEndedIds.length
+    ? await prisma.lease.findMany({
+        where: { id: { in: owingEndedIds } },
+        orderBy: [
+          { unit: { property: { name: "asc" } } },
+          { unit: { unitNumber: "asc" } },
+        ],
+        select: {
+          id: true,
+          tenant: { select: { firstName: true, lastName: true } },
+          unit: {
+            select: { unitNumber: true, property: { select: { name: true } } },
+          },
+        },
+      })
+    : [];
+  const leaseOptions = [
+    ...activeLeases.map((l) => ({
+      id: l.id,
+      label: `Unit ${l.unit.unitNumber} — ${l.tenant.lastName}, ${l.tenant.firstName}`,
+      group: l.unit.property.name,
+    })),
+    ...endedLeases.map((l) => ({
+      id: l.id,
+      label: `Unit ${l.unit.unitNumber} — ${l.tenant.lastName}, ${l.tenant.firstName} (ended)`,
+      group: `Back rent — ${l.unit.property.name}`,
+    })),
+  ];
 
   // Active non-tenant payers (HUD/housing authorities, …) for the "Paid by" picker.
   const payers = await prisma.payer.findMany({

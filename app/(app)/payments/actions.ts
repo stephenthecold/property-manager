@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { toCents } from "@/lib/money";
+import { fromCents, toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { postPayment, voidPayment } from "@/lib/services/payments";
-import { waiveCharge } from "@/lib/services/charges";
+import { waiveCharge, writeOffLeaseBalance } from "@/lib/services/charges";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 
@@ -158,5 +158,46 @@ export async function waiveChargeAction(
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to waive the charge." };
+  }
+}
+
+export interface WriteOffBalanceState {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+}
+
+/**
+ * Write off (forgive) a lease's entire outstanding back-rent balance as an
+ * append-only set of ledger reversals — the bad-debt case for a terminated
+ * lease. Same gate as waiving (`payments.manage`); the ledger stays the source
+ * of truth and nothing is deleted. Validation problems are RETURNED as state.
+ */
+export async function writeOffBalanceAction(
+  _prev: WriteOffBalanceState,
+  fd: FormData,
+): Promise<WriteOffBalanceState> {
+  await requireCapability("payments.manage");
+  const leaseId = String(fd.get("leaseId") ?? "");
+  if (!leaseId) return { error: "Missing lease id." };
+  const reason = String(fd.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required to write off a balance." };
+
+  try {
+    const res = await writeOffLeaseBalance({
+      leaseId,
+      reason,
+      actor: await auditActor(),
+    });
+    revalidatePath(`/tenants/${res.tenantId}`);
+    revalidatePath("/payments");
+    revalidatePath("/dashboard");
+    revalidatePath("/reports");
+    return {
+      ok: true,
+      message: `Wrote off ${fromCents(res.writtenOffCents)} of back rent across ${res.chargesAffected} charge(s).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to write off the balance." };
   }
 }
