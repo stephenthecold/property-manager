@@ -3,8 +3,12 @@
 Rental property-management platform. Phases 1–4.7 are built and deployed (core app, receipts,
 SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) — see
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what exists and
-[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. The prioritized enterprise-gap
-backlog lives in [`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md) (refresh it with
+[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. A Phase-5 batch of enterprise-gap
+features has since shipped (two-way SMS inbox, ⌘K global search, per-tenant activity timeline,
+work-order lifecycle, preventive-maintenance log, asset/warranty registry, lease-expiration alerts,
+portal notices, lease abstract, reminder delivery tracking, maintenance/audit photos & CSV export) —
+the prioritized enterprise-gap backlog ([`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md))
+tracks what shipped, what's left, and the pending live-DB verification pass (refresh it with
 `/competitive-audit`; turn an item into a build with `/feature-intake`). This file is the working
 guide; [`docs/`](docs/) has the details.
 
@@ -161,6 +165,10 @@ UI/visual and behavioural changes are not "done" until rendered and observed. If
   S3 should use bucket SSE instead (presigned URLs bypass the app).
 - Batch accounting reads with `batchLeaseSnapshots()` (2 queries for N leases) instead of
   calling `leaseSnapshot()` in a loop; both share the same pure compute.
+- **Maintenance jobs have a multi-state lifecycle** (`MaintenanceJobStatus`: pending/assigned/
+  in_progress/on_hold/completed/canceled). Test "is this job open?" with `isOpenStatus()` /
+  `OPEN_STATUSES` from [`lib/maintenance/status.ts`](lib/maintenance/status.ts) — never
+  `status === "pending"`. Completion (cost → `PropertyExpense` mirror) is still tied to `completed`.
 - `npm run lint` is clean (zero errors); keep it that way.
 
 When extending (Phases 2–5), attach to existing seams (`sourceType/sourceId`, provider
