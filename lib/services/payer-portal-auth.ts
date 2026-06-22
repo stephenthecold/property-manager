@@ -127,7 +127,10 @@ export async function invitePayerPortalAccount(i: {
   });
 
   const settings = await getAppSettings();
-  const link = `${appBaseUrl()}/payer-portal/invite/${token}`;
+  // Public site (Settings → Public site) when configured, else the staff host —
+  // mirrors the tenant portal so payer invites land on the public brand too.
+  const base = settings.publicSiteUrl?.trim().replace(/\/+$/, "") || appBaseUrl();
+  const link = `${base}/payer-portal/invite/${token}`;
   let emailStatus: PayerInviteResult["email"] = "skipped";
   if (settings.emailEnabled) {
     try {

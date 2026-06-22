@@ -29,6 +29,13 @@ export default async function WelcomePage() {
 
   // Staff console lives on the canonical app host (e.g. manage.newedgerentals.com).
   const staffUrl = getEnv().APP_URL.replace(/\/+$/, "");
+  // Trim once so the guard and the rendered text agree (textareas keep newlines
+  // via whitespace-pre-wrap, but stray leading/trailing space shouldn't show).
+  const tagline = s.publicSiteTagline?.trim();
+  const intro = s.publicSiteIntro?.trim();
+  const areas = s.publicSiteAreas?.trim();
+  const hours = s.publicSiteHours?.trim();
+  const address = s.businessAddress?.trim();
   const contact = [s.businessPhone, s.businessEmail].filter(Boolean).join(" · ");
 
   return (
@@ -41,11 +48,11 @@ export default async function WelcomePage() {
             {s.businessName}
           </div>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {s.publicSiteTagline?.trim() || `Welcome to ${s.businessName}`}
+            {tagline || `Welcome to ${s.businessName}`}
           </h1>
-          {s.publicSiteIntro?.trim() && (
+          {intro && (
             <p className="mx-auto max-w-2xl whitespace-pre-wrap text-base text-muted-foreground">
-              {s.publicSiteIntro}
+              {intro}
             </p>
           )}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -68,29 +75,25 @@ export default async function WelcomePage() {
         </section>
 
         {/* Areas served + office hours */}
-        {(s.publicSiteAreas?.trim() || s.publicSiteHours?.trim()) && (
+        {(areas || hours) && (
           <section className="grid gap-4 sm:grid-cols-2">
-            {s.publicSiteAreas?.trim() && (
+            {areas && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Areas we serve</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    {s.publicSiteAreas}
-                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{areas}</p>
                 </CardContent>
               </Card>
             )}
-            {s.publicSiteHours?.trim() && (
+            {hours && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Office hours</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                    {s.publicSiteHours}
-                  </p>
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{hours}</p>
                 </CardContent>
               </Card>
             )}
@@ -98,13 +101,11 @@ export default async function WelcomePage() {
         )}
 
         {/* Contact */}
-        {(contact || s.businessAddress?.trim()) && (
+        {(contact || address) && (
           <section className="space-y-1 text-center text-sm text-muted-foreground">
             <div className="font-medium text-foreground">Contact us</div>
             {contact && <div>{contact}</div>}
-            {s.businessAddress?.trim() && (
-              <div className="whitespace-pre-wrap">{s.businessAddress}</div>
-            )}
+            {address && <div className="whitespace-pre-wrap">{address}</div>}
           </section>
         )}
 
