@@ -302,6 +302,16 @@ model AppSettings {
   termsText         String?
   termsUrl          String?
 
+  // Public marketing site (module "publicSite") served at the public host
+  // (e.g. newedgerentals.com): operator-authored splash copy; null/blank ->
+  // shipped fallback. publicSiteUrl is the public base URL so tenant portal
+  // invite/reset links point at the public brand, not the staff host.
+  publicSiteUrl     String?
+  publicSiteTagline String?
+  publicSiteIntro   String?
+  publicSiteAreas   String?
+  publicSiteHours   String?
+
   // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
   // not configured; "stub" logs only; "smtp" sends. Auth is either a password
   // or OAuth2 (XOAUTH2: Gmail / Microsoft 365); all three secrets are

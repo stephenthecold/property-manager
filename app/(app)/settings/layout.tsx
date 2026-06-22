@@ -17,6 +17,7 @@ const SETTINGS_LINKS: {
   { href: "/settings/notifications", label: "Notifications", cap: null },
   { href: "/settings/billing", label: "Billing", cap: "billing.settings" },
   { href: "/settings/organization", label: "Organization", cap: "organization.settings" },
+  { href: "/settings/public-site", label: "Public site", cap: "organization.settings" },
   { href: "/settings/leases", label: "Leases", cap: "organization.settings" },
   { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
   {

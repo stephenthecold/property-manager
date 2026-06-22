@@ -55,6 +55,12 @@ const MODULE_INFO = [
     description:
       "A directory of contractors and service providers (plumber, electrician, HVAC, landscaper, cleaner, …) with trade, contact details, and notes. A reference list only — vendors never affect tenant balances. Turning it off hides the Vendors page; all entries are kept.",
   },
+  {
+    key: "publicSite" as const,
+    label: "Public website (marketing splash)",
+    description:
+      "A public landing page at your public domain's root (e.g. newedgerentals.com) with a hero, an Apply button, resident/payer login links, areas served, office hours, and contact — linking to the existing privacy/terms pages. Edit the copy at Settings → Public site. Requires DNS + your reverse proxy to route the public domain to the app (see docs/PUBLIC_SITE.md). When off, the public root sends visitors to the resident login instead.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {
