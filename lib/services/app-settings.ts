@@ -52,6 +52,8 @@ export interface ModuleFlags {
   inspections: boolean;
   /** Directory of contractors/service providers (/vendors). */
   vendors: boolean;
+  /** Public marketing splash at the public host root (/welcome). */
+  publicSite: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -64,6 +66,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   notices: false,
   inspections: false,
   vendors: false,
+  publicSite: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -93,6 +96,8 @@ function resolveModules(raw: unknown): ModuleFlags {
         : MODULE_DEFAULTS.inspections,
     vendors:
       typeof obj.vendors === "boolean" ? obj.vendors : MODULE_DEFAULTS.vendors,
+    publicSite:
+      typeof obj.publicSite === "boolean" ? obj.publicSite : MODULE_DEFAULTS.publicSite,
   };
 }
 
@@ -179,6 +184,13 @@ export interface ResolvedAppSettings {
   privacyPolicyUrl: string | null;
   termsText: string | null;
   termsUrl: string | null;
+  /** Public marketing site copy (module "publicSite"); null/blank -> fallback.
+   *  publicSiteUrl is the public base URL for tenant-portal links. */
+  publicSiteUrl: string | null;
+  publicSiteTagline: string | null;
+  publicSiteIntro: string | null;
+  publicSiteAreas: string | null;
+  publicSiteHours: string | null;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -303,6 +315,11 @@ async function resolve(): Promise<ResolvedAppSettings> {
     privacyPolicyUrl: row?.privacyPolicyUrl ?? null,
     termsText: row?.termsText ?? null,
     termsUrl: row?.termsUrl ?? null,
+    publicSiteUrl: row?.publicSiteUrl ?? null,
+    publicSiteTagline: row?.publicSiteTagline ?? null,
+    publicSiteIntro: row?.publicSiteIntro ?? null,
+    publicSiteAreas: row?.publicSiteAreas ?? null,
+    publicSiteHours: row?.publicSiteHours ?? null,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
@@ -1115,6 +1132,46 @@ export async function saveComplianceLinks(
         privacyPolicyHosted: !!input.privacyPolicyText,
         termsHosted: !!input.termsText,
       },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface PublicSiteSettingsInput {
+  /** Public base URL (e.g. https://newedgerentals.com); null clears it so
+   *  tenant-portal links fall back to APP_URL. Caller normalizes it. */
+  publicSiteUrl: string | null;
+  publicSiteTagline: string | null;
+  publicSiteIntro: string | null;
+  publicSiteAreas: string | null;
+  publicSiteHours: string | null;
+}
+
+/**
+ * Persist the public marketing-site copy + base URL (module "publicSite").
+ * Pure content/config — never touches the ledger or tenant data.
+ */
+export async function savePublicSiteSettings(
+  input: PublicSiteSettingsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { ...input, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.public_site.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? { publicSiteUrl: before.publicSiteUrl, publicSiteTagline: before.publicSiteTagline }
+        : undefined,
+      after: { ...data, updatedBy: undefined },
     });
   });
   invalidateAppSettingsCache();

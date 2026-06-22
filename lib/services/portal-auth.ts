@@ -55,6 +55,16 @@ function appBaseUrl(): string {
   return getEnv().APP_URL.replace(/\/+$/, "");
 }
 
+/**
+ * Base URL for tenant-facing portal links (invite/reset). Prefers the public
+ * site URL (Settings → Public site) so links land on the public brand
+ * (e.g. https://newedgerentals.com/portal); falls back to the canonical
+ * APP_URL (the staff host) when it isn't configured.
+ */
+function portalLinkBase(publicSiteUrl: string | null): string {
+  return publicSiteUrl?.trim().replace(/\/+$/, "") || appBaseUrl();
+}
+
 async function portalEnabled(): Promise<boolean> {
   return (await getAppSettings()).modules.tenantPortal;
 }
@@ -160,7 +170,7 @@ export async function invitePortalAccount(i: {
 
   // Delivery (best-effort per channel) AFTER the account row is committed.
   const settings = await getAppSettings();
-  const link = `${appBaseUrl()}/portal/invite/${token}`;
+  const link = `${portalLinkBase(settings.publicSiteUrl)}/portal/invite/${token}`;
   const first = tenant.firstName;
   let sms: InviteResult["sms"] = "skipped";
   if (settings.smsEnabled && tenant.phone) {
@@ -479,7 +489,7 @@ export async function requestPasswordReset(i: {
     },
   });
   const settings = await getAppSettings();
-  const link = `${appBaseUrl()}/portal/invite/${token}`;
+  const link = `${portalLinkBase(settings.publicSiteUrl)}/portal/invite/${token}`;
   if (settings.smsEnabled && account.tenant.phone) {
     try {
       await (await resolveSmsProvider()).send({

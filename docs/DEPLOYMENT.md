@@ -109,6 +109,13 @@ CSP) from [`next.config.ts`](../next.config.ts).
 > use a real cert on a real domain (the options above), not the bundled Caddy's `localhost`
 > default.
 
+### Public marketing site + resident portal hostname
+
+To serve a public splash + the resident/payer portals on a separate public domain (e.g.
+`newedgerentals.com`) while staff stay on `manage.<domain>`, see
+[`PUBLIC_SITE.md`](PUBLIC_SITE.md) — it has the apex Caddy site block (rewrite `/` → the splash,
+default-deny the staff console) and the Settings steps. Host routing lives entirely in your proxy.
+
 ## Secrets & key rotation
 
 - `AUTH_SECRET`, `SETTINGS_ENC_KEY` and DB credentials live in `.env` (or Docker secrets / a
