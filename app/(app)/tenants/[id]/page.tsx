@@ -7,6 +7,7 @@ import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
 import { getLeaseRentShares } from "@/lib/services/rent-shares";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import {
+  batchLeaseSnapshots,
   loadLeaseAccounting,
   snapshotFromAccounting,
 } from "@/lib/services/accounting";
@@ -33,13 +34,18 @@ import {
   removeLeaseDeposit,
 } from "@/app/(app)/leases/actions";
 import { UTILITY_OPTIONS } from "@/lib/config/lease";
-import { updateTenant } from "@/app/(app)/tenants/actions";
+import {
+  archiveTenantAction,
+  unarchiveTenantAction,
+  updateTenant,
+} from "@/app/(app)/tenants/actions";
 import { addRentShareAction, removeRentShareAction } from "./rent-share-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { WaiveChargeDialog } from "@/components/app/waive-charge-dialog";
+import { WriteOffBalanceDialog } from "@/components/app/write-off-balance-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -129,6 +135,12 @@ export default async function TenantDetail({
     allLeases.find((l) => l.status === "active" || l.status === "month_to_month") ??
     null;
   const isPrimaryOnActive = activeLease?.tenantId === tenant.id;
+  // Terminated leases (this tenant as primary or co-tenant). Back rent survives
+  // termination (terminateLease never touches the ledger), so any positive
+  // balance here is collectible/forgivable below.
+  const terminatedLeases = allLeases.filter(
+    (l) => l.status === "ended" || l.status === "eviction",
+  );
   // Tenants eligible to be added as co-tenants (not already on the lease).
   const addableCoTenants = activeLease
     ? await prisma.tenant.findMany({
@@ -169,28 +181,34 @@ export default async function TenantDetail({
   );
 
   // Independent reads for this tenant — run them together instead of serially.
-  const [ledger, payments, documents, reminders, inboundMessages] = await Promise.all([
-    activeLease
-      ? prisma.ledgerEntry.findMany({
-          where: { leaseId: activeLease.id },
-          orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }],
-        })
-      : Promise.resolve([]),
-    activeLease
-      ? prisma.payment.findMany({
-          where: { leaseId: activeLease.id },
-          orderBy: { paymentDate: "desc" },
-        })
-      : Promise.resolve([]),
-    listDocuments({ tenantId: tenant.id }),
-    prisma.reminder.findMany({
-      where: { tenantId: tenant.id },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
-    listInboundForTenant(tenant.id),
-  ]);
+  const [ledger, payments, documents, reminders, inboundMessages, backRentSnaps] =
+    await Promise.all([
+      activeLease
+        ? prisma.ledgerEntry.findMany({
+            where: { leaseId: activeLease.id },
+            orderBy: [{ effectiveDate: "desc" }, { createdAt: "desc" }],
+          })
+        : Promise.resolve([]),
+      activeLease
+        ? prisma.payment.findMany({
+            where: { leaseId: activeLease.id },
+            orderBy: { paymentDate: "desc" },
+          })
+        : Promise.resolve([]),
+      listDocuments({ tenantId: tenant.id }),
+      prisma.reminder.findMany({
+        where: { tenantId: tenant.id },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+      listInboundForTenant(tenant.id),
+      batchLeaseSnapshots(terminatedLeases, now),
+    ]);
   const recentInbound = inboundMessages.slice(0, 5);
+  // Terminated leases still owing money (a credit balance is excluded).
+  const backRent = terminatedLeases
+    .map((l) => ({ lease: l, snap: backRentSnaps.get(l.id)! }))
+    .filter(({ snap }) => snap.totalOwedCents > 0n);
 
   const currency = activeLease?.unit.property.currency ?? "USD";
 
@@ -220,6 +238,16 @@ export default async function TenantDetail({
   const canManageLeases = hasCapability(
     actingRole,
     "leases.manage",
+    appSettings.rolePermissions,
+  );
+  const canManageTenants = hasCapability(
+    actingRole,
+    "tenants.manage",
+    appSettings.rolePermissions,
+  );
+  const canRecordPayments = hasCapability(
+    actingRole,
+    "payments.manage",
     appSettings.rolePermissions,
   );
 
@@ -298,6 +326,14 @@ export default async function TenantDetail({
                 No SMS consent
               </Badge>
             )}
+            {!tenant.isActive && (
+              <Badge
+                variant="outline"
+                className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              >
+                Archived
+              </Badge>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -324,6 +360,28 @@ export default async function TenantDetail({
               />
             </>
           )}
+          {canManageTenants &&
+            (!tenant.isActive ? (
+              <form action={unarchiveTenantAction}>
+                <input type="hidden" name="tenantId" value={tenant.id} />
+                <ConfirmSubmitButton
+                  variant="outline"
+                  confirmMessage="Restore this tenant? They can be added to new leases again. Their tenant-portal login stays disabled until you re-enable it separately."
+                >
+                  Unarchive
+                </ConfirmSubmitButton>
+              </form>
+            ) : !activeLease ? (
+              <form action={archiveTenantAction}>
+                <input type="hidden" name="tenantId" value={tenant.id} />
+                <ConfirmSubmitButton
+                  variant="outline"
+                  confirmMessage="Archive this tenant? They’ll be hidden from the active list and can’t be added to new leases, and any tenant-portal login is disabled. History is kept; you can unarchive anytime."
+                >
+                  Archive tenant
+                </ConfirmSubmitButton>
+              </form>
+            ) : null)}
         </div>
       </div>
 
@@ -1128,6 +1186,69 @@ export default async function TenantDetail({
             <Button render={<Link href={`/leases/new?tenantId=${tenant.id}`} />}>
               Create lease
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {backRent.length > 0 && (
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader>
+            <CardTitle className="text-base">Back rent (ended leases)</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              These leases have ended but still owe a balance. The debt is tracked on the
+              ledger — record payments against it as it&apos;s collected, or write it off.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {backRent.map(({ lease, snap }) => {
+              const leaseCurrency = lease.unit.property.currency;
+              const owed = formatCurrency(snap.totalOwedCents, leaseCurrency);
+              const unitLabel = `${lease.unit.property.name} · ${lease.unit.unitNumber}`;
+              return (
+                <div
+                  key={lease.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="space-y-1">
+                    <div className="font-medium">{unitLabel}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {lease.status === "eviction" ? "Eviction" : "Ended"}
+                      {lease.endDate
+                        ? ` ${lease.endDate.toLocaleDateString("en-US", {
+                            timeZone: lease.unit.property.timezone,
+                          })}`
+                        : ""}
+                      {snap.daysSinceLastPayment != null &&
+                        ` · last paid ${snap.daysSinceLastPayment} days ago`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">Owed</div>
+                      <div className="font-semibold tabular-nums text-red-600 dark:text-red-400">
+                        {owed}
+                      </div>
+                    </div>
+                    {canRecordPayments && (
+                      <>
+                        <RecordPaymentDialog
+                          leaseId={lease.id}
+                          payerOptions={payerOptions}
+                          defaultAmount={fromCents(snap.totalOwedCents)}
+                          trigger="Collect"
+                          compact
+                        />
+                        <WriteOffBalanceDialog
+                          leaseId={lease.id}
+                          owedFormatted={owed}
+                          unitLabel={unitLabel}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

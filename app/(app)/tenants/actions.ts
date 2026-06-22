@@ -159,6 +159,153 @@ export async function updateTenant(
   return { ok: true };
 }
 
+/**
+ * Archive/unarchive guard failures land back on the tenants list as a ?error=
+ * banner — a thrown server-action error renders as the opaque production digest
+ * page (same pattern as the lease archive/delete actions).
+ */
+function failToTenants(message: string): never {
+  redirect(`/tenants?error=${encodeURIComponent(message)}`);
+}
+
+/**
+ * Archive a tenant: hide them from the active list and block attachment to NEW
+ * leases (every lease/co-tenant picker already filters `isActive: true`), and
+ * disable any tenant-portal login (the portal already rejects an inactive
+ * tenant; this also drops live sessions). History is never deleted. Refused
+ * while the tenant is still on an active/month-to-month lease — end it first.
+ */
+export async function archiveTenantAction(fd: FormData): Promise<void> {
+  await requireCapability("tenants.manage");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) failToTenants("Missing tenant id.");
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) failToTenants("Tenant not found.");
+  if (!tenant.isActive) {
+    revalidatePath(`/tenants/${tenantId}`);
+    return; // already archived — nothing to do
+  }
+  const onActiveLease = await prisma.lease.findFirst({
+    where: {
+      status: { in: ["active", "month_to_month"] },
+      OR: [{ tenantId }, { coTenants: { some: { tenantId } } }],
+    },
+    select: { id: true },
+  });
+  if (onActiveLease) {
+    failToTenants(
+      "This tenant is still on an active lease — terminate the lease first, then archive.",
+    );
+  }
+
+  const actor = await auditActor();
+  await withAudit(
+    {
+      ...actor,
+      action: "tenant.archived",
+      entityType: "Tenant",
+      entityId: tenant.id,
+      before: { isActive: tenant.isActive },
+    },
+    async (tx) => {
+      const updated = await tx.tenant.update({
+        where: { id: tenant.id },
+        data: { isActive: false },
+      });
+      return { result: updated, after: { isActive: false } };
+    },
+  );
+  // Also disable any tenant-portal login. Its own transaction (kills sessions +
+  // audits); a missing account is a no-op. Never let a portal hiccup undo the
+  // archive — the tenant flag flip already blocks portal login on its own.
+  await setPortalAccountActive({ tenantId, isActive: false, actor }).catch(() => {});
+
+  revalidatePath("/tenants");
+  revalidatePath(`/tenants/${tenantId}`);
+}
+
+/**
+ * Restore an archived tenant so they can be attached to new leases again. The
+ * tenant-portal login stays disabled until separately re-enabled (re-granting
+ * portal access should be a deliberate step).
+ */
+export async function unarchiveTenantAction(fd: FormData): Promise<void> {
+  await requireCapability("tenants.manage");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) failToTenants("Missing tenant id.");
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) failToTenants("Tenant not found.");
+  if (tenant.isActive) {
+    revalidatePath(`/tenants/${tenantId}`);
+    return; // already active — nothing to do
+  }
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "tenant.unarchived",
+      entityType: "Tenant",
+      entityId: tenant.id,
+      before: { isActive: tenant.isActive },
+    },
+    async (tx) => {
+      const updated = await tx.tenant.update({
+        where: { id: tenant.id },
+        data: { isActive: true },
+      });
+      return { result: updated, after: { isActive: true } };
+    },
+  );
+  revalidatePath("/tenants");
+  revalidatePath(`/tenants/${tenantId}`);
+}
+
+export interface InlineTenantState {
+  ok?: boolean;
+  error?: string;
+  /** The created tenant, shaped for the lease form's option list. */
+  tenant?: { id: string; label: string };
+}
+
+/**
+ * Create a tenant from INSIDE another flow (the lease-creation form) and RETURN
+ * it instead of redirecting, so the caller can drop it into its picker and
+ * select it. A lean subset of {@link createTenant} (name + contact); the rest
+ * of the profile (consent, emergency contact, …) is filled in later from the
+ * tenant page. Same capability gate, and audited.
+ */
+export async function createTenantInline(
+  _prev: InlineTenantState,
+  fd: FormData,
+): Promise<InlineTenantState> {
+  await requireCapability("tenants.manage");
+  const firstName = str(fd, "firstName");
+  const lastName = str(fd, "lastName");
+  if (!firstName || !lastName) {
+    return { error: "First and last name are required." };
+  }
+  const phone = str(fd, "phone") || null;
+  const email = str(fd, "email") || null;
+  const actor = await auditActor();
+  const tenant = await prisma.$transaction(async (tx) => {
+    const created = await tx.tenant.create({
+      data: { firstName, lastName, phone, email },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "tenant.created",
+      entityType: "Tenant",
+      entityId: created.id,
+      after: { firstName, lastName, inline: true },
+    });
+    return created;
+  });
+  revalidatePath("/tenants");
+  return {
+    ok: true,
+    tenant: { id: tenant.id, label: `${tenant.lastName}, ${tenant.firstName}` },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tenant portal (module "tenantPortal") — invite + enable/disable, portal.manage
 // ---------------------------------------------------------------------------

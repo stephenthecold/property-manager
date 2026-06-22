@@ -4,6 +4,7 @@ import { useActionState, useMemo, useRef, useState } from "react";
 import { createLease, type CreateLeaseState } from "../actions";
 import { UTILITY_OPTIONS } from "@/lib/config/lease";
 import { LeaseInternetFields } from "@/components/app/lease-internet-fields";
+import { NewTenantInlineDialog } from "@/components/app/new-tenant-inline-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,22 +66,33 @@ export function LeaseForm({
   );
   const [coTenantIds, setCoTenantIds] = useState<string[]>([]);
   const [coFilter, setCoFilter] = useState("");
+  // Lifted into state so a tenant created inline (below) can be appended and
+  // auto-selected without a full page reload.
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>(tenants);
 
   const tenantLabel = useMemo(
-    () => new Map(tenants.map((t) => [t.id, t.label])),
-    [tenants],
+    () => new Map(tenantOptions.map((t) => [t.id, t.label])),
+    [tenantOptions],
   );
   const coTenantChoices = useMemo(() => {
     const q = coFilter.trim().toLowerCase();
-    return tenants.filter(
+    return tenantOptions.filter(
       (t) => t.id !== primaryId && (!q || t.label.toLowerCase().includes(q)),
     );
-  }, [tenants, primaryId, coFilter]);
+  }, [tenantOptions, primaryId, coFilter]);
 
   function handlePrimaryChange(id: string) {
     setPrimaryId(id);
     // The primary tenant can never also be a co-tenant.
     setCoTenantIds((ids) => ids.filter((c) => c !== id));
+  }
+  function handleTenantCreated(t: TenantOption) {
+    setTenantOptions((opts) =>
+      opts.some((o) => o.id === t.id)
+        ? opts
+        : [...opts, t].sort((a, b) => a.label.localeCompare(b.label)),
+    );
+    setPrimaryId(t.id);
   }
   function toggleCoTenant(id: string) {
     setCoTenantIds((ids) =>
@@ -122,25 +134,28 @@ export function LeaseForm({
 
       <div className="space-y-2">
         <Label htmlFor="tenantId">Tenant</Label>
-        <select
-          id="tenantId"
-          name="tenantId"
-          value={primaryId}
-          onChange={(e) => handlePrimaryChange(e.target.value)}
-          required
-          className="h-9 w-full rounded-md border px-3 text-sm"
-        >
-          <option value="" disabled>
-            Select tenant…
-          </option>
-          {tenants.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
+        <div className="flex items-center gap-2">
+          <select
+            id="tenantId"
+            name="tenantId"
+            value={primaryId}
+            onChange={(e) => handlePrimaryChange(e.target.value)}
+            required
+            className="h-9 w-full rounded-md border px-3 text-sm"
+          >
+            <option value="" disabled>
+              Select tenant…
             </option>
-          ))}
-        </select>
+            {tenantOptions.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <NewTenantInlineDialog onCreated={handleTenantCreated} />
+        </div>
         <p className="text-xs text-muted-foreground">
-          Tenants already on an active lease aren&apos;t shown.
+          Tenants already on an active lease aren&apos;t shown — or add a new one.
         </p>
       </div>
 

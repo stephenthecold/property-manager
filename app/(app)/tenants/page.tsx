@@ -5,6 +5,8 @@ import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/app/data-table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,19 +27,29 @@ export default async function TenantsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
-  const qRaw = sp.q;
-  const q = (Array.isArray(qRaw) ? qRaw[0] : qRaw)?.trim() ?? "";
+  const first = (v: string | string[] | undefined) =>
+    (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  const q = first(sp.q);
+  const error = first(sp.error);
+  // Active by default; archived tenants are hidden until you switch the view.
+  const view =
+    first(sp.view) === "archived" ? "archived" : first(sp.view) === "all" ? "all" : "active";
+  const activeFilter: Prisma.TenantWhereInput =
+    view === "all" ? {} : { isActive: view === "active" };
 
-  const where: Prisma.TenantWhereInput = q
-    ? {
-        OR: [
-          { firstName: { contains: q, mode: "insensitive" } },
-          { lastName: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-          { phone: { contains: q, mode: "insensitive" } },
-        ],
-      }
-    : {};
+  const where: Prisma.TenantWhereInput = {
+    ...activeFilter,
+    ...(q
+      ? {
+          OR: [
+            { firstName: { contains: q, mode: "insensitive" } },
+            { lastName: { contains: q, mode: "insensitive" } },
+            { email: { contains: q, mode: "insensitive" } },
+            { phone: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
 
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
@@ -51,8 +63,8 @@ export default async function TenantsPage({
       },
     },
   });
-  // Cheap second count for "N of M" when a search is active.
-  const total = q ? await prisma.tenant.count() : tenants.length;
+  // Cheap second count for "N of M" when a search is active (within this view).
+  const total = q ? await prisma.tenant.count({ where: activeFilter }) : tenants.length;
 
   // One batched snapshot load for every tenant's active lease (2 queries total).
   const activeLeases = tenants
@@ -71,6 +83,12 @@ export default async function TenantsPage({
         <Button render={<Link href="/tenants/new" />}>Add tenant</Button>
       </div>
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="w-full space-y-2 sm:w-auto">
           <Label htmlFor="q">Search</Label>
@@ -82,10 +100,23 @@ export default async function TenantsPage({
             className="w-full sm:w-64"
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="view">Show</Label>
+          <select
+            id="view"
+            name="view"
+            defaultValue={view}
+            className="h-9 w-36 rounded-md border px-3 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
+          </select>
+        </div>
         <Button type="submit" size="sm">
           Apply
         </Button>
-        {q && (
+        {(q || view !== "active") && (
           <Button variant="ghost" size="sm" render={<Link href="/tenants" />}>
             Clear
           </Button>
@@ -94,7 +125,7 @@ export default async function TenantsPage({
 
       {q && (
         <p className="text-sm text-muted-foreground">
-          {tenants.length} of {total} tenants
+          {tenants.length} of {total} {view === "active" ? "active " : view === "archived" ? "archived " : ""}tenants
         </p>
       )}
 
@@ -118,7 +149,7 @@ export default async function TenantsPage({
           sortValues: [
             `${tenant.lastName}, ${tenant.firstName}`,
             lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : null,
-            snap?.status ?? null,
+            tenant.isActive ? (snap?.status ?? null) : "archived",
             snap ? String(snap.netBalanceCents) : null,
             snap?.daysSinceLastPayment ?? null,
           ],
@@ -131,7 +162,15 @@ export default async function TenantsPage({
               {tenant.firstName} {tenant.lastName}
             </Link>,
             lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : "—",
-            snap ? (
+            !tenant.isActive ? (
+              <Badge
+                key="s"
+                variant="outline"
+                className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              >
+                Archived
+              </Badge>
+            ) : snap ? (
               <StatusBadge key="s" status={snap.status} />
             ) : (
               <span key="s" className="text-muted-foreground">

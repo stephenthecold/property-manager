@@ -55,6 +55,63 @@ export async function getOverdue(now: Date): Promise<RentRollRow[]> {
   return all.filter((r) => Number(r.pastDue) > 0 || r.status === "overdue");
 }
 
+export interface BackRentRow {
+  property: string;
+  unit: string;
+  tenant: string;
+  status: string;
+  endDate: string;
+  owed: string;
+  pastDue90: string;
+  lastPaidDays: string;
+}
+
+export const BACK_RENT_HEADERS = [
+  "property",
+  "unit",
+  "tenant",
+  "status",
+  "endDate",
+  "owed",
+  "pastDue90",
+  "lastPaidDays",
+] as const;
+
+/**
+ * Terminated leases (ended/eviction) that STILL owe money — the back-rent /
+ * collections worklist. A balance survives termination (terminateLease only
+ * flips status; the append-only ledger is never touched), so this just surfaces
+ * what was always there, biggest balance first. A tenant credit (negative
+ * balance) is excluded — only `totalOwedCents > 0` shows.
+ */
+export async function getBackRent(now: Date): Promise<BackRentRow[]> {
+  const leases = await prisma.lease.findMany({
+    where: { status: { in: ["ended", "eviction"] } },
+    include: { tenant: true, unit: { include: { property: true } } },
+  });
+  const snaps = await batchLeaseSnapshots(leases, now);
+  return leases
+    .map((l) => ({ l, s: snaps.get(l.id)! }))
+    .filter(({ s }) => s.totalOwedCents > 0n)
+    .sort(({ s: a }, { s: b }) =>
+      b.totalOwedCents > a.totalOwedCents ? 1 : b.totalOwedCents < a.totalOwedCents ? -1 : 0,
+    )
+    .map(({ l, s }) => ({
+      property: l.unit.property.name,
+      unit: l.unit.unitNumber,
+      tenant: `${l.tenant.firstName} ${l.tenant.lastName}`,
+      status: l.status,
+      endDate: l.endDate
+        ? DateTime.fromJSDate(l.endDate, { zone: l.unit.property.timezone }).toFormat(
+            "yyyy-MM-dd",
+          )
+        : "",
+      owed: fromCents(s.totalOwedCents),
+      pastDue90: fromCents(s.aging.d90plus),
+      lastPaidDays: s.daysSinceLastPayment == null ? "" : String(s.daysSinceLastPayment),
+    }));
+}
+
 /** Minimal, dependency-free CSV serializer (RFC-4180 quoting). */
 export function toCsv(headers: string[], rows: Record<string, string>[]): string {
   // Formula-injection guard: a cell starting with =, +, @ (or a non-numeric -)
