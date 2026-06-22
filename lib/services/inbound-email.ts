@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import { emailKey } from "@/lib/portal/identity";
+import { getFileStorage } from "@/lib/providers/storage";
 import { createUploadedDocument, runOcrOnDocument } from "@/lib/services/documents";
 import { syntheticMessageKey } from "@/lib/providers/inbound-email/parse";
 import type { ParsedInboundEmail } from "@/lib/providers/inbound-email/types";
@@ -38,35 +40,95 @@ async function matchTenantIdByEmail(rawEmail: string): Promise<string | null> {
   return tenant?.id ?? null;
 }
 
+/** Best-effort rollback of attachment documents stored during a failed capture. */
+async function deleteAttachmentDocs(
+  docs: { documentId: string; key: string }[],
+): Promise<void> {
+  if (docs.length === 0) return;
+  const storage = await getFileStorage();
+  for (const d of docs) {
+    try {
+      await prisma.uploadedDocument.delete({ where: { id: d.documentId } });
+    } catch {
+      // best effort — an orphaned row must not mask the original error
+    }
+    try {
+      await storage.delete(d.key);
+    } catch {
+      // best effort
+    }
+  }
+}
+
 /**
- * Record one captured email (idempotent on messageId). Stores the row, then its
- * safe attachments as UploadedDocuments (best-effort OCR for prefill), and
- * returns the row id (or the existing id on a re-poll). NEVER throws.
+ * Record one captured email (idempotent on messageId). Stores its safe
+ * attachments as UploadedDocuments FIRST (under a pre-generated id), then the
+ * InboundEmail row — so the dedup row only ever exists once every attachment is
+ * safely stored. Returns the row id (or the winner's id on a dedup/race).
+ *
+ * THROWS on an unrecovered failure (e.g. a storage error): the IMAP provider
+ * then leaves the message UNSEEN and retries it next poll, instead of marking it
+ * seen with a dropped attachment. (There is no webhook here, so — unlike inbound
+ * SMS — we prefer retry over best-effort swallowing.)
  */
 export async function recordInboundEmail(
   msg: ParsedInboundEmail,
-): Promise<string | null> {
-  try {
-    const fromEmail = (msg.fromEmail ?? "").trim();
-    // Always a non-null dedup key: real Message-ID, else a deterministic hash.
-    const dedupKey =
-      msg.messageId?.trim() ||
-      syntheticMessageKey({
-        fromEmail,
-        subject: msg.subject ?? null,
-        receivedAt: msg.receivedAt ?? new Date(),
-        size: (msg.text ?? "").length + (msg.attachments?.length ?? 0),
-      });
-
-    const existing = await prisma.inboundEmail.findUnique({
-      where: { messageId: dedupKey },
-      select: { id: true },
+): Promise<string> {
+  const fromEmail = (msg.fromEmail ?? "").trim();
+  // Always a non-null dedup key: real Message-ID, else a deterministic hash over
+  // sender / subject / second / body / attachment-size.
+  const dedupKey =
+    msg.messageId?.trim() ||
+    syntheticMessageKey({
+      fromEmail,
+      subject: msg.subject ?? null,
+      receivedAt: msg.receivedAt ?? new Date(),
+      body: msg.text ?? "",
+      attachmentBytes: (msg.attachments ?? []).reduce(
+        (n, a) => n + (a.content?.length ?? 0),
+        0,
+      ),
     });
-    if (existing) return existing.id;
 
-    const tenantId = await matchTenantIdByEmail(fromEmail);
-    const created = await prisma.inboundEmail.create({
+  const existing = await prisma.inboundEmail.findUnique({
+    where: { messageId: dedupKey },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const tenantId = await matchTenantIdByEmail(fromEmail);
+  // Pre-generate the row id so attachments can reference it and be stored BEFORE
+  // the dedup row exists. If a store fails we roll back this attempt's docs and
+  // rethrow, leaving no orphaned InboundEmail row to block a clean retry.
+  const inboundEmailId = randomUUID();
+  const storedDocs: { documentId: string; key: string }[] = [];
+
+  try {
+    for (const att of msg.attachments ?? []) {
+      const doc = await createUploadedDocument({
+        body: att.content,
+        fileName: att.filename,
+        contentType: att.contentType,
+        uploadType: "email_attachment",
+        inboundEmailId,
+        tenantId,
+        notes: `Inbound email from ${fromEmail || "unknown"}${
+          msg.subject ? ` — ${msg.subject}` : ""
+        }`,
+        actor: SYSTEM_ACTOR,
+      });
+      storedDocs.push(doc);
+      // Best-effort OCR so the review form can prefill amount/date/reference.
+      try {
+        await runOcrOnDocument(doc.documentId, SYSTEM_ACTOR);
+      } catch {
+        // OCR is optional; a failure must not fail capture.
+      }
+    }
+
+    await prisma.inboundEmail.create({
       data: {
+        id: inboundEmailId,
         messageId: dedupKey,
         fromEmail: fromEmail || "(unknown)",
         fromName: msg.fromName ?? null,
@@ -74,78 +136,47 @@ export async function recordInboundEmail(
         subject: msg.subject ?? null,
         body: msg.text ?? "",
         tenantId,
-        attachmentCount: 0,
+        attachmentCount: storedDocs.length,
         status: "new",
         receivedAt: msg.receivedAt ?? new Date(),
       },
-      select: { id: true },
     });
-
-    // Attachments reference the row, so they're stored after it exists.
-    let stored = 0;
-    for (const att of msg.attachments ?? []) {
-      try {
-        const { documentId } = await createUploadedDocument({
-          body: att.content,
-          fileName: att.filename,
-          contentType: att.contentType,
-          uploadType: "email_attachment",
-          inboundEmailId: created.id,
-          tenantId,
-          notes: `Inbound email from ${fromEmail || "unknown"}${
-            msg.subject ? ` — ${msg.subject}` : ""
-          }`,
-          actor: SYSTEM_ACTOR,
-        });
-        stored++;
-        // Best-effort OCR so the review form can prefill amount/date/reference.
-        try {
-          await runOcrOnDocument(documentId, SYSTEM_ACTOR);
-        } catch {
-          // OCR is optional; a failure must not lose the attachment.
-        }
-      } catch (attErr) {
-        console.error(
-          "[inbox] attachment store failed:",
-          attErr instanceof Error ? attErr.message : "unknown error",
-        );
-      }
-    }
-    if (stored > 0) {
-      await prisma.inboundEmail.update({
-        where: { id: created.id },
-        data: { attachmentCount: stored },
-      });
-    }
-
-    try {
-      await writeAudit(prisma, {
-        ...SYSTEM_ACTOR,
-        action: "inbound_email.received",
-        entityType: "InboundEmail",
-        entityId: created.id,
-        after: {
-          fromEmail,
-          subject: msg.subject ?? null,
-          tenantId,
-          attachmentCount: stored,
-        },
-      });
-    } catch (auditErr) {
-      console.error(
-        "[inbox] audit write failed (email captured):",
-        auditErr instanceof Error ? auditErr.message : "unknown error",
-      );
-    }
-
-    return created.id;
   } catch (e) {
-    console.error(
-      "[inbox] failed to capture inbound email:",
-      e instanceof Error ? e.message : "unknown error",
-    );
-    return null;
+    // Roll back this attempt's documents so a retry starts clean.
+    await deleteAttachmentDocs(storedDocs);
+    // A concurrent poll may have created the row first — return the winner's id
+    // (its own attachments are intact); the message is already captured.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const winner = await prisma.inboundEmail
+        .findUnique({ where: { messageId: dedupKey }, select: { id: true } })
+        .catch(() => null);
+      if (winner) return winner.id;
+    }
+    throw e; // leave the message unseen for the next poll
   }
+
+  // Best-effort audit — the email is captured; a failed audit must not retry it.
+  try {
+    await writeAudit(prisma, {
+      ...SYSTEM_ACTOR,
+      action: "inbound_email.received",
+      entityType: "InboundEmail",
+      entityId: inboundEmailId,
+      after: {
+        fromEmail,
+        subject: msg.subject ?? null,
+        tenantId,
+        attachmentCount: storedDocs.length,
+      },
+    });
+  } catch (auditErr) {
+    console.error(
+      "[inbox] audit write failed (email captured):",
+      auditErr instanceof Error ? auditErr.message : "unknown error",
+    );
+  }
+
+  return inboundEmailId;
 }
 
 export type InboxStatus = "new" | "archived" | "posted";

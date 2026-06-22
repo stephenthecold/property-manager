@@ -25,7 +25,8 @@ describe("syntheticMessageKey", () => {
     fromEmail: "a@b.com",
     subject: "Hi" as string | null,
     receivedAt: new Date("2026-06-01T10:00:00.000Z"),
-    size: 100,
+    body: "invoice attached",
+    attachmentBytes: 100,
   };
 
   it("is deterministic and namespaced so it can't collide with a real Message-ID", () => {
@@ -35,12 +36,15 @@ describe("syntheticMessageKey", () => {
     expect(k1.startsWith("synthetic:")).toBe(true);
   });
 
-  it("changes when any input part changes", () => {
+  it("changes when any input part changes (incl. body, so distinct mail differs)", () => {
     expect(syntheticMessageKey(base)).not.toBe(
-      syntheticMessageKey({ ...base, size: 101 }),
+      syntheticMessageKey({ ...base, attachmentBytes: 101 }),
     );
     expect(syntheticMessageKey(base)).not.toBe(
       syntheticMessageKey({ ...base, subject: "Bye" }),
+    );
+    expect(syntheticMessageKey(base)).not.toBe(
+      syntheticMessageKey({ ...base, body: "different body" }),
     );
   });
 

@@ -17,6 +17,10 @@ import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
 
 const CATEGORIES = ["utilities", "insurance", "maintenance", "taxes", "other"] as const;
 
+/** Thrown inside the post transaction to roll it back when the email was already
+ *  posted by a concurrent/double submit (caught to redirect, not error out). */
+class AlreadyPostedError extends Error {}
+
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
 }
@@ -73,38 +77,10 @@ export async function postInboxExpenseAction(fd: FormData): Promise<void> {
   }
   if (amountCents <= 0n) back("amount");
 
-  // Attribution: lease -> unit -> property (same precedence as createExpense).
-  const leaseId = str(fd, "leaseId") || null;
-  const unitIdRaw = str(fd, "unitId") || null;
-  const propertyIdRaw = str(fd, "propertyId") || null;
-
-  let propertyId: string;
-  let unitId: string | null = null;
-  let buildingId: string | null = null;
-  let resolvedLeaseId: string | null = null;
-
-  if (leaseId) {
-    const lease = await prisma.lease.findUnique({
-      where: { id: leaseId },
-      include: { unit: true },
-    });
-    if (!lease) back("lease");
-    resolvedLeaseId = lease!.id;
-    unitId = lease!.unitId;
-    buildingId = lease!.unit.buildingId;
-    propertyId = lease!.unit.propertyId;
-  } else if (unitIdRaw) {
-    const unit = await prisma.unit.findUnique({ where: { id: unitIdRaw } });
-    if (!unit) back("unit");
-    unitId = unit!.id;
-    buildingId = unit!.buildingId;
-    propertyId = unit!.propertyId;
-  } else if (propertyIdRaw) {
-    propertyId = propertyIdRaw;
-  } else {
-    return back("target");
-  }
-
+  // The inbox form attributes an emailed invoice to a property (unit/lease
+  // attribution can be refined later in Financials), so this is property-level.
+  const propertyId = str(fd, "propertyId") || null;
+  if (!propertyId) return back("target");
   const property = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!property) back("property");
 
@@ -117,59 +93,64 @@ export async function postInboxExpenseAction(fd: FormData): Promise<void> {
   const vendorId = str(fd, "vendorId") || null;
   if (vendorId && !(await isActiveVendor(vendorId))) back("vendor");
 
-  await withAudit(
-    {
-      ...(await auditActor()),
-      action: "financials.expense_added",
-      entityType: "PropertyExpense",
-      entityId: "(new)",
-    },
-    async (tx) => {
-      const created = await tx.propertyExpense.create({
-        data: {
-          propertyId: propertyId!,
-          buildingId,
-          unitId,
-          leaseId: resolvedLeaseId,
-          category,
-          amountCents,
-          incurredOn: incurredOn!,
-          description: str(fd, "description") || null,
-          vendorId,
-          sourceType: "inbound_email",
-          sourceId: email!.id,
-          createdBy: dbUser.id,
-        },
-      });
-      // Link the email's attachments to the expense and mark the inbox item
-      // posted (terminal) — same transaction so a failure rolls back together.
-      await tx.uploadedDocument.updateMany({
-        where: { inboundEmailId: email!.id },
-        data: { propertyExpenseId: created.id },
-      });
-      await tx.inboundEmail.update({
-        where: { id: email!.id },
-        data: {
-          status: "posted",
-          propertyExpenseId: created.id,
-          handledBy: dbUser.id,
-          handledAt: new Date(),
-          readAt: email!.readAt ?? new Date(),
-        },
-      });
-      return {
-        result: created,
-        entityId: created.id,
-        after: {
-          propertyId,
-          category,
-          amountCents,
-          sourceType: "inbound_email",
-          sourceId: email!.id,
-        },
-      };
-    },
-  );
+  try {
+    await withAudit(
+      {
+        ...(await auditActor()),
+        action: "financials.expense_added",
+        entityType: "PropertyExpense",
+        entityId: "(new)",
+      },
+      async (tx) => {
+        const created = await tx.propertyExpense.create({
+          data: {
+            propertyId,
+            category,
+            amountCents,
+            incurredOn: incurredOn!,
+            description: str(fd, "description") || null,
+            vendorId,
+            sourceType: "inbound_email",
+            sourceId: email!.id,
+            createdBy: dbUser.id,
+          },
+        });
+        // Atomically claim the email: only the FIRST poster flips it to "posted".
+        // A concurrent/double submit matches 0 rows here and throws, rolling the
+        // whole transaction back (no duplicate expense) → "already posted".
+        const claim = await tx.inboundEmail.updateMany({
+          where: { id: email!.id, status: { not: "posted" } },
+          data: {
+            status: "posted",
+            propertyExpenseId: created.id,
+            handledBy: dbUser.id,
+            handledAt: new Date(),
+            readAt: email!.readAt ?? new Date(),
+          },
+        });
+        if (claim.count === 0) throw new AlreadyPostedError();
+        // Link the email's attachments to the created expense.
+        await tx.uploadedDocument.updateMany({
+          where: { inboundEmailId: email!.id },
+          data: { propertyExpenseId: created.id },
+        });
+        return {
+          result: created,
+          entityId: created.id,
+          after: {
+            propertyId,
+            category,
+            amountCents,
+            sourceType: "inbound_email",
+            sourceId: email!.id,
+          },
+        };
+      },
+    );
+  } catch (e) {
+    if (e instanceof AlreadyPostedError) back("already_posted");
+    throw e;
+  }
 
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${email!.id}`);

@@ -71,35 +71,30 @@ export default async function InboxDetailPage({
   if (!data) notFound();
   const { email, attachments } = data;
 
-  // Download links for attachments (signed URLs; storage may be unconfigured).
-  const attachmentLinks = await Promise.all(
-    attachments.map(async (a) => {
-      let url: string | null = null;
-      try {
-        url = (await getDocumentDownloadUrl(a.id))?.url ?? null;
-      } catch {
-        url = null;
-      }
-      return { doc: a, url };
-    }),
-  );
-
-  // OCR prefill from the first attachment we managed to read.
-  const ocrText = attachments.find((a) => a.ocrText)?.ocrText ?? null;
-  const suggestion: OcrSuggestion = ocrText ? suggestFromOcrText(ocrText) : {};
-  const suggestedAmount = suggestion.amountCents
-    ? fromCents(BigInt(suggestion.amountCents))
-    : undefined;
-
-  // Prefill the vendor when the sender matches an active vendor's email.
-  const vendorMatch = email.fromEmail
-    ? await prisma.vendor.findFirst({
-        where: { isActive: true, email: { equals: email.fromEmail, mode: "insensitive" } },
-        select: { id: true },
-      })
-    : null;
-
-  const [properties, vendors] = await Promise.all([
+  // These four reads are mutually independent — run them in one batch:
+  // per-attachment signed download URLs, the sender→vendor match, the property
+  // list, and the active-vendor list.
+  const [attachmentLinks, vendorMatch, properties, vendors] = await Promise.all([
+    Promise.all(
+      attachments.map(async (a) => {
+        let url: string | null = null;
+        try {
+          url = (await getDocumentDownloadUrl(a.id))?.url ?? null;
+        } catch {
+          url = null; // storage not configured — show a hint instead of a link
+        }
+        return { doc: a, url };
+      }),
+    ),
+    email.fromEmail
+      ? prisma.vendor.findFirst({
+          where: {
+            isActive: true,
+            email: { equals: email.fromEmail, mode: "insensitive" },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
     prisma.property.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
@@ -107,6 +102,13 @@ export default async function InboxDetailPage({
     }),
     listActiveVendors(),
   ]);
+
+  // OCR prefill from the first attachment we managed to read.
+  const ocrText = attachments.find((a) => a.ocrText)?.ocrText ?? null;
+  const suggestion: OcrSuggestion = ocrText ? suggestFromOcrText(ocrText) : {};
+  const suggestedAmount = suggestion.amountCents
+    ? fromCents(BigInt(suggestion.amountCents))
+    : undefined;
 
   const posted = email.status === "posted";
 
