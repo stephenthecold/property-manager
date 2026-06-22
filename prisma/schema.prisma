@@ -114,6 +114,7 @@ enum UploadType {
   lease_template // .docx with {{placeholders}}, filled per lease
   tenant_document
   other
+  email_attachment // file pulled off an inbound email (module "mailbox")
 }
 
 enum ReminderType {
@@ -338,6 +339,39 @@ model AppSettings {
   emailOauthRefreshTokenCiphertext String?
   emailOauthRefreshTokenNonce      String?
   emailOauthRefreshTokenTag        String?
+
+  // Inbound email (module "mailbox"): capture a mailbox via IMAP into a staff
+  // inbox for invoices/receipts (→ a reviewed PropertyExpense) and
+  // correspondence. DB-only config (no env fallback). inboxProvider null ->
+  // not configured; "stub" injects canned messages; "imap" polls a real mailbox
+  // in the worker. Microsoft 365 disables IMAP Basic Auth, so auth is either a
+  // "password" (self-hosted / Gmail app password) or "oauth2" (XOAUTH2:
+  // client-credentials app-only, or a refresh token). All three secrets are
+  // AES-256-GCM encrypted with SETTINGS_ENC_KEY (field-bound AAD).
+  inboxEnabled            Boolean @default(false) // master switch for polling
+  inboxProvider           String? // null | "stub" | "imap"
+  inboxImapHost           String?
+  inboxImapPort           Int?
+  inboxImapSecure         Boolean @default(true) // implicit TLS (993)
+  inboxImapUser           String? // the mailbox address that is polled
+  inboxFolder             String? // null/blank -> "INBOX"
+  inboxAuthMethod         String? // "password" | "oauth2"
+  inboxPasswordCiphertext String?
+  inboxPasswordNonce      String?
+  inboxPasswordTag        String?
+  inboxOauthClientId      String?
+  // OAuth2 token endpoint, e.g. Microsoft 365:
+  // https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token
+  inboxOauthTokenUrl      String?
+  // OAuth2 scope; null/blank -> https://outlook.office365.com/.default
+  inboxOauthScope         String?
+  inboxOauthClientSecretCiphertext String?
+  inboxOauthClientSecretNonce      String?
+  inboxOauthClientSecretTag        String?
+  // Present -> refresh_token grant (delegated); absent -> client_credentials.
+  inboxOauthRefreshTokenCiphertext String?
+  inboxOauthRefreshTokenNonce      String?
+  inboxOauthRefreshTokenTag        String?
 
   // Role -> capability overrides vs. the default hierarchy, e.g.
   // { "viewer": { "reports.view": true }, "manager": { "payments.manage": false } }.
@@ -584,6 +618,7 @@ model Tenant {
   requests      TenantRequest[]
   trialTokens   TenantPortalTrialToken[]
   inboundMessages InboundMessage[]
+  inboundEmails   InboundEmail[]
 
   @@index([lastName, firstName])
 }
@@ -1061,6 +1096,8 @@ model UploadedDocument {
   receiptId     String?
   maintenanceJobId String? // loose ref: photos / invoices attached to a maintenance job
   tenantRequestId String? // loose ref: photos a tenant attached to a maintenance request
+  inboundEmailId  String? // loose ref: file pulled off an inbound email (module "mailbox")
+  propertyExpenseId String? // loose ref: set when an emailed invoice is posted as an expense
   fileUrl       String
   fileName      String?
   fileType      String?
@@ -1078,6 +1115,8 @@ model UploadedDocument {
   @@index([receiptId])
   @@index([maintenanceJobId])
   @@index([tenantRequestId])
+  @@index([inboundEmailId])
+  @@index([propertyExpenseId])
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.
@@ -1130,6 +1169,38 @@ model InboundMessage {
   @@index([tenantId])
   @@index([readAt])
   @@index([receivedAt])
+}
+
+/// Inbound emails captured from a configured mailbox (module "mailbox"): a
+/// general staff inbox for invoices/receipts and correspondence. `body` is the
+/// plain-text part only (HTML is never rendered). `tenantId` is matched by the
+/// sender email at capture (null when unknown). Attachments are UploadedDocument
+/// rows (inboundEmailId). An OPERATING record — never a ledger entry; posting an
+/// invoice creates a human-reviewed PropertyExpense (propertyExpenseId). Capture
+/// is best-effort and idempotent on `messageId` (RFC822 Message-ID, or a
+/// synthetic key when absent), so re-polling never double-records.
+model InboundEmail {
+  id                String    @id @default(cuid())
+  messageId         String    @unique
+  fromEmail         String
+  fromName          String?
+  toAddress         String? // mailbox/alias it arrived at (future routing)
+  subject           String?
+  body              String // plain-text part only, capped at capture
+  attachmentCount   Int       @default(0)
+  status            String    @default("new") // new | archived | posted
+  tenantId          String? // matched tenant by sender email; null when unknown
+  tenant            Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  propertyExpenseId String? // set when an invoice was posted as an expense
+  handledBy         String? // staff User.id who posted/archived
+  handledAt         DateTime?
+  receivedAt        DateTime  @default(now())
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([status, receivedAt])
+  @@index([tenantId])
+  @@index([readAt])
 }
 
 model Reminder {

@@ -24,6 +24,7 @@ export interface CreateDocumentInput {
   receiptId?: string | null;
   maintenanceJobId?: string | null;
   tenantRequestId?: string | null;
+  inboundEmailId?: string | null;
   notes?: string | null;
   actor: AuditContext;
 }
@@ -68,6 +69,7 @@ export async function createUploadedDocument(
           receiptId: input.receiptId ?? null,
           maintenanceJobId: input.maintenanceJobId ?? null,
           tenantRequestId: input.tenantRequestId ?? null,
+          inboundEmailId: input.inboundEmailId ?? null,
           notes: input.notes ?? null,
           createdBy: input.actor.actorId ?? null,
         },
@@ -119,6 +121,7 @@ export async function listDocuments(
     receiptId?: string;
     maintenanceJobId?: string;
     tenantRequestId?: string;
+    inboundEmailId?: string;
     uploadType?: UploadType;
   } = {},
 ): Promise<UploadedDocument[]> {
@@ -129,6 +132,7 @@ export async function listDocuments(
       ...(filter.receiptId ? { receiptId: filter.receiptId } : {}),
       ...(filter.maintenanceJobId ? { maintenanceJobId: filter.maintenanceJobId } : {}),
       ...(filter.tenantRequestId ? { tenantRequestId: filter.tenantRequestId } : {}),
+      ...(filter.inboundEmailId ? { inboundEmailId: filter.inboundEmailId } : {}),
       ...(filter.uploadType ? { uploadType: filter.uploadType } : {}),
     },
     orderBy: { createdAt: "desc" },

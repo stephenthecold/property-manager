@@ -5,6 +5,7 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { reminderCron } from "@/lib/reminders/schedule";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import { runScheduledReminders } from "@/lib/services/reminders";
+import { runInboxPollOnce } from "@/lib/services/inbox-poll";
 import {
   runWeeklyMaintenanceDigest,
   runWeeklyStaffDigest,
@@ -20,6 +21,7 @@ import {
 
 const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
 const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
+const INBOX_POLL_SCHEDULE = process.env.INBOX_POLL_CRON ?? "*/5 * * * *"; // every 5 min
 // Reminder schedule is resolved at startup: Settings → Messaging "send hour"
 // (DB) wins, else REMINDER_CRON env, else 09:00 daily (lib/reminders/schedule).
 
@@ -52,6 +54,21 @@ async function runRemindersOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] maintenance reminder run failed:", e);
+  }
+}
+
+async function runInboxOnce(): Promise<void> {
+  // Inbound-email capture (module "mailbox"). No-ops unless a mailbox is
+  // configured; a failure here never disrupts billing or reminders.
+  try {
+    const res = await runInboxPollOnce();
+    if (!res.skipped) {
+      console.log(
+        `[worker] inbox poll: fetched=${res.fetched} processed=${res.processed} failed=${res.failed}`,
+      );
+    }
+  } catch (e) {
+    console.error("[worker] inbox poll failed:", e);
   }
 }
 
@@ -92,15 +109,19 @@ async function main(): Promise<void> {
   }
   const reminderSchedule = reminderCron(reminderSendHour, process.env.REMINDER_CRON);
   console.log(
-    `[worker] starting (billing="${SCHEDULE}", reminders="${reminderSchedule}", staffDigest="${STAFF_DIGEST_SCHEDULE}")`,
+    `[worker] starting (billing="${SCHEDULE}", reminders="${reminderSchedule}", staffDigest="${STAFF_DIGEST_SCHEDULE}", inbox="${INBOX_POLL_SCHEDULE}")`,
   );
   await runOnce(); // startup back-fill
   await runRemindersOnce(); // startup catch-up (idempotent, duplicates skip)
+  await runInboxOnce(); // startup catch-up (idempotent on messageId)
   cron.schedule(SCHEDULE, () => {
     void runOnce();
   });
   cron.schedule(reminderSchedule, () => {
     void runRemindersOnce();
+  });
+  cron.schedule(INBOX_POLL_SCHEDULE, () => {
+    void runInboxOnce();
   });
   // Cron-only (no startup run): the digest has no per-send idempotency row,
   // so running it at boot would re-email staff on every container restart.

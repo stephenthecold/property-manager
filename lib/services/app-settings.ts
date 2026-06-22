@@ -35,6 +35,13 @@ export const EMAIL_OAUTH_CLIENT_SECRET_AAD =
 export const EMAIL_OAUTH_REFRESH_TOKEN_AAD =
   "appsettings:emailOauthRefreshToken:singleton";
 
+/** AADs binding each encrypted inbound-mailbox (IMAP) secret to its row/field. */
+export const INBOX_PASSWORD_AAD = "appsettings:inboxPassword:singleton";
+export const INBOX_OAUTH_CLIENT_SECRET_AAD =
+  "appsettings:inboxOauthClientSecret:singleton";
+export const INBOX_OAUTH_REFRESH_TOKEN_AAD =
+  "appsettings:inboxOauthRefreshToken:singleton";
+
 export interface ModuleFlags {
   /** Expenses, mortgages, profit/ROI (dashboard cards + /financials). */
   financials: boolean;
@@ -54,6 +61,8 @@ export interface ModuleFlags {
   vendors: boolean;
   /** Public marketing splash at the public host root (/welcome). */
   publicSite: boolean;
+  /** Inbound email inbox: capture a mailbox for invoices/receipts (/inbox). */
+  mailbox: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -67,6 +76,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   inspections: false,
   vendors: false,
   publicSite: false,
+  mailbox: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -98,6 +108,8 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.vendors === "boolean" ? obj.vendors : MODULE_DEFAULTS.vendors,
     publicSite:
       typeof obj.publicSite === "boolean" ? obj.publicSite : MODULE_DEFAULTS.publicSite,
+    mailbox:
+      typeof obj.mailbox === "boolean" ? obj.mailbox : MODULE_DEFAULTS.mailbox,
   };
 }
 
@@ -161,6 +173,21 @@ export interface ResolvedAppSettings {
   emailHasPassword: boolean;
   emailHasOauthClientSecret: boolean;
   emailHasOauthRefreshToken: boolean;
+  /** Inbound email inbox (module "mailbox"). DB-only config; secrets presence-only. */
+  inboxEnabled: boolean;
+  inboxProvider: "stub" | "imap" | null;
+  inboxImapHost: string | null;
+  inboxImapPort: number | null;
+  inboxImapSecure: boolean;
+  inboxImapUser: string | null;
+  inboxFolder: string | null;
+  inboxAuthMethod: "password" | "oauth2" | null;
+  inboxOauthClientId: string | null;
+  inboxOauthTokenUrl: string | null;
+  inboxOauthScope: string | null;
+  inboxHasPassword: boolean;
+  inboxHasOauthClientSecret: boolean;
+  inboxHasOauthRefreshToken: boolean;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
   /** DEFAULT_EMAIL_SUBJECTS merged with per-type DB overrides (email channel). */
@@ -304,6 +331,26 @@ async function resolve(): Promise<ResolvedAppSettings> {
     emailHasPassword: !!row?.emailPasswordCiphertext,
     emailHasOauthClientSecret: !!row?.emailOauthClientSecretCiphertext,
     emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
+    inboxEnabled: row?.inboxEnabled ?? false,
+    inboxProvider:
+      row?.inboxProvider === "stub" || row?.inboxProvider === "imap"
+        ? row.inboxProvider
+        : null,
+    inboxImapHost: row?.inboxImapHost ?? null,
+    inboxImapPort: row?.inboxImapPort ?? null,
+    inboxImapSecure: row?.inboxImapSecure ?? true,
+    inboxImapUser: row?.inboxImapUser ?? null,
+    inboxFolder: row?.inboxFolder ?? null,
+    inboxAuthMethod:
+      row?.inboxAuthMethod === "password" || row?.inboxAuthMethod === "oauth2"
+        ? row.inboxAuthMethod
+        : null,
+    inboxOauthClientId: row?.inboxOauthClientId ?? null,
+    inboxOauthTokenUrl: row?.inboxOauthTokenUrl ?? null,
+    inboxOauthScope: row?.inboxOauthScope ?? null,
+    inboxHasPassword: !!row?.inboxPasswordCiphertext,
+    inboxHasOauthClientSecret: !!row?.inboxOauthClientSecretCiphertext,
+    inboxHasOauthRefreshToken: !!row?.inboxOauthRefreshTokenCiphertext,
     templates,
     emailSubjects,
     leaseAgreementText: row?.leaseAgreementText ?? null,
@@ -1172,6 +1219,98 @@ export async function savePublicSiteSettings(
         ? { publicSiteUrl: before.publicSiteUrl, publicSiteTagline: before.publicSiteTagline }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+export interface InboxSettingsInput {
+  inboxEnabled: boolean;
+  /** null = not configured; "stub" injects canned mail; "imap" polls a mailbox. */
+  inboxProvider: "stub" | "imap" | null;
+  inboxImapHost: string | null;
+  inboxImapPort: number | null;
+  inboxImapSecure: boolean;
+  inboxImapUser: string | null;
+  inboxFolder: string | null;
+  inboxAuthMethod: "password" | "oauth2" | null;
+  inboxOauthClientId: string | null;
+  inboxOauthTokenUrl: string | null;
+  inboxOauthScope: string | null;
+  /** undefined = keep the stored secret; "" clears it; a string replaces it. */
+  inboxPassword?: string;
+  inboxOauthClientSecret?: string;
+  inboxOauthRefreshToken?: string;
+}
+
+/**
+ * Persist the inbound-mailbox (IMAP) config. Mirrors saveEmailSettings: the
+ * three secrets are AES-256-GCM encrypted (field-bound AAD) and never audited —
+ * only whether each changed. Pure config; never touches the ledger.
+ */
+export async function saveInboxSettings(
+  input: InboxSettingsInput,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    inboxEnabled: input.inboxEnabled,
+    inboxProvider: input.inboxProvider,
+    inboxImapHost: input.inboxImapHost,
+    inboxImapPort: input.inboxImapPort,
+    inboxImapSecure: input.inboxImapSecure,
+    inboxImapUser: input.inboxImapUser,
+    inboxFolder: input.inboxFolder,
+    inboxAuthMethod: input.inboxAuthMethod,
+    inboxOauthClientId: input.inboxOauthClientId,
+    inboxOauthTokenUrl: input.inboxOauthTokenUrl,
+    inboxOauthScope: input.inboxOauthScope,
+    ...encryptedTripletData(input.inboxPassword, INBOX_PASSWORD_AAD, {
+      ciphertext: "inboxPasswordCiphertext",
+      nonce: "inboxPasswordNonce",
+      tag: "inboxPasswordTag",
+    }),
+    ...encryptedTripletData(
+      input.inboxOauthClientSecret,
+      INBOX_OAUTH_CLIENT_SECRET_AAD,
+      {
+        ciphertext: "inboxOauthClientSecretCiphertext",
+        nonce: "inboxOauthClientSecretNonce",
+        tag: "inboxOauthClientSecretTag",
+      },
+    ),
+    ...encryptedTripletData(
+      input.inboxOauthRefreshToken,
+      INBOX_OAUTH_REFRESH_TOKEN_AAD,
+      {
+        ciphertext: "inboxOauthRefreshTokenCiphertext",
+        nonce: "inboxOauthRefreshTokenNonce",
+        tag: "inboxOauthRefreshTokenTag",
+      },
+    ),
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    // Never audit secrets — only whether each one changed this save.
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.inbox.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: {
+        inboxEnabled: input.inboxEnabled,
+        inboxProvider: input.inboxProvider,
+        inboxImapHost: input.inboxImapHost,
+        inboxImapUser: input.inboxImapUser,
+        inboxAuthMethod: input.inboxAuthMethod,
+        passwordChanged: input.inboxPassword !== undefined,
+        oauthClientSecretChanged: input.inboxOauthClientSecret !== undefined,
+        oauthRefreshTokenChanged: input.inboxOauthRefreshToken !== undefined,
+      },
     });
   });
   invalidateAppSettingsCache();
