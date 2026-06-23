@@ -11,7 +11,17 @@ import {
   statusLabel,
 } from "@/lib/maintenance/status";
 import { Badge } from "@/components/ui/badge";
-import { updateUnit, deleteUnit } from "../actions";
+import {
+  updateUnit,
+  deleteUnit,
+  addUnitConditionAction,
+  deleteUnitConditionAction,
+} from "../actions";
+import {
+  CONDITION_PHASES,
+  conditionPhaseLabel,
+  listConditionLogsForUnit,
+} from "@/lib/services/unit-condition";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -112,6 +122,24 @@ export default async function UnitDetail({
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       })
     : [];
+
+  // Condition photos (module "inspections"): the unit's full history + the
+  // unit's leases (active + past) for the optional tenancy picker.
+  const conditionLogs = modules.inspections
+    ? await listConditionLogsForUnit(unit.id)
+    : [];
+  const unitLeases = modules.inspections
+    ? await prisma.lease.findMany({
+        where: { unitId: unit.id },
+        include: { tenant: { select: { firstName: true, lastName: true } } },
+        orderBy: { startDate: "desc" },
+      })
+    : [];
+  const conditionDateDefault = new Date().toLocaleDateString("en-CA", {
+    timeZone: unit.property.timezone,
+  });
+  const fmtLeaseDate = (d: Date) =>
+    d.toLocaleDateString("en-US", { timeZone: unit.property.timezone });
 
   return (
     <div className="space-y-6">
@@ -396,6 +424,165 @@ export default async function UnitDetail({
                   </li>
                 ))}
               </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {modules.inspections && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Condition photos</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Dated move-in / move-out / turnover photos with a note.
+              </p>
+            </div>
+            <FormDialog
+              trigger="Add condition photos"
+              title="Add condition photos"
+              wide
+              action={addUnitConditionAction}
+              submitLabel="Save photos"
+            >
+              <input type="hidden" name="unitId" value={unit.id} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="phase">Type</Label>
+                  <select
+                    id="phase"
+                    name="phase"
+                    defaultValue="move_out"
+                    className="h-9 w-full rounded-md border px-3 text-sm"
+                  >
+                    {CONDITION_PHASES.map((p) => (
+                      <option key={p} value={p}>
+                        {conditionPhaseLabel(p)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="conditionDate">Date</Label>
+                  <Input
+                    id="conditionDate"
+                    name="conditionDate"
+                    type="date"
+                    defaultValue={conditionDateDefault}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="leaseId">Tenancy (optional)</Label>
+                <select
+                  id="leaseId"
+                  name="leaseId"
+                  defaultValue=""
+                  className="h-9 w-full rounded-md border px-3 text-sm"
+                >
+                  <option value="">— no tenant (unit only) —</option>
+                  {unitLeases.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.tenant.firstName} {l.tenant.lastName} ({fmtLeaseDate(l.startDate)}
+                      {l.endDate ? `–${fmtLeaseDate(l.endDate)}` : "–present"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="note">Note (optional)</Label>
+                <Textarea
+                  id="note"
+                  name="note"
+                  placeholder="e.g. Carpet stained in living room; kitchen left clean."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="condition-photos">Photos</Label>
+                <input
+                  id="condition-photos"
+                  name="photos"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  className="block text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/70"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Up to 5 images (JPG/PNG/WebP, 10 MB each).
+                </p>
+              </div>
+            </FormDialog>
+          </CardHeader>
+          <CardContent>
+            {conditionLogs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No condition photos yet.</p>
+            ) : (
+              <div className="space-y-5">
+                {conditionLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="space-y-2 border-b pb-4 last:border-b-0 last:pb-0"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="font-medium">
+                        {conditionPhaseLabel(log.phase)}
+                      </Badge>
+                      <span className="text-sm font-medium">
+                        {log.conditionDate.toLocaleDateString("en-US", {
+                          timeZone: unit.property.timezone,
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                      {log.tenantName && (
+                        <span className="text-sm text-muted-foreground">
+                          · {log.tenantName}
+                        </span>
+                      )}
+                      <form action={deleteUnitConditionAction} className="ml-auto">
+                        <input type="hidden" name="logId" value={log.id} />
+                        <input type="hidden" name="unitId" value={unit.id} />
+                        <ConfirmSubmitButton
+                          variant="ghost"
+                          size="xs"
+                          confirmMessage="Delete this condition photo batch? This cannot be undone."
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </form>
+                    </div>
+                    {log.note && (
+                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                        {log.note}
+                      </p>
+                    )}
+                    {log.photos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {log.photos.map((p) =>
+                          p.url ? (
+                            <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element -- signed URL, not optimizable */}
+                              <img
+                                src={p.url}
+                                alt={p.fileName ?? "Condition photo"}
+                                className="aspect-square w-full rounded-md border object-cover"
+                              />
+                            </a>
+                          ) : (
+                            <div
+                              key={p.id}
+                              className="flex aspect-square w-full items-center justify-center rounded-md border text-center text-xs text-muted-foreground"
+                            >
+                              (unavailable)
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

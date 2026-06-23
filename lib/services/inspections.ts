@@ -20,7 +20,7 @@ export async function listInspections() {
         select: {
           tenantId: true,
           tenant: { select: { firstName: true, lastName: true } },
-          unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+          unit: { select: { id: true, unitNumber: true, property: { select: { name: true } } } },
         },
       },
     },
@@ -37,7 +37,7 @@ export async function getInspection(id: string) {
           id: true,
           tenantId: true,
           tenant: { select: { firstName: true, lastName: true } },
-          unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+          unit: { select: { id: true, unitNumber: true, property: { select: { name: true } } } },
         },
       },
     },
