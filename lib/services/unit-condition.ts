@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/db";
 import { withAudit, type AuditContext } from "@/lib/audit/audit";
-import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { saveMaintenancePhotos } from "@/lib/services/maintenance-photos";
 import { getFileStorage } from "@/lib/providers/storage";
 import type { UnitConditionPhase } from "@/lib/generated/prisma/enums";
@@ -68,10 +67,12 @@ async function loadConditionLogs(
   });
   if (logs.length === 0) return [];
 
+  // Resolve the storage provider once (null when unconfigured → placeholder URLs).
+  const storage = await getFileStorage().catch(() => null);
   const docs = await prisma.uploadedDocument.findMany({
     where: { unitConditionLogId: { in: logs.map((l) => l.id) }, fileType: { startsWith: "image/" } },
     orderBy: { createdAt: "asc" },
-    select: { id: true, fileName: true, unitConditionLogId: true },
+    select: { id: true, fileName: true, fileUrl: true, unitConditionLogId: true },
   });
   const byLog = new Map<string, typeof docs>();
   for (const d of docs) {
@@ -95,10 +96,12 @@ async function loadConditionLogs(
       photos: await Promise.all(
         (byLog.get(l.id) ?? []).map(async (d) => {
           let url: string | null = null;
-          try {
-            url = (await getDocumentDownloadUrl(d.id))?.url ?? null;
-          } catch {
-            url = null;
+          if (storage) {
+            try {
+              url = await storage.getSignedUrl(d.fileUrl);
+            } catch {
+              url = null; // storage hiccup — render a placeholder
+            }
           }
           return { id: d.id, url, fileName: d.fileName };
         }),
@@ -180,13 +183,23 @@ export async function createConditionLog(input: {
     },
   );
 
-  const res = await saveMaintenancePhotos({
-    files: input.files,
-    unitConditionLogId: log.id,
-    note: "", // one note per batch lives on the log, not per photo
-    uploadType: "condition_photo",
-    actor: input.actor,
-  });
+  let res: Awaited<ReturnType<typeof saveMaintenancePhotos>>;
+  try {
+    res = await saveMaintenancePhotos({
+      files: input.files,
+      unitConditionLogId: log.id,
+      note: "", // one note per batch lives on the log, not per photo
+      uploadType: "condition_photo",
+      actor: input.actor,
+    });
+  } catch (e) {
+    // The log is already committed; if saving THROWS (not just returns an
+    // error), remove the now-empty batch and surface an inline message instead
+    // of the opaque error page.
+    await prisma.unitConditionLog.delete({ where: { id: log.id } }).catch(() => {});
+    console.error("[unit-condition] photo save threw:", e);
+    return { error: "Couldn't save the photos — check file storage and try again." };
+  }
 
   if (res.saved === 0) {
     // No usable image landed — don't leave an empty batch behind.
@@ -200,13 +213,17 @@ export async function createConditionLog(input: {
   return { ok: true, saved: res.saved, skipped: res.skipped };
 }
 
-/** Delete a condition batch and its photos (DB rows + best-effort storage). */
+/**
+ * Delete a condition batch and its photos (DB rows + best-effort storage).
+ * Returns the deleted batch's unitId (so the caller revalidates the right unit)
+ * or null when there was nothing to delete.
+ */
 export async function deleteConditionLog(
   id: string,
   actor: AuditContext,
-): Promise<void> {
+): Promise<string | null> {
   const log = await prisma.unitConditionLog.findUnique({ where: { id } });
-  if (!log) return;
+  if (!log) return null;
   const docs = await prisma.uploadedDocument.findMany({
     where: { unitConditionLogId: id },
     select: { fileUrl: true },
@@ -228,12 +245,15 @@ export async function deleteConditionLog(
   );
 
   // Best-effort storage cleanup after the DB commit.
-  const storage = await getFileStorage();
-  for (const d of docs) {
-    try {
-      await storage.delete(d.fileUrl);
-    } catch {
-      // orphaned object is harmless; don't fail the delete
+  const storage = await getFileStorage().catch(() => null);
+  if (storage) {
+    for (const d of docs) {
+      try {
+        await storage.delete(d.fileUrl);
+      } catch {
+        // orphaned object is harmless; don't fail the delete
+      }
     }
   }
+  return log.unitId;
 }

@@ -254,7 +254,12 @@ export async function deleteUnitConditionAction(fd: FormData): Promise<void> {
   await requireCapability("inspections.manage");
   await assertModuleEnabled("inspections");
   const logId = str(fd, "logId");
-  const unitId = str(fd, "unitId");
-  if (logId) await deleteConditionLog(logId, await auditActor());
+  const formUnitId = str(fd, "unitId");
+  // Revalidate the batch's ACTUAL unit (not the form-supplied one) so a stale
+  // form id can't leave the real unit page showing a deleted batch.
+  const deletedUnitId = logId
+    ? await deleteConditionLog(logId, await auditActor())
+    : null;
+  const unitId = deletedUnitId ?? formUnitId;
   if (unitId) revalidatePath(`/units/${unitId}`);
 }

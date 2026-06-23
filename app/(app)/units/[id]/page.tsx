@@ -5,6 +5,8 @@ import { formatCurrency, fromCents } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
 import { computeVacancy } from "@/lib/units/vacancy";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { getDisplayRole } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
 import {
   OPEN_STATUSES,
   statusBadgeClass,
@@ -115,7 +117,8 @@ export default async function UnitDetail({
         ? "Unavailable"
         : occupancyLabel;
 
-  const { modules } = await getAppSettings();
+  const app = await getAppSettings();
+  const { modules } = app;
   const openJobs = modules.maintenance
     ? await prisma.maintenanceJob.findMany({
         where: { unitId: unit.id, status: { in: OPEN_STATUSES } },
@@ -123,12 +126,17 @@ export default async function UnitDetail({
       })
     : [];
 
-  // Condition photos (module "inspections"): the unit's full history + the
-  // unit's leases (active + past) for the optional tenancy picker.
-  const conditionLogs = modules.inspections
+  // Condition photos (module "inspections"): gated on inspections.manage to
+  // VIEW (matching the inspection detail page), not just the module flag — the
+  // unit's full history + the unit's leases for the optional tenancy picker.
+  const { actingRole } = await getDisplayRole();
+  const canCondition =
+    modules.inspections &&
+    hasCapability(actingRole, "inspections.manage", app.rolePermissions);
+  const conditionLogs = canCondition
     ? await listConditionLogsForUnit(unit.id)
     : [];
-  const unitLeases = modules.inspections
+  const unitLeases = canCondition
     ? await prisma.lease.findMany({
         where: { unitId: unit.id },
         include: { tenant: { select: { firstName: true, lastName: true } } },
@@ -429,7 +437,7 @@ export default async function UnitDetail({
         </Card>
       )}
 
-      {modules.inspections && (
+      {canCondition && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-2">
             <div>

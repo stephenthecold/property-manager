@@ -210,7 +210,10 @@ export default async function InspectionDetailPage({
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">{conditionPhaseLabel(log.phase)}</span>
                     <span className="text-muted-foreground">
-                      · {log.conditionDate.toLocaleDateString("en-US")}
+                      ·{" "}
+                      {log.conditionDate.toLocaleDateString("en-US", {
+                        timeZone: inspection.lease.unit.property.timezone,
+                      })}
                     </span>
                   </div>
                   {log.note && (
