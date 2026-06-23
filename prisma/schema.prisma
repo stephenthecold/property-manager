@@ -115,6 +115,7 @@ enum UploadType {
   tenant_document
   other
   email_attachment // file pulled off an inbound email (module "mailbox")
+  public_site // marketing photo shown on the public site (module "publicSite")
 }
 
 enum ReminderType {
@@ -312,6 +313,14 @@ model AppSettings {
   publicSiteIntro   String?
   publicSiteAreas   String?
   publicSiteHours   String?
+  // Richer marketing content (all operator-edited at Settings → Public site):
+  // an amenities list (one per line), a hero/banner image + a photo gallery
+  // (UploadedDocument ids; served publicly via /welcome/photo/[id]), and a
+  // toggle to show live current-availability (vacant units) on the site.
+  publicSiteAmenities      String?
+  publicSiteHeroDocumentId String? // UploadedDocument.id (loose ref), uploadType "public_site"
+  publicSiteGallery        Json    @default("[]") // [{ "id": "<UploadedDocument.id>" }, ...]
+  publicSiteShowAvailability Boolean @default(false)
 
   // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
   // not configured; "stub" logs only; "smtp" sends. Auth is either a password

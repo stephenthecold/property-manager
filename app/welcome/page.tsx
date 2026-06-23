@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { CheckIcon } from "lucide-react";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getEnv } from "@/lib/config/env";
 import { brandedPageMetadata } from "@/lib/config/metadata";
+import {
+  availabilityWhen,
+  formatBedsBaths,
+  listPublicAvailability,
+} from "@/lib/services/public-site";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,102 +21,244 @@ export async function generateMetadata(): Promise<Metadata> {
   return brandedPageMetadata((await getAppSettings()).businessName);
 }
 
+const photoUrl = (id: string) => `/welcome/photo/${id}`;
+
+/** Display-only money format from integer cents — BigInt math, never a float. */
+function formatRent(cents: bigint): string {
+  const dollars = (cents / 100n).toLocaleString("en-US");
+  const rem = Number(cents % 100n);
+  return rem === 0 ? `$${dollars}` : `$${dollars}.${String(rem).padStart(2, "0")}`;
+}
+
 /**
- * Public marketing splash served at the public host root (Caddy rewrites
+ * Public marketing site served at the public host root (Caddy rewrites
  * `/` → `/welcome`). NO session — "/welcome" is a PUBLIC_PREFIX. Module-gated:
- * when the publicSite module is off, send visitors to the resident login so the
- * public hostname still does something useful before the splash is turned on.
- * Operator-authored copy + branding come from Settings; nothing here reads
- * tenant data.
+ * when the publicSite module is off, send visitors to the resident login.
+ * Operator-authored copy/photos + branding come from Settings. The only
+ * tenant-adjacent data is the opt-in current-availability list, which exposes
+ * marketing fields of VACANT units only (lib/services/public-site.ts).
  */
 export default async function WelcomePage() {
   const s = await getAppSettings();
   if (!s.modules.publicSite) redirect("/portal");
 
-  // Staff console lives on the canonical app host (e.g. manage.newedgerentals.com).
   const staffUrl = getEnv().APP_URL.replace(/\/+$/, "");
-  // Trim once so the guard and the rendered text agree (textareas keep newlines
-  // via whitespace-pre-wrap, but stray leading/trailing space shouldn't show).
   const tagline = s.publicSiteTagline?.trim();
   const intro = s.publicSiteIntro?.trim();
+  const amenities = (s.publicSiteAmenities ?? "")
+    .split("\n")
+    .map((a) => a.trim())
+    .filter(Boolean);
   const areas = s.publicSiteAreas?.trim();
   const hours = s.publicSiteHours?.trim();
   const address = s.businessAddress?.trim();
   const contact = [s.businessPhone, s.businessEmail].filter(Boolean).join(" · ");
+  const hero = s.publicSiteHeroDocumentId;
+  const gallery = s.publicSiteGallery;
+  const availability = s.publicSiteShowAvailability
+    ? await listPublicAvailability(new Date())
+    : [];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       <BrandColorStyle color={s.brandColor} />
-      <main className="mx-auto max-w-3xl space-y-10 px-4 py-16">
-        {/* Hero */}
-        <section className="space-y-4 text-center">
-          <div className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            {s.businessName}
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {tagline || `Welcome to ${s.businessName}`}
-          </h1>
-          {intro && (
-            <p className="mx-auto max-w-2xl whitespace-pre-wrap text-base text-muted-foreground">
-              {intro}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            {s.modules.applications && (
-              <Button size="lg" render={<Link href="/apply" />}>
-                Apply now
-              </Button>
-            )}
-            {s.modules.tenantPortal && (
-              <Button size="lg" variant="outline" render={<Link href="/portal" />}>
-                Resident login
-              </Button>
-            )}
-            {s.modules.payerPortal && (
-              <Button size="lg" variant="outline" render={<Link href="/payer-portal" />}>
-                Payer login
-              </Button>
-            )}
-          </div>
-        </section>
 
-        {/* Areas served + office hours */}
+      {/* Hero */}
+      <section className="relative isolate overflow-hidden">
+        {hero ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- operator asset, not optimizable */}
+            <img
+              src={photoUrl(hero)}
+              alt=""
+              className="absolute inset-0 -z-10 size-full object-cover"
+            />
+            <div className="absolute inset-0 -z-10 bg-black/55" />
+          </>
+        ) : (
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/20 via-background to-background" />
+        )}
+        <div className="mx-auto max-w-4xl px-4 py-24 text-center sm:py-32">
+          <div className={cn(hero && "text-white")}>
+            <div
+              className={cn(
+                "text-sm font-medium uppercase tracking-widest",
+                hero ? "text-white/80" : "text-muted-foreground",
+              )}
+            >
+              {s.businessName}
+            </div>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+              {tagline || `Welcome to ${s.businessName}`}
+            </h1>
+            {intro && (
+              <p
+                className={cn(
+                  "mx-auto mt-5 max-w-2xl whitespace-pre-wrap text-lg",
+                  hero ? "text-white/90" : "text-muted-foreground",
+                )}
+              >
+                {intro}
+              </p>
+            )}
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              {s.modules.applications && (
+                <Button size="lg" render={<Link href="/apply" />}>
+                  Apply now
+                </Button>
+              )}
+              {s.modules.tenantPortal && (
+                <Button size="lg" variant="secondary" render={<Link href="/portal" />}>
+                  Resident login
+                </Button>
+              )}
+              {s.modules.payerPortal && (
+                <Button size="lg" variant="secondary" render={<Link href="/payer-portal" />}>
+                  Payer login
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <main className="mx-auto max-w-5xl space-y-16 px-4 py-16">
+        {/* About / welcome (only when there's a hero, so the intro still shows
+            below the fold; without a hero the intro already appears in the hero) */}
+        {intro && hero && (
+          <section className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-semibold tracking-tight">Welcome</h2>
+            <p className="mt-3 whitespace-pre-wrap text-muted-foreground">{intro}</p>
+          </section>
+        )}
+
+        {/* Amenities */}
+        {amenities.length > 0 && (
+          <section>
+            <h2 className="text-center text-2xl font-semibold tracking-tight">Amenities</h2>
+            <ul className="mx-auto mt-6 grid max-w-3xl gap-3 sm:grid-cols-2">
+              {amenities.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Photo gallery */}
+        {gallery.length > 0 && (
+          <section>
+            <h2 className="text-center text-2xl font-semibold tracking-tight">Gallery</h2>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {gallery.map((g) => (
+                // eslint-disable-next-line @next/next/no-img-element -- operator asset, not optimizable
+                <img
+                  key={g.id}
+                  src={photoUrl(g.id)}
+                  alt=""
+                  loading="lazy"
+                  className="aspect-[4/3] w-full rounded-lg border object-cover"
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Current availability */}
+        {s.publicSiteShowAvailability && (
+          <section>
+            <h2 className="text-center text-2xl font-semibold tracking-tight">
+              Current availability
+            </h2>
+            {availability.length === 0 ? (
+              <p className="mt-4 text-center text-muted-foreground">
+                No units are available right now — check back soon
+                {s.modules.applications ? (
+                  <>
+                    {" "}
+                    or{" "}
+                    <Link href="/apply" className="text-primary underline underline-offset-2">
+                      submit an application
+                    </Link>
+                  </>
+                ) : null}
+                .
+              </p>
+            ) : (
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {availability.map((u) => (
+                  <div
+                    key={u.unitId}
+                    className="flex flex-col rounded-lg border bg-card p-4 text-card-foreground"
+                  >
+                    <div className="font-medium">{u.propertyName}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {formatBedsBaths(u.bedrooms, u.bathrooms)}
+                    </div>
+                    <div className="mt-2 text-lg font-semibold">
+                      {formatRent(u.rentCents)}
+                      <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {availabilityWhen(u.availableNow, u.availableOn)}
+                    </div>
+                    {s.modules.applications && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3"
+                        render={<Link href={`/apply?unit=${u.unitId}`} />}
+                      >
+                        Apply
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Location / areas + office hours */}
         {(areas || hours) && (
-          <section className="grid gap-4 sm:grid-cols-2">
+          <section className="grid gap-6 sm:grid-cols-2">
             {areas && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Areas we serve</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{areas}</p>
-                </CardContent>
-              </Card>
+              <div className="rounded-lg border bg-card p-5 text-card-foreground">
+                <h2 className="text-lg font-semibold">Where we are</h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{areas}</p>
+              </div>
             )}
             {hours && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Office hours</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">{hours}</p>
-                </CardContent>
-              </Card>
+              <div className="rounded-lg border bg-card p-5 text-card-foreground">
+                <h2 className="text-lg font-semibold">Office hours</h2>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{hours}</p>
+              </div>
             )}
           </section>
         )}
 
         {/* Contact */}
         {(contact || address) && (
-          <section className="space-y-1 text-center text-sm text-muted-foreground">
-            <div className="font-medium text-foreground">Contact us</div>
-            {contact && <div>{contact}</div>}
-            {address && <div className="whitespace-pre-wrap">{address}</div>}
+          <section className="text-center">
+            <h2 className="text-2xl font-semibold tracking-tight">Get in touch</h2>
+            {contact && <p className="mt-3 text-muted-foreground">{contact}</p>}
+            {address && (
+              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{address}</p>
+            )}
+            {s.modules.applications && (
+              <div className="mt-5">
+                <Button render={<Link href="/apply" />}>Apply now</Button>
+              </div>
+            )}
           </section>
         )}
+      </main>
 
-        {/* Footer */}
-        <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t pt-6 text-xs text-muted-foreground">
+      {/* Footer */}
+      <footer className="border-t">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-8 text-xs text-muted-foreground">
           <Link href="/privacy" className="hover:text-foreground hover:underline">
             Privacy policy
           </Link>
@@ -123,8 +271,8 @@ export default async function WelcomePage() {
           <span>
             © {new Date().getFullYear()} {s.businessName}
           </span>
-        </footer>
-      </main>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -34,7 +34,7 @@ newedgerentals.com {
     rewrite @root /welcome
 
     # Only public-facing paths are exposed on the public brand
-    @public path / /welcome /apply /apply/* /portal /portal/* /payer-portal /payer-portal/* \
+    @public path / /welcome /welcome/* /apply /apply/* /portal /portal/* /payer-portal /payer-portal/* \
                   /privacy /terms /sign /sign/* /sms-opt-in /api/portal/* \
                   /_next/* /favicon.ico /icon /robots.txt
     handle @public {
@@ -55,6 +55,8 @@ manage.newedgerentals.com {
 Notes:
 - `property-manager:3000` is the app's upstream on your Caddy Docker network (the alias from
   `docker-compose.caddy.yml`). Adjust if yours differs.
+- `/welcome/*` covers the marketing **photos** (hero + gallery), which are served publicly at
+  `/welcome/photo/<id>` — only documents you uploaded as public-site images are served there.
 - The `@public` allowlist is **default-deny**: anything not listed (e.g. `/dashboard`,
   `/settings`, `/login`) is bounced back to the splash, so the staff console never appears on the
   public brand. Staff routes are also session-gated, so this is defense-in-depth, not the only
@@ -70,7 +72,12 @@ Notes:
      reset links** are generated against this, so residents get on-brand
      `https://newedgerentals.com/portal/...` links instead of the staff host. Blank = fall back to
      `APP_URL`.
-   - Headline, intro blurb, areas served, office hours.
+   - Headline, intro blurb, **amenities** (one per line), areas served, office hours.
+   - A **hero/banner image** and a **photo gallery** — uploaded right here; served publicly at
+     `/welcome/photo/<id>` (allowed by the `@public /welcome/*` rule above).
+   - **Show current availability** (optional toggle) — lists your currently-vacant units
+     (beds/baths/rent/available date, no floor plans) with an Apply link, pulled live from your
+     data. Leave off to keep the site marketing-only.
 3. Logo, business name, brand color, phone/email/address come from **Settings → Organization**;
    privacy & terms come from **Settings → Messaging → Compliance** (already rendered at `/privacy`
    and `/terms`).
@@ -81,6 +88,8 @@ Notes:
   contact, privacy/terms footer).
 - `https://newedgerentals.com/portal` → resident login; `…/payer-portal` → payer login;
   `…/apply` → application form.
+- Hero/gallery **photos load** (served from `/welcome/photo/...`); if you enabled "Show current
+  availability", currently-vacant units appear with Apply links.
 - `https://newedgerentals.com/dashboard` → bounced to the splash (staff console not exposed here).
 - `https://manage.newedgerentals.com/` → staff console, unchanged.
 - Send a tenant portal invite and confirm the link host is `newedgerentals.com`.
