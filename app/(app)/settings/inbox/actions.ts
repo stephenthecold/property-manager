@@ -114,7 +114,12 @@ export async function saveInboxOauthClientAction(
   if (!clientId) return { error: "Client ID is required." };
 
   const clientSecretRaw = String(fd.get("oauthClientSecret") ?? "");
-  if (!clientSecretRaw && !(await getAppSettings()).inboxHasOauthClientSecret) {
+  const settings = await getAppSettings();
+  // A blank secret only keeps the stored one when it belongs to THIS provider —
+  // otherwise we'd silently reuse the other provider's secret (→ invalid_client).
+  const canKeepStored =
+    settings.inboxOauthProvider === providerRaw && settings.inboxHasOauthClientSecret;
+  if (!clientSecretRaw && !canKeepStored) {
     return { error: "Client secret is required." };
   }
 

@@ -57,9 +57,19 @@ async function runRemindersOnce(): Promise<void> {
   }
 }
 
+// Guards against overlapping polls: node-cron does not serialize runs, and two
+// concurrent refresh_token grants would race Microsoft's single-use refresh-token
+// rotation and could invalidate the stored token.
+let inboxPolling = false;
+
 async function runInboxOnce(): Promise<void> {
   // Inbound-email capture (module "mailbox"). No-ops unless a mailbox is
   // configured; a failure here never disrupts billing or reminders.
+  if (inboxPolling) {
+    console.log("[worker] inbox poll still running — skipping this tick");
+    return;
+  }
+  inboxPolling = true;
   try {
     const res = await runInboxPollOnce();
     if (!res.skipped) {
@@ -69,6 +79,8 @@ async function runInboxOnce(): Promise<void> {
     }
   } catch (e) {
     console.error("[worker] inbox poll failed:", e);
+  } finally {
+    inboxPolling = false;
   }
 }
 

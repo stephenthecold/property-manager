@@ -77,6 +77,17 @@ describe("buildAuthorizeUrl", () => {
   });
 });
 
+describe("provider scopes", () => {
+  it("runtime imapScope omits OIDC scopes (Microsoft rejects mixing them on refresh)", () => {
+    expect(OAUTH_PROVIDERS.microsoft.imapScope).toContain("IMAP.AccessAsUser.All");
+    expect(OAUTH_PROVIDERS.microsoft.imapScope).not.toContain("openid");
+    expect(OAUTH_PROVIDERS.microsoft.imapScope).not.toContain("email");
+    expect(OAUTH_PROVIDERS.google.imapScope).toBe("https://mail.google.com/");
+    // The AUTHORIZE scope still requests the id_token claims.
+    expect(OAUTH_PROVIDERS.microsoft.defaultScope).toContain("openid");
+  });
+});
+
 describe("buildCodeExchangeBody", () => {
   it("is an authorization_code grant carrying the PKCE verifier", () => {
     const body = buildCodeExchangeBody({

@@ -17,8 +17,13 @@ export function isInboxOauthProvider(v: string): v is InboxOauthProvider {
 export interface ProviderEndpoints {
   authorizeUrl: (tenant: string | null) => string;
   tokenUrl: (tenant: string | null) => string;
-  /** IMAP delegated scope + offline_access (refresh token) + openid/email. */
+  /** Scope for the AUTHORIZE request: IMAP + offline_access (refresh token) +
+   *  openid/email (so the id_token carries the mailbox address). */
   defaultScope: string;
+  /** Scope the WORKER replays on the refresh_token grant: the resource scope
+   *  ONLY. Microsoft can reject mixing OIDC (openid/email) with a resource scope
+   *  on a token request, so the runtime scope must omit them. */
+  imapScope: string;
   imapHost: string;
 }
 
@@ -32,12 +37,14 @@ export const OAUTH_PROVIDERS: Record<InboxOauthProvider, ProviderEndpoints> = {
       `${MICROSOFT_BASE}/${encodeURIComponent(tenant || "common")}/oauth2/v2.0/token`,
     defaultScope:
       "https://outlook.office365.com/IMAP.AccessAsUser.All offline_access openid email",
+    imapScope: "https://outlook.office365.com/IMAP.AccessAsUser.All offline_access",
     imapHost: "outlook.office365.com",
   },
   google: {
     authorizeUrl: () => "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: () => "https://oauth2.googleapis.com/token",
     defaultScope: "https://mail.google.com/ openid email",
+    imapScope: "https://mail.google.com/",
     imapHost: "imap.gmail.com",
   },
 };

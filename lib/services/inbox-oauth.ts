@@ -116,7 +116,7 @@ export async function saveInboxOauthClientConfig(
     inboxOauthTenant: tenant,
     inboxOauthClientId: input.clientId,
     inboxOauthTokenUrl: ep.tokenUrl(tenant),
-    inboxOauthScope: ep.defaultScope,
+    inboxOauthScope: ep.imapScope,
     inboxImapHost: ep.imapHost,
     inboxImapPort: 993,
     inboxImapSecure: true,
@@ -260,6 +260,15 @@ export async function completeInboxOauth(input: {
     };
   }
   const mailbox = decodeIdTokenEmail(json.id_token) ?? row.inboxImapUser ?? "";
+  if (!mailbox) {
+    // Without the mailbox address the worker can't log in (resolveInboxProvider
+    // needs a user), so don't report a misleading "connected" with a dead poll.
+    return {
+      ok: false,
+      error:
+        "Connected, but the sign-in didn't return a mailbox address. Ensure the app requests the openid + email scope, then reconnect.",
+    };
+  }
   const enc = encryptSecret(json.refresh_token, INBOX_OAUTH_REFRESH_TOKEN_AAD);
 
   await prisma.$transaction(async (tx) => {
@@ -273,9 +282,9 @@ export async function completeInboxOauth(input: {
         inboxImapHost: ep.imapHost,
         inboxImapPort: 993,
         inboxImapSecure: true,
-        inboxImapUser: mailbox || row.inboxImapUser,
+        inboxImapUser: mailbox,
         inboxOauthTokenUrl: tokenUrl,
-        inboxOauthScope: ep.defaultScope,
+        inboxOauthScope: ep.imapScope,
         inboxOauthRefreshTokenCiphertext: enc.ciphertext,
         inboxOauthRefreshTokenNonce: enc.nonce,
         inboxOauthRefreshTokenTag: enc.tag,
