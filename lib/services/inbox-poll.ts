@@ -6,6 +6,7 @@ import {
   INBOX_PASSWORD_AAD,
 } from "@/lib/services/app-settings";
 import { recordInboundEmail } from "@/lib/services/inbound-email";
+import { persistRotatedInboxRefreshToken } from "@/lib/services/inbox-oauth";
 import type { InboundEmailProvider } from "@/lib/providers/inbound-email/types";
 import { ImapInboundProvider } from "@/lib/providers/inbound-email/imap";
 import { StubInboundProvider } from "@/lib/providers/inbound-email/stub";
@@ -84,6 +85,9 @@ export async function resolveInboxProvider(): Promise<InboundEmailProvider | nul
         tokenUrl: row.inboxOauthTokenUrl,
         scope: row.inboxOauthScope?.trim() || DEFAULT_IMAP_OAUTH_SCOPE,
         refreshToken,
+        // Persist a rotated refresh token (Microsoft rotates each grant) so a
+        // delegated "Connect" mailbox keeps working without re-consent.
+        onRefreshToken: persistRotatedInboxRefreshToken,
       },
     });
   }

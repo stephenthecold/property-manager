@@ -188,6 +188,9 @@ export interface ResolvedAppSettings {
   inboxHasPassword: boolean;
   inboxHasOauthClientSecret: boolean;
   inboxHasOauthRefreshToken: boolean;
+  /** Interactive "Connect" flow: provider that issued the stored refresh token. */
+  inboxOauthProvider: "microsoft" | "google" | null;
+  inboxOauthTenant: string | null;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
   /** DEFAULT_EMAIL_SUBJECTS merged with per-type DB overrides (email channel). */
@@ -351,6 +354,11 @@ async function resolve(): Promise<ResolvedAppSettings> {
     inboxHasPassword: !!row?.inboxPasswordCiphertext,
     inboxHasOauthClientSecret: !!row?.inboxOauthClientSecretCiphertext,
     inboxHasOauthRefreshToken: !!row?.inboxOauthRefreshTokenCiphertext,
+    inboxOauthProvider:
+      row?.inboxOauthProvider === "microsoft" || row?.inboxOauthProvider === "google"
+        ? row.inboxOauthProvider
+        : null,
+    inboxOauthTenant: row?.inboxOauthTenant ?? null,
     templates,
     emailSubjects,
     leaseAgreementText: row?.leaseAgreementText ?? null,

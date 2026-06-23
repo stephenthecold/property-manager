@@ -16,6 +16,15 @@ export interface ImapOauthConfig {
   scope: string;
   /** When present, a delegated refresh-token grant is used instead of app-only. */
   refreshToken?: string | null;
+  /** Called with a ROTATED refresh token (Microsoft rotates on each grant) so a
+   *  delegated connection can persist it and keep working. */
+  onRefreshToken?: (token: string) => Promise<void>;
+}
+
+export interface ImapTokenResult {
+  accessToken: string;
+  /** Present when the IdP rotated/returned a (new) refresh token. */
+  refreshToken?: string;
 }
 
 /** Build the token-endpoint POST body. PURE — unit-tested without a network. */
@@ -34,7 +43,9 @@ export function buildImapTokenRequestBody(cfg: ImapOauthConfig): URLSearchParams
 }
 
 /** Fetch an access token from the OAuth2 token endpoint. Throws on failure. */
-export async function fetchImapAccessToken(cfg: ImapOauthConfig): Promise<string> {
+export async function fetchImapAccessToken(
+  cfg: ImapOauthConfig,
+): Promise<ImapTokenResult> {
   if (!cfg.tokenUrl) {
     throw new Error("IMAP OAuth2 token URL is not set.");
   }
@@ -49,9 +60,12 @@ export async function fetchImapAccessToken(cfg: ImapOauthConfig): Promise<string
       `IMAP OAuth2 token request failed (${res.status}): ${detail.slice(0, 200)}`,
     );
   }
-  const json = (await res.json()) as { access_token?: string };
+  const json = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+  };
   if (!json.access_token) {
     throw new Error("IMAP OAuth2 token response had no access_token.");
   }
-  return json.access_token;
+  return { accessToken: json.access_token, refreshToken: json.refresh_token };
 }

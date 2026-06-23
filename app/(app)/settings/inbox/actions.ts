@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { getAppSettings, saveInboxSettings } from "@/lib/services/app-settings";
+import { isInboxOauthProvider } from "@/lib/providers/inbound-email/oauth-connect";
+import {
+  disconnectInboxOauth,
+  saveInboxOauthClientConfig,
+} from "@/lib/services/inbox-oauth";
 
 export interface InboxSettingsState {
   ok?: boolean;
@@ -92,4 +97,49 @@ export async function saveInboxAction(
   revalidatePath("/settings/inbox");
   revalidatePath("/inbox");
   return { ok: true, message: "Email inbox settings saved." };
+}
+
+/** Save the Microsoft/Google client app config used by the Connect redirect. */
+export async function saveInboxOauthClientAction(
+  _prev: InboxSettingsState,
+  fd: FormData,
+): Promise<InboxSettingsState> {
+  await requireCapability("messaging.settings");
+
+  const providerRaw = String(fd.get("oauthProvider") ?? "");
+  if (!isInboxOauthProvider(providerRaw)) {
+    return { error: "Choose Microsoft 365 or Google." };
+  }
+  const clientId = str(fd, "oauthClientId");
+  if (!clientId) return { error: "Client ID is required." };
+
+  const clientSecretRaw = String(fd.get("oauthClientSecret") ?? "");
+  const settings = await getAppSettings();
+  // A blank secret only keeps the stored one when it belongs to THIS provider —
+  // otherwise we'd silently reuse the other provider's secret (→ invalid_client).
+  const canKeepStored =
+    settings.inboxOauthProvider === providerRaw && settings.inboxHasOauthClientSecret;
+  if (!clientSecretRaw && !canKeepStored) {
+    return { error: "Client secret is required." };
+  }
+
+  await saveInboxOauthClientConfig(
+    {
+      provider: providerRaw,
+      tenant: str(fd, "oauthTenant"),
+      clientId,
+      clientSecret: clientSecretRaw === "" ? undefined : clientSecretRaw,
+    },
+    await auditActor(),
+  );
+  revalidatePath("/settings/inbox");
+  return { ok: true, message: "Connection settings saved — now click Connect." };
+}
+
+/** Disconnect a connected mailbox (clears the refresh token, stops polling). */
+export async function disconnectInboxAction(): Promise<void> {
+  await requireCapability("messaging.settings");
+  await disconnectInboxOauth(await auditActor());
+  revalidatePath("/settings/inbox");
+  revalidatePath("/inbox");
 }
