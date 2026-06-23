@@ -127,6 +127,12 @@ export function PublicSiteForm({ initial }: { initial: PublicSiteInitial }) {
             placeholder="A sentence or two about your community and what makes it a great place to live."
             defaultValue={initial.publicSiteIntro}
           />
+          <p className="text-xs text-muted-foreground">
+            Doubles as your “About” section. For SMS carrier verification
+            (10DLC), clearly state what your business does and the services you
+            provide — e.g. “… a residential property-management company offering
+            rentals and resident services in the Austin area.”
+          </p>
         </div>
 
         <div className="space-y-2">

@@ -52,7 +52,8 @@ export default async function WelcomePage() {
   const areas = s.publicSiteAreas?.trim();
   const hours = s.publicSiteHours?.trim();
   const address = s.businessAddress?.trim();
-  const contact = [s.businessPhone, s.businessEmail].filter(Boolean).join(" · ");
+  const phone = s.businessPhone?.trim();
+  const email = s.businessEmail?.trim();
   const hero = s.publicSiteHeroDocumentId;
   const gallery = s.publicSiteGallery;
   const availability = s.publicSiteShowAvailability
@@ -236,14 +237,36 @@ export default async function WelcomePage() {
           </section>
         )}
 
-        {/* Contact */}
-        {(contact || address) && (
+        {/* Contact — labeled, clickable details so carriers (10DLC brand
+            verification) and visitors can confirm how to reach the business. */}
+        {(phone || email || address) && (
           <section className="text-center">
             <h2 className="text-2xl font-semibold tracking-tight">Get in touch</h2>
-            {contact && <p className="mt-3 text-muted-foreground">{contact}</p>}
-            {address && (
-              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{address}</p>
-            )}
+            <div className="mt-3 space-y-1 text-muted-foreground">
+              {phone && (
+                <p>
+                  Call{" "}
+                  <a
+                    href={`tel:${phone.replace(/[^\d+]/g, "")}`}
+                    className="text-primary underline underline-offset-2"
+                  >
+                    {phone}
+                  </a>
+                </p>
+              )}
+              {email && (
+                <p>
+                  Email{" "}
+                  <a
+                    href={`mailto:${email}`}
+                    className="text-primary underline underline-offset-2"
+                  >
+                    {email}
+                  </a>
+                </p>
+              )}
+              {address && <p className="whitespace-pre-wrap text-sm">{address}</p>}
+            </div>
             {s.modules.applications && (
               <div className="mt-5">
                 <Button render={<Link href="/apply" />}>Apply now</Button>
