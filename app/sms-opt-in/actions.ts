@@ -11,6 +11,8 @@ import {
 
 export interface OptInState {
   ok?: boolean;
+  /** true = an opt-in was recorded; false = submitted without ticking consent. */
+  consented?: boolean;
   error?: string;
 }
 
@@ -39,13 +41,13 @@ export async function submitSmsOptInAction(
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "Please enter a valid email address." };
   }
-  // Consent is optional in spirit, but this form's purpose is to opt in: if the
-  // box is unticked we do NOT mark anyone opted in.
+  // SMS consent is OPTIONAL: the form MUST be submittable without ticking the
+  // box. Carriers (10DLC) reject a mandatory opt-in checkbox alongside a
+  // mandatory phone field as "forced opt-in", so an unticked submit SUCCEEDS and
+  // simply records nothing. We never record a public opt-OUT here — that would
+  // let anyone opt a tenant out by phone; opt-out is the STOP keyword.
   if (!consent) {
-    return {
-      error:
-        "To opt in, please check the SMS consent box. If you don't want SMS, you can simply close this page.",
-    };
+    return { ok: true, consented: false };
   }
 
   const h = await headers();
@@ -70,5 +72,5 @@ export async function submitSmsOptInAction(
       error: "Sorry, we couldn't record your opt-in right now. Please try again later.",
     };
   }
-  return { ok: true };
+  return { ok: true, consented: true };
 }
