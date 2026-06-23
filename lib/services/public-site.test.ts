@@ -38,8 +38,8 @@ describe("resolvePublicSiteGallery", () => {
     expect(resolvePublicSiteGallery([{ nope: 1 }, "short", 123, null])).toEqual([]);
   });
 
-  it("caps the list at 60", () => {
+  it("caps the list at PUBLIC_SITE_GALLERY_MAX (30)", () => {
     const many = Array.from({ length: 70 }, (_, i) => id(`g${i}`));
-    expect(resolvePublicSiteGallery(many)).toHaveLength(60);
+    expect(resolvePublicSiteGallery(many)).toHaveLength(30);
   });
 });

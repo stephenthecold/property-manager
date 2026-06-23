@@ -1204,6 +1204,10 @@ export async function saveComplianceLinks(
   invalidateAppSettingsCache();
 }
 
+/** Max photos kept in the public-site gallery (shared by the resolver + the
+ *  upload action so the read cap and the write cap never disagree). */
+export const PUBLIC_SITE_GALLERY_MAX = 30;
+
 /** One photo in the public-site gallery (an UploadedDocument id). */
 export interface PublicSiteGalleryItem {
   id: string;
@@ -1226,7 +1230,7 @@ export function resolvePublicSiteGallery(raw: unknown): PublicSiteGalleryItem[] 
       seen.add(id);
       out.push({ id });
     }
-    if (out.length >= 60) break;
+    if (out.length >= PUBLIC_SITE_GALLERY_MAX) break;
   }
   return out;
 }

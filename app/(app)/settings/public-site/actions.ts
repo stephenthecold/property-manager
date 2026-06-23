@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import {
   getAppSettings,
+  PUBLIC_SITE_GALLERY_MAX,
   savePublicSiteGallery,
   savePublicSiteHeroDocument,
   savePublicSiteSettings,
@@ -17,7 +18,13 @@ function str(fd: FormData, key: string): string {
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const GALLERY_MAX = 30;
+
+/** Validate an image File against the type + size rules; null = ok. */
+function imageError(file: File): string | null {
+  if (!IMAGE_TYPES.has(file.type)) return "Photos must be PNG, JPEG, or WebP.";
+  if (file.size > IMAGE_MAX_BYTES) return "Each photo must be under 5 MB.";
+  return null;
+}
 
 function storageError(e: unknown): string {
   console.error("[public-site] image upload failed:", e);
@@ -124,20 +131,23 @@ export async function addGalleryImagesAction(
   if (files.length === 0) return { error: "Choose one or more photos to add." };
 
   const current = (await getAppSettings()).publicSiteGallery;
-  if (current.length >= GALLERY_MAX) {
-    return { error: `The gallery is full (max ${GALLERY_MAX} photos).` };
+  const room = PUBLIC_SITE_GALLERY_MAX - current.length;
+  if (room <= 0) {
+    return { error: `The gallery is full (max ${PUBLIC_SITE_GALLERY_MAX} photos).` };
+  }
+  const toUpload = files.slice(0, room); // silently cap to the remaining slots
+
+  // Validate the WHOLE batch BEFORE uploading any — otherwise a bad file partway
+  // through would leave the earlier ones stored but orphaned (the early return
+  // never saves the gallery list).
+  for (const file of toUpload) {
+    const err = imageError(file);
+    if (err) return { error: err };
   }
 
   const additions: { id: string }[] = [];
-  for (const file of files) {
-    if (current.length + additions.length >= GALLERY_MAX) break;
-    if (!IMAGE_TYPES.has(file.type)) {
-      return { error: "Photos must be PNG, JPEG, or WebP." };
-    }
-    if (file.size > IMAGE_MAX_BYTES) {
-      return { error: "Each photo must be under 5 MB." };
-    }
-    try {
+  try {
+    for (const file of toUpload) {
       const { documentId } = await createUploadedDocument({
         body: Buffer.from(await file.arrayBuffer()),
         fileName: file.name || "photo",
@@ -147,9 +157,11 @@ export async function addGalleryImagesAction(
         actor,
       });
       additions.push({ id: documentId });
-    } catch (e) {
-      return { error: storageError(e) };
     }
+  } catch (e) {
+    // A storage failure mid-batch can orphan an earlier upload (a stray, never-
+    // referenced marketing image) — acceptable; surface the error.
+    return { error: storageError(e) };
   }
 
   await savePublicSiteGallery([...current, ...additions], actor);

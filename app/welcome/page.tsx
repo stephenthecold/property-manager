@@ -91,13 +91,10 @@ export default async function WelcomePage() {
             <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
               {tagline || `Welcome to ${s.businessName}`}
             </h1>
-            {intro && (
-              <p
-                className={cn(
-                  "mx-auto mt-5 max-w-2xl whitespace-pre-wrap text-lg",
-                  hero ? "text-white/90" : "text-muted-foreground",
-                )}
-              >
+            {/* With a hero image the intro reads better below the banner (the
+                "Welcome" section); without one, show it here in the hero. */}
+            {intro && !hero && (
+              <p className="mx-auto mt-5 max-w-2xl whitespace-pre-wrap text-lg text-muted-foreground">
                 {intro}
               </p>
             )}
