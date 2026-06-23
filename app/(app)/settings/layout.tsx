@@ -20,6 +20,7 @@ const SETTINGS_LINKS: {
   { href: "/settings/public-site", label: "Public site", cap: "organization.settings" },
   { href: "/settings/leases", label: "Leases", cap: "organization.settings" },
   { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
+  { href: "/settings/inbox", label: "Email inbox", cap: "messaging.settings" },
   {
     href: "/settings/applications",
     label: "Applications",

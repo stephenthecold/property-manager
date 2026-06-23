@@ -61,6 +61,12 @@ const MODULE_INFO = [
     description:
       "A public landing page at your public domain's root (e.g. newedgerentals.com) with a hero, an Apply button, resident/payer login links, areas served, office hours, and contact — linking to the existing privacy/terms pages. Edit the copy at Settings → Public site. Requires DNS + your reverse proxy to route the public domain to the app (see docs/PUBLIC_SITE.md). When off, the public root sends visitors to the resident login instead.",
   },
+  {
+    key: "mailbox" as const,
+    label: "Email inbox (invoice & mail capture)",
+    description:
+      "Polls a configured mailbox (IMAP) into a staff Email inbox at /inbox, where emailed invoices/receipts can be reviewed and posted to Financials as expenses (the file is attached and amount/date are OCR-prefilled). Configure the mailbox at Settings → Email inbox (supports Microsoft 365 OAuth2, Gmail app passwords, and self-hosted IMAP). Capture is read-only and de-duplicated; nothing financial is created without staff review. Turning it off stops polling and hides the inbox; captured mail is kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {
