@@ -22,6 +22,10 @@ export default async function PublicSiteSettingsPage() {
             publicSiteIntro: s.publicSiteIntro ?? "",
             publicSiteAreas: s.publicSiteAreas ?? "",
             publicSiteHours: s.publicSiteHours ?? "",
+            publicSiteAmenities: s.publicSiteAmenities ?? "",
+            showAvailability: s.publicSiteShowAvailability,
+            heroDocumentId: s.publicSiteHeroDocumentId,
+            gallery: s.publicSiteGallery.map((g) => g.id),
             enabled: s.modules.publicSite,
             businessName: s.businessName,
           }}

@@ -221,6 +221,14 @@ export interface ResolvedAppSettings {
   publicSiteIntro: string | null;
   publicSiteAreas: string | null;
   publicSiteHours: string | null;
+  /** Amenities list (one per line); null/blank -> section hidden. */
+  publicSiteAmenities: string | null;
+  /** Hero/banner image + photo gallery (UploadedDocument ids), served publicly
+   *  via /welcome/photo/[id]. */
+  publicSiteHeroDocumentId: string | null;
+  publicSiteGallery: PublicSiteGalleryItem[];
+  /** Show the live current-availability (vacant units) section. */
+  publicSiteShowAvailability: boolean;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -375,6 +383,10 @@ async function resolve(): Promise<ResolvedAppSettings> {
     publicSiteIntro: row?.publicSiteIntro ?? null,
     publicSiteAreas: row?.publicSiteAreas ?? null,
     publicSiteHours: row?.publicSiteHours ?? null,
+    publicSiteAmenities: row?.publicSiteAmenities ?? null,
+    publicSiteHeroDocumentId: row?.publicSiteHeroDocumentId ?? null,
+    publicSiteGallery: resolvePublicSiteGallery(row?.publicSiteGallery),
+    publicSiteShowAvailability: row?.publicSiteShowAvailability ?? false,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
@@ -1192,6 +1204,37 @@ export async function saveComplianceLinks(
   invalidateAppSettingsCache();
 }
 
+/** Max photos kept in the public-site gallery (shared by the resolver + the
+ *  upload action so the read cap and the write cap never disagree). */
+export const PUBLIC_SITE_GALLERY_MAX = 30;
+
+/** One photo in the public-site gallery (an UploadedDocument id). */
+export interface PublicSiteGalleryItem {
+  id: string;
+}
+
+/** Sanitize the stored gallery JSON to a capped list of id-shaped strings. */
+export function resolvePublicSiteGallery(raw: unknown): PublicSiteGalleryItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PublicSiteGalleryItem[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const id =
+      typeof item === "string"
+        ? item
+        : item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string"
+          ? (item as { id: string }).id
+          : null;
+    // cuid-ish id guard (matches the uploads route's isLikelyId), de-duped, capped.
+    if (id && /^[a-z0-9]{20,40}$/i.test(id) && !seen.has(id)) {
+      seen.add(id);
+      out.push({ id });
+    }
+    if (out.length >= PUBLIC_SITE_GALLERY_MAX) break;
+  }
+  return out;
+}
+
 export interface PublicSiteSettingsInput {
   /** Public base URL (e.g. https://newedgerentals.com); null clears it so
    *  tenant-portal links fall back to APP_URL. Caller normalizes it. */
@@ -1200,6 +1243,8 @@ export interface PublicSiteSettingsInput {
   publicSiteIntro: string | null;
   publicSiteAreas: string | null;
   publicSiteHours: string | null;
+  publicSiteAmenities: string | null;
+  publicSiteShowAvailability: boolean;
 }
 
 /**
@@ -1227,6 +1272,55 @@ export async function savePublicSiteSettings(
         ? { publicSiteUrl: before.publicSiteUrl, publicSiteTagline: before.publicSiteTagline }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/** Set (or clear, with null) the public-site hero/banner image document id. */
+export async function savePublicSiteHeroDocument(
+  documentId: string | null,
+  actor: AuditContext,
+): Promise<void> {
+  const data = {
+    publicSiteHeroDocumentId: documentId,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.public_site.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: { publicSiteHeroDocumentId: documentId },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/** Replace the public-site photo gallery (an already-sanitized id list). */
+export async function savePublicSiteGallery(
+  items: PublicSiteGalleryItem[],
+  actor: AuditContext,
+): Promise<void> {
+  const json = items as unknown as InputJsonValue;
+  await prisma.$transaction(async (tx) => {
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", publicSiteGallery: json, updatedBy: actor.actorId ?? null },
+      update: { publicSiteGallery: json, updatedBy: actor.actorId ?? null },
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.public_site.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      after: { galleryCount: items.length },
     });
   });
   invalidateAppSettingsCache();
