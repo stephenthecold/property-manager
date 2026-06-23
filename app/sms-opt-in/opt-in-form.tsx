@@ -18,9 +18,20 @@ export function SmsOptInForm({ businessName }: { businessName: string }) {
     return (
       <Alert>
         <AlertDescription>
-          Thanks! You&apos;re opted in to {businessName} SMS notifications. Reply{" "}
-          <span className="font-mono">STOP</span> to any message to opt out, or{" "}
-          <span className="font-mono">HELP</span> for help.
+          {state.consented ? (
+            <>
+              Thanks! You&apos;re opted in to {businessName} SMS notifications.
+              Reply <span className="font-mono">STOP</span> to any message to opt
+              out, or <span className="font-mono">HELP</span> for help.
+            </>
+          ) : (
+            <>
+              Thanks — your details were submitted. The SMS consent box was left
+              unchecked, so we did <strong>not</strong> opt you in to text
+              messages. You can opt in anytime by submitting again with the box
+              checked.
+            </>
+          )}
         </AlertDescription>
       </Alert>
     );
@@ -58,7 +69,10 @@ export function SmsOptInForm({ businessName }: { businessName: string }) {
         <Input id="propertyUnit" name="propertyUnit" placeholder="123 Main St, Apt 2" />
       </div>
 
-      {/* Separate, NOT pre-checked SMS consent — distinct from any other agreement. */}
+      {/* Separate, NOT pre-checked, NOT required SMS consent — distinct from any
+          other agreement. Optional by design: the form submits with or without
+          it, so a mandatory phone field is never paired with a mandatory opt-in
+          checkbox (10DLC "forced opt-in"). */}
       <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
         <input
           type="checkbox"
@@ -69,9 +83,13 @@ export function SmsOptInForm({ businessName }: { businessName: string }) {
           <SmsConsentText />
         </span>
       </label>
+      <p className="text-xs text-muted-foreground">
+        This checkbox is optional — you can submit the form without it. SMS
+        consent is never required as a condition of renting.
+      </p>
 
       <Button type="submit" disabled={pending}>
-        {pending ? "Submitting…" : "Opt in to SMS notifications"}
+        {pending ? "Submitting…" : "Submit"}
       </Button>
     </form>
   );
