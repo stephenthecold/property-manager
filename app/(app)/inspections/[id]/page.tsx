@@ -4,6 +4,10 @@ import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getInspection, dispositionForInspection } from "@/lib/services/inspections";
 import { inspectionStatusLabel, inspectionTypeLabel } from "@/lib/inspections/disposition";
+import {
+  conditionPhaseLabel,
+  listConditionLogsForLease,
+} from "@/lib/services/unit-condition";
 import { formatCurrency } from "@/lib/money";
 import {
   addDeductionAction,
@@ -38,6 +42,8 @@ export default async function InspectionDetailPage({
     : null;
 
   const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US") : "—");
+  const conditionLogs = await listConditionLogsForLease(inspection.lease.id);
+  const unitId = inspection.lease.unit.id;
 
   return (
     <div className="space-y-6">
@@ -180,6 +186,70 @@ export default async function InspectionDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">Condition photos</CardTitle>
+          <Link href={`/units/${unitId}`} className="text-sm font-medium hover:underline">
+            Add / manage on unit
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {conditionLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No condition photos for this tenancy yet — add them on the{" "}
+              <Link href={`/units/${unitId}`} className="hover:underline">
+                unit page
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {conditionLogs.map((log) => (
+                <div key={log.id} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">{conditionPhaseLabel(log.phase)}</span>
+                    <span className="text-muted-foreground">
+                      ·{" "}
+                      {log.conditionDate.toLocaleDateString("en-US", {
+                        timeZone: inspection.lease.unit.property.timezone,
+                      })}
+                    </span>
+                  </div>
+                  {log.note && (
+                    <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+                      {log.note}
+                    </p>
+                  )}
+                  {log.photos.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                      {log.photos.map((p) =>
+                        p.url ? (
+                          <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- signed URL, not optimizable */}
+                            <img
+                              src={p.url}
+                              alt={p.fileName ?? "Condition photo"}
+                              className="aspect-square w-full rounded-md border object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <div
+                            key={p.id}
+                            className="flex aspect-square w-full items-center justify-center rounded-md border text-xs text-muted-foreground"
+                          >
+                            (unavailable)
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

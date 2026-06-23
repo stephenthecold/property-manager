@@ -116,6 +116,7 @@ enum UploadType {
   other
   email_attachment // file pulled off an inbound email (module "mailbox")
   public_site // marketing photo shown on the public site (module "publicSite")
+  condition_photo // dated unit move-in/move-out/turnover condition photo (module "inspections")
 }
 
 enum ReminderType {
@@ -594,6 +595,7 @@ model Unit {
   maintenanceJobs MaintenanceJob[]
   rentalApplications RentalApplication[]
   assets          Asset[]
+  conditionLogs   UnitConditionLog[]
 
   @@index([propertyId])
   @@index([buildingId])
@@ -690,6 +692,7 @@ model Lease {
   rentShares    RentShare[]
   notices       Notice[]
   inspections   Inspection[]
+  conditionLogs UnitConditionLog[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -1030,6 +1033,37 @@ model InspectionItem {
   @@index([inspectionId])
 }
 
+enum UnitConditionPhase {
+  move_in // condition when given to a tenant
+  move_out // condition when left after a tenant
+  turnover // vacant turnover / general (no tenant)
+  other
+}
+
+/// Dated unit condition photo batch (module "inspections"): documents how a unit
+/// is given to / left by a tenant, or a vacant turnover. Anchored to a UNIT (so
+/// it shows historically there); the optional lease link ties it to a tenancy.
+/// Photos are UploadedDocument rows (unitConditionLogId, uploadType
+/// "condition_photo"). One note per batch. An OPERATING record — never a ledger
+/// entry, never touches balances or deposit disposition.
+model UnitConditionLog {
+  id            String             @id @default(cuid())
+  unitId        String
+  leaseId       String? // optional tenancy link; null = unit-only (e.g. vacant turnover)
+  phase         UnitConditionPhase
+  conditionDate DateTime // the date the photos document (operator-set)
+  note          String? // one note per batch
+  createdBy     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  unit  Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lease Lease? @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@index([unitId, conditionDate])
+  @@index([leaseId])
+}
+
 // ---------------------------------------------------------------------------
 // Vendors (module "vendors") — a directory of contractors/service providers
 // (plumber, electrician, landscaper, …). A reference directory only; it never
@@ -1112,6 +1146,7 @@ model UploadedDocument {
   tenantRequestId String? // loose ref: photos a tenant attached to a maintenance request
   inboundEmailId  String? // loose ref: file pulled off an inbound email (module "mailbox")
   propertyExpenseId String? // loose ref: set when an emailed invoice is posted as an expense
+  unitConditionLogId String? // loose ref: photo in a unit condition batch (module "inspections")
   fileUrl       String
   fileName      String?
   fileType      String?
@@ -1131,6 +1166,7 @@ model UploadedDocument {
   @@index([tenantRequestId])
   @@index([inboundEmailId])
   @@index([propertyExpenseId])
+  @@index([unitConditionLogId])
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.

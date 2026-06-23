@@ -6,6 +6,12 @@ import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
+import { assertModuleEnabled } from "@/lib/services/app-settings";
+import {
+  createConditionLog,
+  deleteConditionLog,
+  isConditionPhase,
+} from "@/lib/services/unit-condition";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type {
   ServiceStatus,
@@ -190,4 +196,70 @@ export async function deleteUnit(fd: FormData): Promise<void> {
 
   revalidatePath(`/properties/${unit.propertyId}`);
   redirect(`/properties/${unit.propertyId}`);
+}
+
+/**
+ * Add a dated unit condition photo batch (module "inspections"). Documents
+ * move-in / move-out / turnover condition with a note + photos. Returns inline
+ * errors for the FormDialog; never touches the ledger or deposit disposition.
+ */
+export async function addUnitConditionAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("inspections.manage");
+  await assertModuleEnabled("inspections");
+
+  const unitId = str(fd, "unitId");
+  const unit = await prisma.unit.findUnique({
+    where: { id: unitId },
+    include: { property: { select: { timezone: true } } },
+  });
+  if (!unit) return { error: "Unit not found." };
+
+  const phaseRaw = str(fd, "phase");
+  if (!isConditionPhase(phaseRaw)) {
+    return { error: "Choose move-in, move-out, turnover, or other." };
+  }
+
+  const dateRaw = str(fd, "conditionDate");
+  const conditionDate = dateRaw
+    ? parseDateOnlyInZone(dateRaw, unit.property.timezone)
+    : new Date();
+  if (dateRaw && !conditionDate) {
+    return { error: "Condition date must be a valid date." };
+  }
+
+  const files = fd
+    .getAll("photos")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  const res = await createConditionLog({
+    unitId,
+    leaseId: str(fd, "leaseId") || null,
+    phase: phaseRaw,
+    conditionDate: conditionDate!,
+    note: str(fd, "note") || null,
+    files,
+    actor: await auditActor(),
+  });
+  if ("error" in res) return { error: res.error };
+
+  revalidatePath(`/units/${unitId}`);
+  return { ok: true };
+}
+
+/** Delete a unit condition batch (and its photos). */
+export async function deleteUnitConditionAction(fd: FormData): Promise<void> {
+  await requireCapability("inspections.manage");
+  await assertModuleEnabled("inspections");
+  const logId = str(fd, "logId");
+  const formUnitId = str(fd, "unitId");
+  // Revalidate the batch's ACTUAL unit (not the form-supplied one) so a stale
+  // form id can't leave the real unit page showing a deleted batch.
+  const deletedUnitId = logId
+    ? await deleteConditionLog(logId, await auditActor())
+    : null;
+  const unitId = deletedUnitId ?? formUnitId;
+  if (unitId) revalidatePath(`/units/${unitId}`);
 }
