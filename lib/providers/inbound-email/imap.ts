@@ -80,8 +80,24 @@ export class ImapInboundProvider implements InboundEmailProvider {
     if (this.cfg.auth.method === "password") {
       return { user: this.cfg.user, pass: this.cfg.auth.password };
     }
-    const accessToken = await fetchImapAccessToken(this.cfg.auth);
-    return { user: this.cfg.user, accessToken };
+    const result = await fetchImapAccessToken(this.cfg.auth);
+    // Persist a rotated refresh token (Microsoft rotates on each grant) so a
+    // delegated "Connect" mailbox keeps working long-term. Best-effort.
+    if (
+      result.refreshToken &&
+      result.refreshToken !== this.cfg.auth.refreshToken &&
+      this.cfg.auth.onRefreshToken
+    ) {
+      try {
+        await this.cfg.auth.onRefreshToken(result.refreshToken);
+      } catch (e) {
+        console.error(
+          "[inbox:imap] refresh-token persist failed:",
+          e instanceof Error ? e.message : "unknown error",
+        );
+      }
+    }
+    return { user: this.cfg.user, accessToken: result.accessToken };
   }
 
   async poll(

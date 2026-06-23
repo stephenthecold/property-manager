@@ -26,12 +26,44 @@ Try it without a real mailbox first: set the provider to **Stub** — the next
 poll injects a couple of canned messages (including one with an invoice
 attachment) so you can see the inbox and the review→expense flow end to end.
 
-## 2. Microsoft 365 (Exchange Online)
+## 1a. Connect (one-click OAuth) — recommended
+
+The easiest, least error-prone path for **Microsoft 365** and **Google/Gmail**:
+**Settings → Email inbox → Connect a mailbox**. You register an app once, paste
+its Client ID + secret, then click **Connect** and sign in — the app captures
+and stores the refresh token for you (no token pasting, no admin-consent on
+app-only permissions, no Exchange `New-ApplicationAccessPolicy`). Microsoft
+rotates refresh tokens; the worker persists the rotation automatically.
+
+**Microsoft 365**
+1. Entra ID → **App registrations → New**. Platform **Web**, redirect URI = the
+   value shown on the Connect screen (`{APP_URL}/api/inbox/oauth/microsoft/callback`).
+2. **API permissions → Microsoft Graph / Office 365 Exchange Online → Delegated →
+   `IMAP.AccessAsUser.All`** (and `offline_access`, `openid`, `email`).
+3. **Certificates & secrets → New client secret**. Copy the **client ID**,
+   **secret**, and your **tenant ID** into the Connect form → **Save** → **Connect
+   Microsoft 365** → sign in as the mailbox.
+
+**Google / Gmail (Workspace)**
+1. Google Cloud → **APIs & Services**: enable the **Gmail API**, configure the
+   **OAuth consent screen**, and create an **OAuth client → Web application** with
+   the redirect URI shown on the Connect screen
+   (`{APP_URL}/api/inbox/oauth/google/callback`).
+2. Scope is `https://mail.google.com/`. Paste the **client ID + secret** → **Save**
+   → **Connect Google** → sign in. (Workspace admins may need to allow the app.)
+
+> The redirect URI must match **exactly** (scheme + host + path) — the app shows
+> the precise value to copy. `APP_URL` must be your real staff host.
+
+The manual sections below remain for self-hosted IMAP, Gmail app passwords, the
+stub demo, or app-only OAuth2 — you don't need them if you used Connect.
+
+## 2. Microsoft 365 — manual (app-only, advanced)
 
 Microsoft **disabled IMAP Basic Auth** for Exchange Online, so a username +
 password login will fail. Authenticate with **OAuth2 (XOAUTH2)** instead. For a
-service mailbox the cleanest option is the **client-credentials (app-only)**
-grant — no user password, no expiring refresh token.
+service mailbox without the redirect flow, use the **client-credentials
+(app-only)** grant — no user password, no expiring refresh token.
 
 **a. Register an app** (Entra ID / Azure AD → App registrations → New):
    - **API permissions → Add → APIs my organization uses → Office 365 Exchange

@@ -372,6 +372,11 @@ model AppSettings {
   inboxOauthRefreshTokenCiphertext String?
   inboxOauthRefreshTokenNonce      String?
   inboxOauthRefreshTokenTag        String?
+  // Interactive "Connect" flow: which provider issued the stored refresh token
+  // ("microsoft" | "google") and the Microsoft tenant — so the redirect flow can
+  // rebuild the authorize/token URLs and the UI can show the connection.
+  inboxOauthProvider               String?
+  inboxOauthTenant                 String?
 
   // Role -> capability overrides vs. the default hierarchy, e.g.
   // { "viewer": { "reports.view": true }, "manager": { "payments.manage": false } }.
