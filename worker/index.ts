@@ -1,11 +1,13 @@
 import "dotenv/config";
 import cron from "node-cron";
+import pg from "pg";
 import { runBilling } from "@/lib/services/billing";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { reminderCron } from "@/lib/reminders/schedule";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import { runScheduledReminders } from "@/lib/services/reminders";
 import { runInboxPollOnce } from "@/lib/services/inbox-poll";
+import { INBOX_POLL_CHANNEL } from "@/lib/services/inbox-poll-signal";
 import {
   runWeeklyMaintenanceDigest,
   runWeeklyStaffDigest,
@@ -84,6 +86,66 @@ async function runInboxOnce(): Promise<void> {
   }
 }
 
+// On-demand inbox poll: the Settings "Poll now" button emits a Postgres NOTIFY,
+// and we LISTEN here so a poll runs immediately instead of waiting for the next
+// 5-minute tick. Uses a dedicated pg connection (the Prisma adapter doesn't
+// expose LISTEN) and reconnects on drop so the button keeps working for the
+// life of the worker. A listener failure only disables on-demand polling — the
+// scheduled cron poll and billing/reminders are untouched.
+function listenForInboxPolls(): void {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error("[worker] DATABASE_URL unset — on-demand inbox polling disabled");
+    return;
+  }
+  // One pending reconnect at a time, and never more than one live client.
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  const reconnect = () => {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void connect();
+    }, 5000);
+  };
+  const connect = async (): Promise<void> => {
+    const client = new pg.Client({ connectionString });
+    // Idempotent teardown: 'error' and 'end' can both fire for one drop, and a
+    // failed connect can emit 'error' before rejecting — collapse them to a
+    // single cleanup + reconnect, and tear down the old client so connections
+    // and listeners don't accumulate while the DB flaps.
+    let closed = false;
+    const onClosed = (e?: unknown) => {
+      if (closed) return;
+      closed = true;
+      if (e) {
+        console.error(
+          "[worker] inbox-poll listener connection lost:",
+          e instanceof Error ? e.message : e,
+        );
+      }
+      client.removeAllListeners();
+      client.end().catch(() => {});
+      reconnect();
+    };
+    client.on("notification", (msg) => {
+      if (msg.channel === INBOX_POLL_CHANNEL) {
+        console.log("[worker] inbox poll requested (NOTIFY) — running now");
+        void runInboxOnce();
+      }
+    });
+    client.on("error", onClosed);
+    client.on("end", () => onClosed());
+    try {
+      await client.connect();
+      await client.query(`LISTEN ${INBOX_POLL_CHANNEL}`);
+      console.log(`[worker] on-demand inbox polling ready (LISTEN ${INBOX_POLL_CHANNEL})`);
+    } catch (e) {
+      onClosed(e);
+    }
+  };
+  void connect();
+}
+
 async function runStaffDigestOnce(): Promise<void> {
   try {
     const res = await runWeeklyStaffDigest(new Date());
@@ -135,6 +197,7 @@ async function main(): Promise<void> {
   cron.schedule(INBOX_POLL_SCHEDULE, () => {
     void runInboxOnce();
   });
+  listenForInboxPolls(); // on-demand polls from the Settings "Poll now" button
   // Cron-only (no startup run): the digest has no per-send idempotency row,
   // so running it at boot would re-email staff on every container restart.
   cron.schedule(STAFF_DIGEST_SCHEDULE, () => {
