@@ -47,7 +47,7 @@ export async function fetchImapAccessToken(
   cfg: ImapOauthConfig,
 ): Promise<ImapTokenResult> {
   if (!cfg.tokenUrl) {
-    throw new Error("IMAP OAuth2 token URL is not set.");
+    throw new Error("OAuth2 token URL is not set.");
   }
   const res = await fetch(cfg.tokenUrl, {
     method: "POST",
@@ -57,7 +57,7 @@ export async function fetchImapAccessToken(
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(
-      `IMAP OAuth2 token request failed (${res.status}): ${detail.slice(0, 200)}`,
+      `OAuth2 token request failed (${res.status}): ${detail.slice(0, 200)}`,
     );
   }
   const json = (await res.json()) as {
@@ -65,7 +65,7 @@ export async function fetchImapAccessToken(
     refresh_token?: string;
   };
   if (!json.access_token) {
-    throw new Error("IMAP OAuth2 token response had no access_token.");
+    throw new Error("OAuth2 token response had no access_token.");
   }
   return { accessToken: json.access_token, refreshToken: json.refresh_token };
 }
