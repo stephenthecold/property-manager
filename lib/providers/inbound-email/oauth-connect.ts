@@ -107,6 +107,10 @@ export function buildAuthorizeUrl(input: AuthorizeUrlInput): string {
     p.set("include_granted_scopes", "true");
   } else {
     p.set("response_mode", "query");
+    // Force the consent screen so a reconnect after a scope change (e.g. the
+    // IMAP→Graph switch) mints a refresh token carrying the CURRENT scopes,
+    // instead of silently reusing an older, narrower consent (→ AADSTS65001).
+    p.set("prompt", "consent");
   }
   return url.toString();
 }

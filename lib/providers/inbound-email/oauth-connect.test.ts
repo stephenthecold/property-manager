@@ -58,6 +58,8 @@ describe("buildAuthorizeUrl", () => {
     expect(url.searchParams.get("response_mode")).toBe("query");
     // Microsoft must NOT get Google-only params.
     expect(url.searchParams.get("access_type")).toBeNull();
+    // …but DOES force consent so a reconnect re-consents the current scopes.
+    expect(url.searchParams.get("prompt")).toBe("consent");
   });
 
   it("adds Google's offline-access + forced-consent params", () => {
