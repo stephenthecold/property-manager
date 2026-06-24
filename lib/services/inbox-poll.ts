@@ -8,11 +8,16 @@ import {
 } from "@/lib/services/app-settings";
 import { recordInboundEmail } from "@/lib/services/inbound-email";
 import { persistRotatedInboxRefreshToken } from "@/lib/services/inbox-oauth";
+import type { AppSettings } from "@/lib/generated/prisma/client";
 import type { InboundEmailProvider } from "@/lib/providers/inbound-email/types";
 import { describeInboxPollError } from "@/lib/providers/inbound-email/error";
 import { ImapInboundProvider } from "@/lib/providers/inbound-email/imap";
+import { GraphInboundProvider } from "@/lib/providers/inbound-email/graph";
 import { StubInboundProvider } from "@/lib/providers/inbound-email/stub";
-import { DEFAULT_IMAP_OAUTH_SCOPE } from "@/lib/providers/inbound-email/imap-token";
+import {
+  DEFAULT_IMAP_OAUTH_SCOPE,
+  type ImapOauthConfig,
+} from "@/lib/providers/inbound-email/imap-token";
 
 /**
  * Inbound-mailbox polling. WORKER-ONLY: this module imports the IMAP client +
@@ -20,6 +25,53 @@ import { DEFAULT_IMAP_OAUTH_SCOPE } from "@/lib/providers/inbound-email/imap-tok
  * from lib/services/inbound-email.ts instead). Secrets are decrypted here, at
  * poll time, and never leave the worker.
  */
+
+/**
+ * Build the shared OAuth2 config (client credentials + stored refresh token)
+ * used by BOTH the IMAP XOAUTH2 and the Microsoft Graph providers, or null when
+ * the OAuth config is incomplete. The rotated refresh token is persisted so a
+ * delegated "Connect" mailbox keeps working without re-consent.
+ */
+function buildInboxOauthConfig(row: AppSettings): ImapOauthConfig | null {
+  if (
+    !row.inboxOauthClientId ||
+    !row.inboxOauthTokenUrl ||
+    !row.inboxOauthClientSecretCiphertext ||
+    !row.inboxOauthClientSecretNonce ||
+    !row.inboxOauthClientSecretTag
+  ) {
+    return null;
+  }
+  const clientSecret = decryptSecret(
+    {
+      ciphertext: row.inboxOauthClientSecretCiphertext,
+      nonce: row.inboxOauthClientSecretNonce,
+      tag: row.inboxOauthClientSecretTag,
+    },
+    INBOX_OAUTH_CLIENT_SECRET_AAD,
+  );
+  const refreshToken =
+    row.inboxOauthRefreshTokenCiphertext &&
+    row.inboxOauthRefreshTokenNonce &&
+    row.inboxOauthRefreshTokenTag
+      ? decryptSecret(
+          {
+            ciphertext: row.inboxOauthRefreshTokenCiphertext,
+            nonce: row.inboxOauthRefreshTokenNonce,
+            tag: row.inboxOauthRefreshTokenTag,
+          },
+          INBOX_OAUTH_REFRESH_TOKEN_AAD,
+        )
+      : null;
+  return {
+    clientId: row.inboxOauthClientId,
+    clientSecret,
+    tokenUrl: row.inboxOauthTokenUrl,
+    scope: row.inboxOauthScope?.trim() || DEFAULT_IMAP_OAUTH_SCOPE,
+    refreshToken,
+    onRefreshToken: persistRotatedInboxRefreshToken,
+  };
+}
 
 /**
  * Resolve the configured inbound-email provider from AppSettings, or null when
@@ -34,6 +86,14 @@ export async function resolveInboxProvider(): Promise<InboundEmailProvider | nul
   if (modules.mailbox !== true) return null;
 
   if (row.inboxProvider === "stub") return new StubInboundProvider();
+
+  // Microsoft 365 via Graph — delegated, polls the signed-in mailbox (`/me`).
+  if (row.inboxProvider === "graph") {
+    const auth = buildInboxOauthConfig(row);
+    if (!auth || !row.inboxImapUser) return null;
+    return new GraphInboundProvider({ mailbox: row.inboxImapUser, auth });
+  }
+
   if (row.inboxProvider !== "imap") return null;
 
   const host = row.inboxImapHost;
@@ -48,50 +108,9 @@ export async function resolveInboxProvider(): Promise<InboundEmailProvider | nul
   };
 
   if (row.inboxAuthMethod === "oauth2") {
-    if (
-      !row.inboxOauthClientId ||
-      !row.inboxOauthTokenUrl ||
-      !row.inboxOauthClientSecretCiphertext ||
-      !row.inboxOauthClientSecretNonce ||
-      !row.inboxOauthClientSecretTag
-    ) {
-      return null;
-    }
-    const clientSecret = decryptSecret(
-      {
-        ciphertext: row.inboxOauthClientSecretCiphertext,
-        nonce: row.inboxOauthClientSecretNonce,
-        tag: row.inboxOauthClientSecretTag,
-      },
-      INBOX_OAUTH_CLIENT_SECRET_AAD,
-    );
-    const refreshToken =
-      row.inboxOauthRefreshTokenCiphertext &&
-      row.inboxOauthRefreshTokenNonce &&
-      row.inboxOauthRefreshTokenTag
-        ? decryptSecret(
-            {
-              ciphertext: row.inboxOauthRefreshTokenCiphertext,
-              nonce: row.inboxOauthRefreshTokenNonce,
-              tag: row.inboxOauthRefreshTokenTag,
-            },
-            INBOX_OAUTH_REFRESH_TOKEN_AAD,
-          )
-        : null;
-    return new ImapInboundProvider({
-      ...common,
-      auth: {
-        method: "oauth2",
-        clientId: row.inboxOauthClientId,
-        clientSecret,
-        tokenUrl: row.inboxOauthTokenUrl,
-        scope: row.inboxOauthScope?.trim() || DEFAULT_IMAP_OAUTH_SCOPE,
-        refreshToken,
-        // Persist a rotated refresh token (Microsoft rotates each grant) so a
-        // delegated "Connect" mailbox keeps working without re-consent.
-        onRefreshToken: persistRotatedInboxRefreshToken,
-      },
-    });
+    const auth = buildInboxOauthConfig(row);
+    if (!auth) return null;
+    return new ImapInboundProvider({ ...common, auth: { method: "oauth2", ...auth } });
   }
 
   // Password auth (self-hosted / Gmail app password).

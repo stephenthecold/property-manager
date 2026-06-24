@@ -51,7 +51,9 @@ describe("buildAuthorizeUrl", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toBe("ch");
     expect(url.searchParams.get("state")).toBe("st");
-    expect(url.searchParams.get("scope")).toContain("IMAP.AccessAsUser.All");
+    expect(url.searchParams.get("scope")).toContain(
+      "https://graph.microsoft.com/Mail.ReadWrite",
+    );
     expect(url.searchParams.get("scope")).toContain("offline_access");
     expect(url.searchParams.get("response_mode")).toBe("query");
     // Microsoft must NOT get Google-only params.
@@ -78,13 +80,19 @@ describe("buildAuthorizeUrl", () => {
 });
 
 describe("provider scopes", () => {
-  it("runtime imapScope omits OIDC scopes (Microsoft rejects mixing them on refresh)", () => {
-    expect(OAUTH_PROVIDERS.microsoft.imapScope).toContain("IMAP.AccessAsUser.All");
-    expect(OAUTH_PROVIDERS.microsoft.imapScope).not.toContain("openid");
-    expect(OAUTH_PROVIDERS.microsoft.imapScope).not.toContain("email");
-    expect(OAUTH_PROVIDERS.google.imapScope).toBe("https://mail.google.com/");
-    // The AUTHORIZE scope still requests the id_token claims.
+  it("runtimeScope omits OIDC scopes (Microsoft rejects mixing them on refresh)", () => {
+    // Microsoft now uses Graph (Mail.ReadWrite); Google still uses IMAP.
+    expect(OAUTH_PROVIDERS.microsoft.providerKind).toBe("graph");
+    expect(OAUTH_PROVIDERS.microsoft.runtimeScope).toContain(
+      "https://graph.microsoft.com/Mail.ReadWrite",
+    );
+    expect(OAUTH_PROVIDERS.microsoft.runtimeScope).not.toContain("openid");
+    expect(OAUTH_PROVIDERS.microsoft.runtimeScope).not.toContain("email");
+    expect(OAUTH_PROVIDERS.google.providerKind).toBe("imap");
+    expect(OAUTH_PROVIDERS.google.runtimeScope).toBe("https://mail.google.com/");
+    // The AUTHORIZE scope still requests the id_token claims + offline access.
     expect(OAUTH_PROVIDERS.microsoft.defaultScope).toContain("openid");
+    expect(OAUTH_PROVIDERS.microsoft.defaultScope).toContain("offline_access");
   });
 });
 

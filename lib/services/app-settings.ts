@@ -175,7 +175,7 @@ export interface ResolvedAppSettings {
   emailHasOauthRefreshToken: boolean;
   /** Inbound email inbox (module "mailbox"). DB-only config; secrets presence-only. */
   inboxEnabled: boolean;
-  inboxProvider: "stub" | "imap" | null;
+  inboxProvider: "stub" | "imap" | "graph" | null;
   inboxImapHost: string | null;
   inboxImapPort: number | null;
   inboxImapSecure: boolean;
@@ -351,7 +351,9 @@ async function resolve(): Promise<ResolvedAppSettings> {
     emailHasOauthRefreshToken: !!row?.emailOauthRefreshTokenCiphertext,
     inboxEnabled: row?.inboxEnabled ?? false,
     inboxProvider:
-      row?.inboxProvider === "stub" || row?.inboxProvider === "imap"
+      row?.inboxProvider === "stub" ||
+      row?.inboxProvider === "imap" ||
+      row?.inboxProvider === "graph"
         ? row.inboxProvider
         : null,
     inboxImapHost: row?.inboxImapHost ?? null,
