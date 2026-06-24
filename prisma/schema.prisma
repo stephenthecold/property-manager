@@ -387,6 +387,14 @@ model AppSettings {
   // rebuild the authorize/token URLs and the UI can show the connection.
   inboxOauthProvider               String?
   inboxOauthTenant                 String?
+  // Poll health: the worker writes the outcome of each poll here so Settings →
+  // Email inbox can show whether polling is actually running, without server logs.
+  inboxLastPolledAt    DateTime? // last poll ATTEMPT (success or fail) — proves the worker is alive
+  inboxLastFetched     Int? // counts from the last SUCCESSFUL poll
+  inboxLastProcessed   Int?
+  inboxLastFailed      Int?
+  inboxLastError       String? // last error message; cleared on a successful poll
+  inboxLastErrorAt     DateTime?
 
   // Role -> capability overrides vs. the default hierarchy, e.g.
   // { "viewer": { "reports.view": true }, "manager": { "payments.manage": false } }.
