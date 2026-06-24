@@ -191,6 +191,13 @@ export interface ResolvedAppSettings {
   /** Interactive "Connect" flow: provider that issued the stored refresh token. */
   inboxOauthProvider: "microsoft" | "google" | null;
   inboxOauthTenant: string | null;
+  /** Inbox poll health (worker-written; null until the first poll runs). */
+  inboxLastPolledAt: Date | null;
+  inboxLastFetched: number | null;
+  inboxLastProcessed: number | null;
+  inboxLastFailed: number | null;
+  inboxLastError: string | null;
+  inboxLastErrorAt: Date | null;
   /** DEFAULT_TEMPLATES merged with per-type DB overrides. */
   templates: Record<ReminderType, string>;
   /** DEFAULT_EMAIL_SUBJECTS merged with per-type DB overrides (email channel). */
@@ -367,6 +374,12 @@ async function resolve(): Promise<ResolvedAppSettings> {
         ? row.inboxOauthProvider
         : null,
     inboxOauthTenant: row?.inboxOauthTenant ?? null,
+    inboxLastPolledAt: row?.inboxLastPolledAt ?? null,
+    inboxLastFetched: row?.inboxLastFetched ?? null,
+    inboxLastProcessed: row?.inboxLastProcessed ?? null,
+    inboxLastFailed: row?.inboxLastFailed ?? null,
+    inboxLastError: row?.inboxLastError ?? null,
+    inboxLastErrorAt: row?.inboxLastErrorAt ?? null,
     templates,
     emailSubjects,
     leaseAgreementText: row?.leaseAgreementText ?? null,
@@ -1324,6 +1337,38 @@ export async function savePublicSiteGallery(
     });
   });
   invalidateAppSettingsCache();
+}
+
+/**
+ * Persist the outcome of one inbox poll (worker → DB) so Settings → Email inbox
+ * can show poll health. Best-effort: a write failure here must never break the
+ * poll itself, so it's caught and logged rather than thrown.
+ */
+export async function recordInboxPollStatus(
+  status:
+    | { ok: true; fetched: number; processed: number; failed: number }
+    | { ok: false; error: string },
+  now: Date,
+): Promise<void> {
+  const data = status.ok
+    ? {
+        inboxLastPolledAt: now,
+        inboxLastFetched: status.fetched,
+        inboxLastProcessed: status.processed,
+        inboxLastFailed: status.failed,
+        inboxLastError: null,
+        inboxLastErrorAt: null,
+      }
+    : {
+        inboxLastPolledAt: now,
+        inboxLastError: status.error.slice(0, 1000),
+        inboxLastErrorAt: now,
+      };
+  try {
+    await prisma.appSettings.update({ where: { id: "singleton" }, data });
+  } catch (e) {
+    console.error("[inbox] could not persist poll status:", e);
+  }
 }
 
 export interface InboxSettingsInput {

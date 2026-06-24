@@ -4,6 +4,7 @@ import {
   INBOX_OAUTH_CLIENT_SECRET_AAD,
   INBOX_OAUTH_REFRESH_TOKEN_AAD,
   INBOX_PASSWORD_AAD,
+  recordInboxPollStatus,
 } from "@/lib/services/app-settings";
 import { recordInboundEmail } from "@/lib/services/inbound-email";
 import { persistRotatedInboxRefreshToken } from "@/lib/services/inbox-oauth";
@@ -125,8 +126,19 @@ export interface InboxPollSummary {
 export async function runInboxPollOnce(): Promise<InboxPollSummary> {
   const provider = await resolveInboxProvider();
   if (!provider) return { skipped: true, fetched: 0, processed: 0, failed: 0 };
-  const res = await provider.poll({ limit: 50 }, async (m) => {
-    await recordInboundEmail(m);
-  });
-  return { skipped: false, ...res };
+  try {
+    const res = await provider.poll({ limit: 50 }, async (m) => {
+      await recordInboundEmail(m);
+    });
+    await recordInboxPollStatus({ ok: true, ...res }, new Date());
+    return { skipped: false, ...res };
+  } catch (e) {
+    // Persist the failure for the health panel, then re-throw so the worker
+    // still logs it exactly as before.
+    await recordInboxPollStatus(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      new Date(),
+    );
+    throw e;
+  }
 }

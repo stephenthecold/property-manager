@@ -2,10 +2,12 @@ import Link from "next/link";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { inboxOauthRedirectUri } from "@/lib/services/inbox-oauth";
+import { inboxHealth } from "@/lib/services/inbox-health";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InboxForm, type InboxInitial } from "./inbox-form";
 import { InboxConnect, type InboxConnectInitial } from "./inbox-connect";
+import { InboxHealthPanel } from "./health-panel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +27,15 @@ export default async function InboxSettingsPage({
   const sp = await searchParams;
   const connected = Array.isArray(sp.connected) ? sp.connected[0] : sp.connected;
   const error = Array.isArray(sp.error) ? sp.error[0] : sp.error;
+
+  const now = new Date();
+  const health = inboxHealth({
+    moduleEnabled: s.modules.mailbox,
+    inboxEnabled: s.inboxEnabled,
+    lastPolledAt: s.inboxLastPolledAt,
+    lastError: s.inboxLastError,
+    now,
+  });
 
   const initial: InboxInitial = {
     inboxEnabled: s.inboxEnabled,
@@ -75,6 +86,15 @@ export default async function InboxSettingsPage({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      <InboxHealthPanel
+        report={health}
+        lastPolledAt={s.inboxLastPolledAt}
+        fetched={s.inboxLastFetched}
+        processed={s.inboxLastProcessed}
+        failed={s.inboxLastFailed}
+        now={now}
+      />
 
       <Card>
         <CardHeader>
