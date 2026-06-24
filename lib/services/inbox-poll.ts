@@ -9,6 +9,7 @@ import {
 import { recordInboundEmail } from "@/lib/services/inbound-email";
 import { persistRotatedInboxRefreshToken } from "@/lib/services/inbox-oauth";
 import type { InboundEmailProvider } from "@/lib/providers/inbound-email/types";
+import { describeInboxPollError } from "@/lib/providers/inbound-email/error";
 import { ImapInboundProvider } from "@/lib/providers/inbound-email/imap";
 import { StubInboundProvider } from "@/lib/providers/inbound-email/stub";
 import { DEFAULT_IMAP_OAUTH_SCOPE } from "@/lib/providers/inbound-email/imap-token";
@@ -134,9 +135,11 @@ export async function runInboxPollOnce(): Promise<InboxPollSummary> {
     return { skipped: false, ...res };
   } catch (e) {
     // Persist the failure for the health panel, then re-throw so the worker
-    // still logs it exactly as before.
+    // still logs the raw error exactly as before. describeInboxPollError lifts
+    // ImapFlow's buried detail (auth rejection, IMAP-disabled, throttling) out
+    // of its generic "Command failed" so the panel can show why it failed.
     await recordInboxPollStatus(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: describeInboxPollError(e) },
       new Date(),
     );
     throw e;
