@@ -25,6 +25,17 @@ export async function saveInboxAction(
 ): Promise<InboxSettingsState> {
   await requireCapability("messaging.settings");
 
+  // A Graph mailbox is managed entirely by the Connect flow; saving the manual
+  // IMAP form would drop inboxProvider and silently stop the poll. Block it and
+  // point the operator at the Connect card instead.
+  const current = await getAppSettings();
+  if (current.inboxProvider === "graph") {
+    return {
+      error:
+        "This mailbox is connected via Microsoft 365 (Graph). Manage it in the Connect card above — Disconnect there first if you want to switch to manual IMAP.",
+    };
+  }
+
   const providerRaw = String(fd.get("inboxProvider") ?? "");
   const inboxProvider =
     providerRaw === "stub" || providerRaw === "imap" ? providerRaw : null;
@@ -60,14 +71,13 @@ export async function saveInboxAction(
     if (!host || !user) {
       return { error: "IMAP requires a host and a mailbox username." };
     }
-    const settings = await getAppSettings();
-    if (authMethod === "password" && !password && !settings.inboxHasPassword) {
+    if (authMethod === "password" && !password && !current.inboxHasPassword) {
       return { error: "IMAP password auth requires a password." };
     }
     if (authMethod === "oauth2") {
       if (!clientId) return { error: "OAuth2 requires a client ID." };
       if (!tokenUrl) return { error: "OAuth2 requires a token URL." };
-      if (!clientSecret && !settings.inboxHasOauthClientSecret) {
+      if (!clientSecret && !current.inboxHasOauthClientSecret) {
         return { error: "OAuth2 requires a client secret." };
       }
       // No refresh token => client-credentials (app-only) grant, which is the

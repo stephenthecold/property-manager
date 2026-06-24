@@ -17,13 +17,17 @@ export function isInboxOauthProvider(v: string): v is InboxOauthProvider {
 export interface ProviderEndpoints {
   authorizeUrl: (tenant: string | null) => string;
   tokenUrl: (tenant: string | null) => string;
-  /** Scope for the AUTHORIZE request: IMAP + offline_access (refresh token) +
-   *  openid/email (so the id_token carries the mailbox address). */
+  /** Which inbound provider a completed Connect yields. Microsoft uses Graph
+   *  (the going-forward API); Google still uses IMAP-over-XOAUTH2. */
+  providerKind: "graph" | "imap";
+  /** Scope for the AUTHORIZE request: resource scope + offline_access (refresh
+   *  token) + openid/email (so the id_token carries the mailbox address). */
   defaultScope: string;
   /** Scope the WORKER replays on the refresh_token grant: the resource scope
    *  ONLY. Microsoft can reject mixing OIDC (openid/email) with a resource scope
    *  on a token request, so the runtime scope must omit them. */
-  imapScope: string;
+  runtimeScope: string;
+  /** IMAP host for the "imap" kind. Unused for "graph" (Graph polls `/me`). */
   imapHost: string;
 }
 
@@ -35,16 +39,20 @@ export const OAUTH_PROVIDERS: Record<InboxOauthProvider, ProviderEndpoints> = {
       `${MICROSOFT_BASE}/${encodeURIComponent(tenant || "common")}/oauth2/v2.0/authorize`,
     tokenUrl: (tenant) =>
       `${MICROSOFT_BASE}/${encodeURIComponent(tenant || "common")}/oauth2/v2.0/token`,
+    providerKind: "graph",
+    // Graph mail access. ReadWrite so the worker can mark captured mail read
+    // (mirrors the IMAP \Seen flow). Token audience is graph.microsoft.com.
     defaultScope:
-      "https://outlook.office365.com/IMAP.AccessAsUser.All offline_access openid email",
-    imapScope: "https://outlook.office365.com/IMAP.AccessAsUser.All offline_access",
-    imapHost: "outlook.office365.com",
+      "https://graph.microsoft.com/Mail.ReadWrite offline_access openid email",
+    runtimeScope: "https://graph.microsoft.com/Mail.ReadWrite offline_access",
+    imapHost: "graph.microsoft.com",
   },
   google: {
     authorizeUrl: () => "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: () => "https://oauth2.googleapis.com/token",
+    providerKind: "imap",
     defaultScope: "https://mail.google.com/ openid email",
-    imapScope: "https://mail.google.com/",
+    runtimeScope: "https://mail.google.com/",
     imapHost: "imap.gmail.com",
   },
 };

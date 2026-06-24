@@ -1,7 +1,8 @@
 # Email inbox — capturing invoices/receipts from a mailbox
 
-The **Email inbox** module (`mailbox`) polls a mailbox over IMAP and lands every
-message in a staff inbox at **`/inbox`**. From there an emailed invoice/receipt
+The **Email inbox** module (`mailbox`) captures mail from a mailbox — **Microsoft
+365 via the Microsoft Graph API**, or **IMAP** for Google/Gmail and self-hosted
+servers — and lands every message in a staff inbox at **`/inbox`**. From there an emailed invoice/receipt
 can be **reviewed and posted to Financials as a `PropertyExpense`** — the
 attachment is stored and the amount/date are OCR-prefilled, but **nothing
 financial is created without a human** confirming it. Inbound email is treated
@@ -35,11 +36,13 @@ and stores the refresh token for you (no token pasting, no admin-consent on
 app-only permissions, no Exchange `New-ApplicationAccessPolicy`). Microsoft
 rotates refresh tokens; the worker persists the rotation automatically.
 
-**Microsoft 365**
+**Microsoft 365** (uses the Microsoft Graph API — Microsoft is retiring IMAP/POP)
 1. Entra ID → **App registrations → New**. Platform **Web**, redirect URI = the
    value shown on the Connect screen (`{APP_URL}/api/inbox/oauth/microsoft/callback`).
-2. **API permissions → Microsoft Graph / Office 365 Exchange Online → Delegated →
-   `IMAP.AccessAsUser.All`** (and `offline_access`, `openid`, `email`).
+2. **API permissions → Microsoft Graph → Delegated → `Mail.ReadWrite`** (and
+   `offline_access`, `openid`, `email`). These are user-consentable, so no admin
+   consent or Exchange `IMAP.AccessAsUser.All` permission is needed. `Mail.ReadWrite`
+   lets the worker mark captured mail read.
 3. **Certificates & secrets → New client secret**. Copy the **client ID**,
    **secret**, and your **tenant ID** into the Connect form → **Save** → **Connect
    Microsoft 365** → sign in as the mailbox.
@@ -110,9 +113,9 @@ STARTTLS — uncheck "Implicit TLS"), mailbox username, authentication
 
 ## 5. How capture works
 
-- The worker searches the folder (default **INBOX**) for **unseen** messages,
-  parses each, records it, and only then marks it **\Seen**. A crash before that
-  leaves the message for the next poll; the recorder de-duplicates on
+- The worker fetches **unread** messages from the Inbox, parses each, records it,
+  and only then marks it **read** (IMAP `\Seen` / Graph `isRead`). A crash before
+  that leaves the message for the next poll; the recorder de-duplicates on
   `Message-ID`, so a re-fetch never creates a duplicate row.
 - Attachments are stored via the configured file storage and OCR'd
   best-effort. Allowed types: PDFs, images, and common office/text docs, each

@@ -110,13 +110,13 @@ export async function saveInboxOauthClientConfig(
             };
           })();
   const data = {
-    inboxProvider: "imap",
+    inboxProvider: ep.providerKind,
     inboxAuthMethod: "oauth2",
     inboxOauthProvider: input.provider,
     inboxOauthTenant: tenant,
     inboxOauthClientId: input.clientId,
     inboxOauthTokenUrl: ep.tokenUrl(tenant),
-    inboxOauthScope: ep.imapScope,
+    inboxOauthScope: ep.runtimeScope,
     inboxImapHost: ep.imapHost,
     inboxImapPort: 993,
     inboxImapSecure: true,
@@ -276,7 +276,7 @@ export async function completeInboxOauth(input: {
       where: { id: "singleton" },
       data: {
         inboxEnabled: true,
-        inboxProvider: "imap",
+        inboxProvider: ep.providerKind,
         inboxAuthMethod: "oauth2",
         inboxOauthProvider: input.provider,
         inboxImapHost: ep.imapHost,
@@ -284,7 +284,7 @@ export async function completeInboxOauth(input: {
         inboxImapSecure: true,
         inboxImapUser: mailbox,
         inboxOauthTokenUrl: tokenUrl,
-        inboxOauthScope: ep.imapScope,
+        inboxOauthScope: ep.runtimeScope,
         inboxOauthRefreshTokenCiphertext: enc.ciphertext,
         inboxOauthRefreshTokenNonce: enc.nonce,
         inboxOauthRefreshTokenTag: enc.tag,
