@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auditActor, requireCapability } from "@/lib/auth/session";
 import { getAppSettings, saveInboxSettings } from "@/lib/services/app-settings";
+import { requestInboxPollNow } from "@/lib/services/inbox-poll-signal";
 import { isInboxOauthProvider } from "@/lib/providers/inbound-email/oauth-connect";
 import {
   disconnectInboxOauth,
@@ -134,6 +135,20 @@ export async function saveInboxOauthClientAction(
   );
   revalidatePath("/settings/inbox");
   return { ok: true, message: "Connection settings saved — now click Connect." };
+}
+
+/**
+ * Ask the worker to poll the inbox immediately (Settings → "Poll now"), instead
+ * of waiting for the 5-minute tick. Just emits a NOTIFY; the worker does the
+ * actual poll, so this never imports the IMAP client.
+ */
+export async function requestInboxPollAction(): Promise<InboxSettingsState> {
+  await requireCapability("messaging.settings");
+  await requestInboxPollNow();
+  return {
+    ok: true,
+    message: "Poll requested — the worker is checking the mailbox now.",
+  };
 }
 
 /** Disconnect a connected mailbox (clears the refresh token, stops polling). */

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InboxForm, type InboxInitial } from "./inbox-form";
 import { InboxConnect, type InboxConnectInitial } from "./inbox-connect";
 import { InboxHealthPanel } from "./health-panel";
+import { PollNowButton } from "./poll-now-button";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +96,7 @@ export default async function InboxSettingsPage({
         failed={s.inboxLastFailed}
         now={now}
       />
+      {s.modules.mailbox && s.inboxEnabled && <PollNowButton />}
 
       <Card>
         <CardHeader>
