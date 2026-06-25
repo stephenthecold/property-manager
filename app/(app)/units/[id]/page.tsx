@@ -32,6 +32,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const runtime = "nodejs";
 
@@ -73,6 +81,22 @@ export default async function UnitDetail({
     ? await leaseSnapshot(lease, unit, new Date(), unit.property.timezone)
     : null;
   const currency = unit.property.currency;
+
+  // Full tenancy history for this unit: every real (non-draft) lease, newest
+  // first, with the primary tenant + any co-tenants. Read-only — staff-level
+  // info, same sensitivity as the current-lease card above.
+  const leaseHistory = await prisma.lease.findMany({
+    where: { unitId: unit.id, status: { not: "draft" } },
+    include: {
+      tenant: { select: { id: true, firstName: true, lastName: true } },
+      coTenants: {
+        include: {
+          tenant: { select: { id: true, firstName: true, lastName: true } },
+        },
+      },
+    },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+  });
 
   const hasActiveLease = !!lease;
   const vacancy = computeVacancy(
@@ -197,6 +221,79 @@ export default async function UnitDetail({
               <p className="text-muted-foreground">No active lease.</p>
               <Button render={<Link href="/leases/new" />}>Create lease</Button>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Lease history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {leaseHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No leases yet for this unit.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tenant</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead className="text-right">Rent</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leaseHistory.map((l) => {
+                  const isCurrent =
+                    l.status === "active" || l.status === "month_to_month";
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell>
+                        <Link
+                          href={`/tenants/${l.tenantId}`}
+                          className="font-medium hover:underline"
+                        >
+                          {l.tenant.firstName} {l.tenant.lastName}
+                        </Link>
+                        {l.coTenants.length > 0 && (
+                          <span className="block text-xs text-muted-foreground">
+                            +{" "}
+                            {l.coTenants
+                              .map(
+                                (c) =>
+                                  `${c.tenant.firstName} ${c.tenant.lastName}`,
+                              )
+                              .join(", ")}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {fmtLeaseDate(l.startDate)} –{" "}
+                        {l.endDate ? fmtLeaseDate(l.endDate) : "present"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(l.rentAmountCents, currency)}
+                      </TableCell>
+                      <TableCell>
+                        <span className="capitalize">
+                          {l.status.replace(/_/g, " ")}
+                        </span>
+                        {isCurrent && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          >
+                            current
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
