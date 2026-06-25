@@ -107,10 +107,15 @@ export function buildAuthorizeUrl(input: AuthorizeUrlInput): string {
     p.set("include_granted_scopes", "true");
   } else {
     p.set("response_mode", "query");
-    // Force the consent screen so a reconnect after a scope change (e.g. the
-    // IMAP→Graph switch) mints a refresh token carrying the CURRENT scopes,
-    // instead of silently reusing an older, narrower consent (→ AADSTS65001).
-    p.set("prompt", "consent");
+    // select_account (NOT consent): show the account picker but HONOR existing
+    // tenant-wide admin consent, so a non-admin in a user-consent-disabled tenant
+    // signs in silently instead of hitting "Need admin approval" (AADSTS90094).
+    // Microsoft's forced-consent behavior changed in early 2026 to block such
+    // users even when admin consent is already granted, and their guidance is to
+    // not specify prompt=consent once consent exists. Incremental consent still
+    // surfaces a prompt for any genuinely new/un-consented scope, and
+    // offline_access (in scope) yields the refresh token regardless of prompt.
+    p.set("prompt", "select_account");
   }
   return url.toString();
 }
