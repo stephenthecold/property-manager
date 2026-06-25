@@ -279,3 +279,91 @@ export async function setInboundEmailArchived(
   });
   return { ok: true };
 }
+
+/**
+ * Permanently delete one inbox message — its UploadedDocument rows and the
+ * InboundEmail row (audited), then its stored attachment files. REFUSES a POSTED
+ * item: it's linked to a PropertyExpense and deleting it would orphan that
+ * record. Operating record only — never touches the ledger or tenant balances.
+ *
+ * Because the dedup row is removed, a re-poll could re-capture the message — but
+ * the provider marks every captured message read first (IMAP \Seen / Graph
+ * isRead) and only fetches unread, so a deleted message does not reappear.
+ */
+export async function deleteInboundEmail(
+  id: string,
+  actor: AuditContext,
+): Promise<{ ok: boolean; reason?: "not_found" | "posted" }> {
+  const row = await prisma.inboundEmail.findUnique({
+    where: { id },
+    select: { id: true, fromEmail: true, subject: true, status: true },
+  });
+  if (!row) return { ok: false, reason: "not_found" };
+  if (row.status === "posted") return { ok: false, reason: "posted" };
+
+  // Capture the file keys before the rows go: files are deleted AFTER the
+  // transaction commits, so a rolled-back delete never strands rows pointing at
+  // already-deleted objects (an orphaned object is harmless; an orphaned row
+  // with a broken Download is not).
+  const docs = await prisma.uploadedDocument.findMany({
+    where: { inboundEmailId: id },
+    select: { fileUrl: true },
+  });
+
+  // Atomic claim: the status predicate inside the transaction closes the window
+  // where a concurrent post flips this row to "posted" after the check above
+  // (mirrors postInboxExpenseAction). 0 rows ⇒ it was posted/gone — leave it.
+  const deleted = await prisma.$transaction(async (tx) => {
+    const claim = await tx.inboundEmail.deleteMany({
+      where: { id, status: { not: "posted" } },
+    });
+    if (claim.count === 0) return false;
+    await tx.uploadedDocument.deleteMany({ where: { inboundEmailId: id } });
+    await writeAudit(tx, {
+      ...actor,
+      action: "inbound_email.deleted",
+      entityType: "InboundEmail",
+      entityId: id,
+      before: {
+        fromEmail: row.fromEmail,
+        subject: row.subject,
+        status: row.status,
+        attachmentCount: docs.length,
+      },
+    });
+    return true;
+  });
+  if (!deleted) return { ok: false, reason: "posted" };
+
+  // Rows are gone (source of truth) — now best-effort remove the stored files.
+  if (docs.length > 0) {
+    const storage = await getFileStorage();
+    for (const d of docs) {
+      try {
+        await storage.delete(d.fileUrl);
+      } catch {
+        // best effort — a leftover object must not surface as a failed delete
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Bulk-delete every NON-POSTED inbox message (files + rows), audited per row —
+ * for clearing mail captured from a mis-configured mailbox. Posted items
+ * (already saved as expenses) are kept. Returns how many were deleted.
+ */
+export async function clearInboundEmails(
+  actor: AuditContext,
+): Promise<{ deleted: number }> {
+  const rows = await prisma.inboundEmail.findMany({
+    where: { status: { not: "posted" } },
+    select: { id: true },
+  });
+  let deleted = 0;
+  for (const r of rows) {
+    if ((await deleteInboundEmail(r.id, actor)).ok) deleted++;
+  }
+  return { deleted };
+}

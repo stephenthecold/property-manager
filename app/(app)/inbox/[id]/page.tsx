@@ -13,10 +13,12 @@ import {
 } from "@/lib/providers/ocr/suggest";
 import {
   archiveInboxAction,
+  deleteInboxAction,
   markInboxReadAction,
   postInboxExpenseAction,
 } from "../actions";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -151,6 +153,17 @@ export default async function InboxDetailPage({
               <Button type="submit" variant="outline" size="sm">
                 {email.status === "archived" ? "Unarchive" : "Archive"}
               </Button>
+            </form>
+          )}
+          {!posted && (
+            <form action={deleteInboxAction}>
+              <input type="hidden" name="id" value={email.id} />
+              <ConfirmSubmitButton
+                size="sm"
+                confirmMessage="Delete this message and its attachments permanently? This can't be undone."
+              >
+                Delete
+              </ConfirmSubmitButton>
             </form>
           )}
         </div>

@@ -9,6 +9,8 @@ import { withAudit } from "@/lib/audit/audit";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { isActiveVendor } from "@/lib/services/vendors";
 import {
+  clearInboundEmails,
+  deleteInboundEmail,
   markInboundEmailRead,
   setInboundEmailArchived,
 } from "@/lib/services/inbound-email";
@@ -42,6 +44,27 @@ export async function archiveInboxAction(fd: FormData): Promise<void> {
   if (id) await setInboundEmailArchived(id, archived, await auditActor());
   revalidatePath("/inbox");
   if (id) revalidatePath(`/inbox/${id}`);
+}
+
+/** Permanently delete one inbox message (+ its attachment files). The detail
+ *  page is gone afterward, so bounce back to the inbox list. */
+export async function deleteInboxAction(fd: FormData): Promise<void> {
+  await requireCapability("mailbox.manage");
+  await assertModuleEnabled("mailbox");
+  const id = str(fd, "id");
+  if (id) await deleteInboundEmail(id, await auditActor());
+  revalidatePath("/inbox");
+  redirect("/inbox");
+}
+
+/** Permanently delete ALL non-posted inbox messages (+ their files) — clears
+ *  mail captured from a mis-configured mailbox. Posted items are preserved. */
+export async function clearInboxAction(_fd: FormData): Promise<void> {
+  await requireCapability("mailbox.manage");
+  await assertModuleEnabled("mailbox");
+  await clearInboundEmails(await auditActor());
+  revalidatePath("/inbox");
+  redirect("/inbox");
 }
 
 /**
