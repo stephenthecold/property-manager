@@ -11,6 +11,8 @@ import { DataTable } from "@/components/app/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { clearInboxAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,20 +59,34 @@ export default async function InboxPage({
 
   const messages = await listInboundEmails({ status: view });
   const unreadCount = messages.filter((m) => !m.readAt).length;
+  // Non-posted items in this view can be cleared (posted ones are kept).
+  const deletableCount = messages.filter((m) => m.status !== "posted").length;
 
   return (
     <div className="w-full space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Email inbox</h2>
-        <p className="text-sm text-muted-foreground">
-          Mail captured from your configured mailbox, newest first. Open a message
-          to review attachments and post an invoice/receipt as an expense.
-          Configure the mailbox under{" "}
-          <Link href="/settings/inbox" className="underline">
-            Settings → Email inbox
-          </Link>
-          .
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Email inbox</h2>
+          <p className="text-sm text-muted-foreground">
+            Mail captured from your configured mailbox, newest first. Open a
+            message to review attachments and post an invoice/receipt as an
+            expense. Configure the mailbox under{" "}
+            <Link href="/settings/inbox" className="underline">
+              Settings → Email inbox
+            </Link>
+            .
+          </p>
+        </div>
+        {deletableCount > 0 && (
+          <form action={clearInboxAction}>
+            <ConfirmSubmitButton
+              size="sm"
+              confirmMessage="Permanently delete ALL non-posted inbox messages and their attachments? Posted items (already saved as expenses) are kept. This can't be undone."
+            >
+              Clear inbox
+            </ConfirmSubmitButton>
+          </form>
+        )}
       </div>
 
       <Card>
