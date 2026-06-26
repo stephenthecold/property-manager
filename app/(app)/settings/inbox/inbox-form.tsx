@@ -141,7 +141,7 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
               name="inboxAuthMethod"
               value={authMethod}
               onChange={(e) => setAuthMethod(e.target.value)}
-              className="h-9 w-full rounded-md border px-3 text-sm md:max-w-sm"
+              className="h-9 w-full rounded-md border px-3 text-sm"
             >
               <option value="password">Password / app password</option>
               <option value="oauth2">OAuth2 / XOAUTH2 (Microsoft 365)</option>
@@ -159,7 +159,6 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
                   initial.hasPassword ? "Configured — leave blank to keep" : "Required"
                 }
                 autoComplete="off"
-                className="md:max-w-sm"
               />
               <p className="text-xs text-muted-foreground">
                 Self-hosted IMAP or a Gmail app password. Microsoft 365 disables

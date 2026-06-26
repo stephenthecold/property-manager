@@ -170,39 +170,39 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
             />
             Send overdue reminders (after the grace period)
           </label>
-          <div className="space-y-2">
-            <Label htmlFor="reminderDueSoonDays">
-              Days before the due date to send “due soon”
-            </Label>
-            <Input
-              id="reminderDueSoonDays"
-              name="reminderDueSoonDays"
-              type="number"
-              min={0}
-              max={28}
-              defaultValue={initial.reminderDueSoonDays}
-              placeholder={`Server default (${initial.envDueSoonDays})`}
-              className="w-48"
-            />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="reminderDueSoonDays">
+                Days before the due date to send “due soon”
+              </Label>
+              <Input
+                id="reminderDueSoonDays"
+                name="reminderDueSoonDays"
+                type="number"
+                min={0}
+                max={28}
+                defaultValue={initial.reminderDueSoonDays}
+                placeholder={`Server default (${initial.envDueSoonDays})`}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reminderSendHour">Daily send hour (0–23)</Label>
+              <Input
+                id="reminderSendHour"
+                name="reminderSendHour"
+                type="number"
+                min={0}
+                max={23}
+                defaultValue={initial.reminderSendHour}
+                placeholder="Server default (9)"
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="reminderSendHour">Daily send hour (0–23)</Label>
-            <Input
-              id="reminderSendHour"
-              name="reminderSendHour"
-              type="number"
-              min={0}
-              max={23}
-              defaultValue={initial.reminderSendHour}
-              placeholder="Server default (9)"
-              className="w-48"
-            />
-            <p className="text-xs text-muted-foreground">
-              Hour the worker runs the daily reminder + digest sweeps (server
-              local time). Blank uses <code>REMINDER_CRON</code> / 09:00. Takes
-              effect on the next worker restart.
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Hour the worker runs the daily reminder + digest sweeps (server
+            local time). Blank uses <code>REMINDER_CRON</code> / 09:00. Takes
+            effect on the next worker restart.
+          </p>
         </div>
 
         <div className="space-y-3 rounded-md border p-3">
@@ -257,7 +257,6 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
               id="testPhone"
               name="testPhone"
               placeholder="+15551234567"
-              className="w-56"
             />
           </div>
           <Button type="submit" variant="outline" disabled={testPending}>

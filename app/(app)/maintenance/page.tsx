@@ -470,7 +470,7 @@ export default async function MaintenancePage({
                     </Badge>
                     <FormDialog
                       trigger="Edit"
-                      triggerVariant="ghost"
+                      triggerVariant="outline"
                       triggerSize="xs"
                       title="Change priority"
                       description={j.title}
@@ -502,7 +502,7 @@ export default async function MaintenancePage({
                     {isOpenStatus(j.status) && (
                       <FormDialog
                         trigger="Assign"
-                        triggerVariant="ghost"
+                        triggerVariant="outline"
                         triggerSize="xs"
                         title="Assign job"
                         description={j.title}
@@ -551,7 +551,7 @@ export default async function MaintenancePage({
                     {isOpenStatus(j.status) && (
                       <FormDialog
                         trigger="Change"
-                        triggerVariant="ghost"
+                        triggerVariant="outline"
                         triggerSize="xs"
                         title="Change status"
                         description={j.title}
@@ -692,7 +692,7 @@ export default async function MaintenancePage({
                       <form action={deleteJobAction} className="inline">
                         <input type="hidden" name="jobId" value={j.id} />
                         <ConfirmSubmitButton
-                          variant="ghost"
+                          variant="destructive"
                           size="xs"
                           confirmMessage="Delete this maintenance job? It is removed permanently and cannot be recovered."
                         >
@@ -719,7 +719,7 @@ export default async function MaintenancePage({
                       <form action={deleteJobAction} className="inline">
                         <input type="hidden" name="jobId" value={j.id} />
                         <ConfirmSubmitButton
-                          variant="ghost"
+                          variant="destructive"
                           size="xs"
                           confirmMessage="Delete this maintenance job? It is removed permanently and cannot be recovered."
                         >
@@ -978,7 +978,7 @@ export default async function MaintenancePage({
                   <form action={removeTaskAction} className="inline">
                     <input type="hidden" name="taskId" value={t.id} />
                     <ConfirmSubmitButton
-                      variant="ghost"
+                      variant="destructive"
                       size="xs"
                       confirmMessage="Remove this recurring task? It disappears from this list (its history is kept)."
                     >

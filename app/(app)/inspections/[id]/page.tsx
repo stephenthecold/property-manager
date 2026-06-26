@@ -175,7 +175,7 @@ export default async function InspectionDetailPage({
                         <form action={removeDeductionAction}>
                           <input type="hidden" name="itemId" value={item.id} />
                           <input type="hidden" name="inspectionId" value={inspection.id} />
-                          <Button type="submit" variant="ghost" size="xs">
+                          <Button type="submit" variant="destructive" size="xs">
                             Remove
                           </Button>
                         </form>

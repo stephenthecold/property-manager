@@ -203,7 +203,7 @@ export default async function InboxDetailPage({
           {!email.readAt && (
             <form action={markInboxReadAction}>
               <input type="hidden" name="id" value={email.id} />
-              <Button type="submit" variant="ghost" size="sm">
+              <Button type="submit" variant="outline" size="sm">
                 Mark read
               </Button>
             </form>
@@ -509,7 +509,7 @@ export default async function InboxDetailPage({
             <div className="border-t pt-3">
               <FormDialog
                 trigger="Attach to an existing payment"
-                triggerVariant="ghost"
+                triggerVariant="outline"
                 title="Attach to an existing payment"
                 action={attachInboxPaymentAction}
                 submitLabel="Attach"

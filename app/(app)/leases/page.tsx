@@ -212,14 +212,14 @@ export default async function LeasesPage({
               <div key="a" className="flex justify-end gap-2">
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   render={<Link href={`/leases/${l.id}/abstract`} />}
                 >
                   Abstract
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   render={<Link href={`/leases/${l.id}/agreement`} />}
                 >
                   Agreement
@@ -228,7 +228,7 @@ export default async function LeasesPage({
                   <>
                     <form action={unarchiveLeaseAction}>
                       <input type="hidden" name="leaseId" value={l.id} />
-                      <Button type="submit" variant="outline" size="sm">
+                      <Button type="submit" variant="outline" size="xs">
                         Unarchive
                       </Button>
                     </form>
@@ -237,6 +237,7 @@ export default async function LeasesPage({
                         <input type="hidden" name="leaseId" value={l.id} />
                         <ConfirmSubmitButton
                           variant="destructive"
+                          size="xs"
                           confirmMessage="Permanently delete this lease? Its auto-generated charge history is erased and cannot be recovered."
                         >
                           Delete
@@ -249,7 +250,7 @@ export default async function LeasesPage({
                     <input type="hidden" name="leaseId" value={l.id} />
                     <ConfirmSubmitButton
                       variant="outline"
-                      size="sm"
+                      size="xs"
                       confirmMessage="Terminate this lease? The unit becomes vacant and billing stops; this cannot be undone from the UI."
                     >
                       Terminate
@@ -258,7 +259,7 @@ export default async function LeasesPage({
                 ) : terminated ? (
                   <form action={archiveLeaseAction}>
                     <input type="hidden" name="leaseId" value={l.id} />
-                    <Button type="submit" variant="outline" size="sm">
+                    <Button type="submit" variant="outline" size="xs">
                       Archive
                     </Button>
                   </form>

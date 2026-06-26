@@ -131,7 +131,7 @@ export default async function MessagesPage({
                   {!m.readAt && (
                     <form action={markInboundReadAction}>
                       <input type="hidden" name="id" value={m.id} />
-                      <Button type="submit" variant="ghost" size="xs">
+                      <Button type="submit" variant="outline" size="xs">
                         Mark read
                       </Button>
                     </form>

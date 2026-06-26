@@ -57,7 +57,7 @@ export function ApplicationsSettingsForm({
               id={`field_${f.key}`}
               name={`field_${f.key}`}
               defaultValue={config[f.key]}
-              className="h-9 w-36 rounded-md border px-3 text-sm capitalize"
+              className="h-9 w-full rounded-md border px-3 text-sm capitalize"
             >
               {!f.contact && <option value="hidden">Hidden</option>}
               <option value="optional">Optional</option>

@@ -305,7 +305,7 @@ export default async function PaymentsPage({
                   />
                   <ConfirmSubmitButton
                     variant="outline"
-                    size="sm"
+                    size="xs"
                     confirmMessage={`Void this ${formatCurrency(p.amountCents, p.lease.unit.property.currency)} payment for ${p.lease.tenant.firstName} ${p.lease.tenant.lastName}? An offsetting reversal is added; the original is kept.`}
                   >
                     Void

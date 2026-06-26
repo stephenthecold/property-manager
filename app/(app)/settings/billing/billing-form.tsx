@@ -48,7 +48,7 @@ export function BillingDefaultsForm({ initial }: { initial: BillingDefaultsIniti
   );
 
   return (
-    <form action={formAction} className="max-w-lg space-y-3">
+    <form action={formAction} className="space-y-3">
       <StateAlerts state={state} />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -129,7 +129,6 @@ export function BillingDefaultsForm({ initial }: { initial: BillingDefaultsIniti
           name="internetFee"
           inputMode="decimal"
           defaultValue={initial.internetFee}
-          className="max-w-40"
         />
       </div>
       <p className="text-xs text-muted-foreground">
@@ -185,7 +184,7 @@ export function PaymentMethodsForm({ initialCashtag }: { initialCashtag: string 
   );
 
   return (
-    <form action={formAction} className="max-w-lg space-y-3">
+    <form action={formAction} className="space-y-3">
       <StateAlerts state={state} />
       <div className="space-y-2">
         <Label htmlFor="cashAppCashtag">Cash App cashtag</Label>

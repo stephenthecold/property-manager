@@ -667,7 +667,7 @@ export default async function UnitDetail({
                         <input type="hidden" name="logId" value={log.id} />
                         <input type="hidden" name="unitId" value={unit.id} />
                         <ConfirmSubmitButton
-                          variant="ghost"
+                          variant="destructive"
                           size="xs"
                           confirmMessage="Delete this condition photo batch? This cannot be undone."
                         >

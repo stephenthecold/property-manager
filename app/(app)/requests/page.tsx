@@ -216,7 +216,7 @@ export default async function RequestsPage({
                     !r.maintenanceJobId && (
                       <form action={convertRequestToJobAction}>
                         <input type="hidden" name="requestId" value={r.id} />
-                        <Button type="submit" variant="outline" size="sm">
+                        <Button type="submit" variant="outline" size="xs">
                           Create job
                         </Button>
                       </form>
@@ -224,7 +224,7 @@ export default async function RequestsPage({
                   <form action={setRequestStatusAction}>
                     <input type="hidden" name="requestId" value={r.id} />
                     <input type="hidden" name="status" value="done" />
-                    <Button type="submit" variant="outline" size="sm">
+                    <Button type="submit" variant="outline" size="xs">
                       Mark done
                     </Button>
                   </form>
@@ -233,7 +233,7 @@ export default async function RequestsPage({
                     <input type="hidden" name="status" value="declined" />
                     <ConfirmSubmitButton
                       variant="outline"
-                      size="sm"
+                      size="xs"
                       confirmMessage={`Decline this ${r.type.replace(/_/g, " ")} request from ${r.tenant.firstName} ${r.tenant.lastName}? They'll see the status change in the portal.`}
                     >
                       Decline
