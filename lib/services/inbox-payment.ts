@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import { postPayment } from "@/lib/services/payments";
-import { parsePaymentEmail } from "@/lib/services/payment-email/parse";
+import { parsePaymentEmail, paymentLineKey } from "@/lib/services/payment-email/parse";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 
 /**
@@ -42,7 +42,10 @@ export async function paymentsForEmail(emailId: string) {
       paymentDate: true,
       status: true,
       lease: {
-        select: { id: true, tenant: { select: { firstName: true, lastName: true } } },
+        select: {
+          id: true,
+          tenant: { select: { id: true, firstName: true, lastName: true } },
+        },
       },
     },
     orderBy: { createdAt: "asc" },
@@ -84,16 +87,47 @@ async function parsedLineCount(emailId: string): Promise<number> {
   }).lines.length;
 }
 
-/** Flip the email to "posted" once every parsed line has a linked payment.
- *  Pure attribution/UI state — never touches the ledger. */
-async function flipIfAllHandled(emailId: string): Promise<void> {
-  const lines = await parsedLineCount(emailId);
-  if (lines === 0) return;
-  const handled = await prisma.payment.count({ where: { sourceEmailId: emailId } });
-  if (handled < lines) return;
+/** Flip the email to "posted" once every parsed line has been RECORDED (mirrors
+ *  the expense-post terminal state, incl. handledBy/handledAt/readAt). Counts
+ *  only payments recorded-FROM this email (idempotency-key prefix) that are
+ *  still posted — merely-attached or voided payments must not complete it, or a
+ *  line could be hidden from the work queue un-recorded. Never touches the ledger. */
+async function flipIfAllHandled(emailId: string, actor: AuditContext): Promise<void> {
+  const email = await prisma.inboundEmail.findUnique({
+    where: { id: emailId },
+    select: { fromEmail: true, subject: true, body: true, status: true, readAt: true },
+  });
+  if (!email || email.status === "posted") return;
+  const lines = parsePaymentEmail({
+    fromEmail: email.fromEmail,
+    subject: email.subject,
+    body: email.body,
+  }).lines;
+  if (lines.length === 0) return;
+
+  const prefix = `inbound_email:${emailId}:`;
+  const posted = await prisma.payment.findMany({
+    where: { sourceEmailId: emailId, status: "posted" },
+    select: { idempotencyKey: true },
+  });
+  const recordedKeys = new Set(
+    posted.map((p) => p.idempotencyKey).filter((k) => k.startsWith(prefix)),
+  );
+  const allRecorded = lines.every((line, i) =>
+    recordedKeys.has(emailPaymentIdempotencyKey(emailId, paymentLineKey(line, i))),
+  );
+  // A single-payment email is also "done" once attached to an existing payment.
+  const singleAttached = lines.length === 1 && posted.length > recordedKeys.size;
+  if (!allRecorded && !singleAttached) return;
+
   await prisma.inboundEmail.updateMany({
     where: { id: emailId, status: { not: "posted" } },
-    data: { status: "posted" },
+    data: {
+      status: "posted",
+      handledBy: actor.actorId ?? null,
+      handledAt: new Date(),
+      readAt: email.readAt ?? new Date(),
+    },
   });
 }
 
@@ -139,7 +173,7 @@ export async function recordInboundPayment(
     actor: input.actor,
   });
   await linkAttachmentsIfSingleLine(input.emailId, res.paymentId);
-  await flipIfAllHandled(input.emailId);
+  await flipIfAllHandled(input.emailId, input.actor);
   return res;
 }
 
@@ -150,12 +184,17 @@ export async function attachEmailToPayment(input: {
   emailId: string;
   paymentId: string;
   actor: AuditContext;
-}): Promise<{ ok: boolean }> {
+}): Promise<{ ok: boolean; reason?: "not_found" | "linked_elsewhere" }> {
   const payment = await prisma.payment.findUnique({
     where: { id: input.paymentId },
     select: { id: true, status: true, sourceEmailId: true },
   });
-  if (!payment) return { ok: false };
+  if (!payment) return { ok: false, reason: "not_found" };
+  // Never steal a payment already linked to a DIFFERENT email (which would also
+  // re-point that email's attachments). Re-attaching the same email is fine.
+  if (payment.sourceEmailId && payment.sourceEmailId !== input.emailId) {
+    return { ok: false, reason: "linked_elsewhere" };
+  }
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: input.paymentId },
@@ -170,6 +209,6 @@ export async function attachEmailToPayment(input: {
     });
   });
   await linkAttachmentsIfSingleLine(input.emailId, input.paymentId);
-  await flipIfAllHandled(input.emailId);
+  await flipIfAllHandled(input.emailId, input.actor);
   return { ok: true };
 }

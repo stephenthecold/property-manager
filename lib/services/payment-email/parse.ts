@@ -93,11 +93,12 @@ function parsePayPal(subject: string, body: string): ParsedPaymentLine[] {
     /^(.*?)\s+sent you\s+\$[\d,]+\.\d{2}/im,
   );
   const payerName = sentLine?.[1]?.trim() || null;
+  // Only the "X sent you $…" line or the labeled "Amount" — NOT the first '$'
+  // anywhere, so PayPal activity/marketing boilerplate can't synthesize a line.
   const amountCents =
     moneyToCents(firstMatch(`${subject}\n${body}`, /sent you\s+(\$[\d,]+\.\d{2})/i)) ??
-    moneyToCents(valueAfterLabel(lines, /^Amount$/i)) ??
-    moneyToCents(firstMatch(body, /(\$[\d,]+\.\d{2})/));
-  if (amountCents == null) return [];
+    moneyToCents(valueAfterLabel(lines, /^Amount$/i));
+  if (amountCents == null || amountCents <= 0n) return [];
   return [
     {
       amountCents,
@@ -150,10 +151,10 @@ function parseBlackbaud(body: string): ParsedPaymentLine[] {
     const amountCents = moneyToCents(amt[1]);
     if (amountCents == null) continue;
     const prev = lines[i - 1] ?? "";
-    // The invoice line is an alnum code, not a label/header.
+    // The invoice line is an alnum code WITH a digit (real codes encode a date),
+    // never a header ("Invoice number"/"Payment amount") or a stray word.
     const invoice =
-      /^[A-Za-z0-9][A-Za-z0-9._-]{2,}$/.test(prev) &&
-      !/payment amount/i.test(prev)
+      /^[A-Za-z0-9][A-Za-z0-9._-]{2,}$/.test(prev) && /\d/.test(prev)
         ? prev
         : null;
     const next = lines[i + 1] ?? "";
@@ -173,19 +174,26 @@ export function parsePaymentEmail(input: {
   const subject = input.subject ?? "";
   const body = input.body ?? "";
   const provider = detectProvider(input.fromEmail ?? "", body);
-  const lines =
+  const lines = (
     provider === "paypal"
       ? parsePayPal(subject, body)
       : provider === "cashapp"
         ? parseCashApp(body)
         : provider === "blackbaud"
           ? parseBlackbaud(body)
-          : [];
+          : []
+  ).filter((l) => l.amountCents > 0n); // never surface a $0 / negative line
   return { provider, method: PROVIDER_METHOD[provider], lines };
 }
 
-/** Stable per-line idempotency key segment (reference, else positional). */
+/**
+ * Stable per-line idempotency key segment. ALWAYS positional so two lines that
+ * share a reference (or both fall back) can never collide to one key — a
+ * collision would let postPayment's idempotency fast-path silently drop the
+ * second payment. The stored body is immutable + parse is deterministic, so the
+ * index is stable across re-renders (no double-credit risk).
+ */
 export function paymentLineKey(line: ParsedPaymentLine, index: number): string {
   const ref = (line.reference ?? "").replace(/[^A-Za-z0-9]/g, "");
-  return ref.length >= 4 ? ref : `idx${index}`;
+  return ref.length >= 4 ? `${ref}_${index}` : `idx${index}`;
 }

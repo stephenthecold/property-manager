@@ -372,7 +372,7 @@ export default async function InboxDetailPage({
                         Recorded
                       </Badge>
                       <Link
-                        href={`/tenants/${recorded.lease.id}`}
+                        href={`/tenants/${recorded.lease.tenant.id}`}
                         className="text-muted-foreground hover:underline"
                       >
                         {recorded.lease.tenant.firstName}{" "}

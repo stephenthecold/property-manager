@@ -191,18 +191,31 @@ describe("parsePaymentEmail — non-payment / unknown", () => {
 });
 
 describe("paymentLineKey", () => {
-  it("uses a sanitized reference when present, else a positional key", () => {
-    expect(
-      paymentLineKey(
-        { amountCents: 1n, payerName: null, paymentDate: null, reference: "#D-VRK42VMR2", memo: null },
-        0,
-      ),
-    ).toBe("DVRK42VMR2");
-    expect(
-      paymentLineKey(
-        { amountCents: 1n, payerName: null, paymentDate: null, reference: null, memo: null },
-        2,
-      ),
-    ).toBe("idx2");
+  const mk = (reference: string | null) => ({
+    amountCents: 1n,
+    payerName: null,
+    paymentDate: null,
+    reference,
+    memo: null,
+  });
+  it("uses a positional, reference-qualified key (else a positional fallback)", () => {
+    expect(paymentLineKey(mk("#D-VRK42VMR2"), 0)).toBe("DVRK42VMR2_0");
+    expect(paymentLineKey(mk(null), 2)).toBe("idx2");
+  });
+  it("never collides two lines that share a reference (no silent dropped payment)", () => {
+    // Two rows with the same invoice code must produce DISTINCT idempotency keys.
+    expect(paymentLineKey(mk("DUP001"), 0)).not.toBe(paymentLineKey(mk("DUP001"), 1));
+  });
+});
+
+describe("parsePaymentEmail — robustness", () => {
+  it("does not synthesize a line from PayPal boilerplate ($0.00 / stray $)", () => {
+    const r = parsePaymentEmail({
+      fromEmail: "service@paypal.com",
+      subject: "Your PayPal account statement is ready",
+      body: "See your $0.00 balance. Now use PayPal Debit and earn 5% cash back.",
+    });
+    expect(r.provider).toBe("paypal");
+    expect(r.lines).toHaveLength(0);
   });
 });

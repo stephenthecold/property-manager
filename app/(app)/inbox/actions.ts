@@ -110,9 +110,14 @@ export async function recordInboxPaymentAction(
   if (!lease) return { error: "Lease not found." };
   const tz = lease.unit.property.timezone;
   const dateRaw = str(fd, "paymentDate");
-  const paymentDate = dateRaw
-    ? (parseDateOnlyInZone(dateRaw, tz) ?? new Date(dateRaw))
-    : new Date();
+  let paymentDate: Date;
+  if (dateRaw) {
+    const parsed = parseDateOnlyInZone(dateRaw, tz);
+    if (!parsed) return { error: "Enter a valid date (YYYY-MM-DD)." };
+    paymentDate = parsed;
+  } else {
+    paymentDate = new Date();
+  }
   const method = (str(fd, "method") || "online") as PaymentMethod;
 
   await recordInboundPayment({
@@ -152,7 +157,14 @@ export async function attachInboxPaymentAction(
     paymentId,
     actor: await auditActor(),
   });
-  if (!res.ok) return { error: "That payment no longer exists." };
+  if (!res.ok) {
+    return {
+      error:
+        res.reason === "linked_elsewhere"
+          ? "That payment is already linked to another email."
+          : "That payment no longer exists.",
+    };
+  }
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${emailId}`);
   return { ok: true };
