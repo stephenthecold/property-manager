@@ -323,7 +323,7 @@ export default async function TenantDetail({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <BackLink href="/tenants" label="Tenants" />
           <h1 className="text-2xl font-semibold">
@@ -356,7 +356,7 @@ export default async function TenantDetail({
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SendReminderDialog
             tenantId={tenant.id}
             leaseId={activeLease?.id}
