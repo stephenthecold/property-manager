@@ -246,6 +246,7 @@ export async function listNotices(filter: {
     include: {
       lease: {
         select: {
+          id: true,
           tenantId: true,
           tenant: { select: { firstName: true, lastName: true } },
           unit: { select: { unitNumber: true, property: { select: { name: true } } } },
@@ -289,6 +290,7 @@ export async function getNoticeForPrint(id: string) {
     include: {
       lease: {
         select: {
+          id: true,
           tenant: { select: { firstName: true, lastName: true } },
           unit: {
             select: {

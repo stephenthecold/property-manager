@@ -122,7 +122,7 @@ export default async function DocumentsPage({
             <span key="z" className="tabular-nums">
               {formatBytes(d.fileSize)}
             </span>,
-            d.tenantId || d.paymentId || d.receiptId ? (
+            d.tenantId || d.leaseId || d.maintenanceJobId || d.paymentId || d.receiptId ? (
               <span key="l" className="flex gap-2">
                 {d.tenantId && (
                   <Link
@@ -130,6 +130,22 @@ export default async function DocumentsPage({
                     className="font-medium hover:underline"
                   >
                     {tenantName.get(d.tenantId) ?? "Tenant"}
+                  </Link>
+                )}
+                {d.leaseId && (
+                  <Link
+                    href={`/leases/${d.leaseId}/agreement`}
+                    className="font-medium hover:underline"
+                  >
+                    Lease
+                  </Link>
+                )}
+                {d.maintenanceJobId && (
+                  <Link
+                    href={`/maintenance/${d.maintenanceJobId}`}
+                    className="font-medium hover:underline"
+                  >
+                    Job
                   </Link>
                 )}
                 {d.paymentId && (

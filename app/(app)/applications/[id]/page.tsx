@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { StatusForm, SendLinkForm } from "../applications-forms";
 import {
@@ -109,9 +110,7 @@ export default async function ApplicationDetail({
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/applications" className="text-sm text-muted-foreground hover:underline">
-          ← All applications
-        </Link>
+        <BackLink href="/applications" label="All applications" />
         <h1 className="mt-1 text-2xl font-semibold">
           {app.firstName} {app.lastName}
         </h1>
@@ -226,9 +225,15 @@ export default async function ApplicationDetail({
             <Field
               label="Interest"
               value={
-                app.unit
-                  ? `${app.property?.name ?? ""} · Unit ${app.unit.unitNumber}`
-                  : (app.property?.name ?? null)
+                app.unit ? (
+                  <Link href={`/units/${app.unit.id}`} className="hover:underline">
+                    {app.property?.name ?? ""} · Unit {app.unit.unitNumber}
+                  </Link>
+                ) : app.property ? (
+                  <Link href={`/properties/${app.property.id}`} className="hover:underline">
+                    {app.property.name}
+                  </Link>
+                ) : null
               }
             />
           </div>

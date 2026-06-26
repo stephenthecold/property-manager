@@ -174,7 +174,13 @@ export default async function LeasesPage({
               >
                 {l.tenant.firstName} {l.tenant.lastName}
               </Link>,
-              `${l.unit.property.name} · ${l.unit.unitNumber}`,
+              <Link
+                key="u"
+                href={`/units/${l.unitId}`}
+                className="hover:underline"
+              >
+                {l.unit.property.name} · {l.unit.unitNumber}
+              </Link>,
               <span key="r" className="tabular-nums">
                 {formatCurrency(l.rentAmountCents, l.unit.property.currency)}
               </span>,

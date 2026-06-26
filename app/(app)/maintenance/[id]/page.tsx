@@ -19,6 +19,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Label } from "@/components/ui/label";
 import { addMaintenancePhotosAction } from "./actions";
@@ -135,9 +136,7 @@ export default async function MaintenanceJobPage({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" render={<Link href="/maintenance" />}>
-          ← Maintenance
-        </Button>
+        <BackLink href="/maintenance" label="Maintenance" />
       </div>
 
       <Card>
@@ -161,11 +160,29 @@ export default async function MaintenanceJobPage({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
               <div className="text-xs text-muted-foreground">Property</div>
-              <div className="font-medium">{job.property.name}</div>
+              <div>
+                <Link
+                  href={`/properties/${job.propertyId}`}
+                  className="font-medium hover:underline"
+                >
+                  {job.property.name}
+                </Link>
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Unit</div>
-              <div className="font-medium">{job.unit?.unitNumber ?? "—"}</div>
+              <div>
+                {job.unit ? (
+                  <Link
+                    href={`/units/${job.unit.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {job.unit.unitNumber}
+                  </Link>
+                ) : (
+                  <span className="font-medium">—</span>
+                )}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Due</div>
@@ -201,7 +218,15 @@ export default async function MaintenanceJobPage({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Vendor</div>
-              <div className="font-medium">{job.vendor?.name ?? "—"}</div>
+              <div>
+                {job.vendorId ? (
+                  <Link href="/vendors" className="font-medium hover:underline">
+                    {job.vendor?.name ?? "—"}
+                  </Link>
+                ) : (
+                  <span className="font-medium">—</span>
+                )}
+              </div>
             </div>
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground">Status</div>

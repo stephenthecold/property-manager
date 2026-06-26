@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
 import { requireCapability } from "@/lib/auth/session";
@@ -250,11 +251,19 @@ export default async function AssetsPage() {
               </span>,
               a.category ?? "—",
               <span key="loc" className="text-sm">
-                {a.property.name}
+                <Link
+                  href={`/properties/${a.property.id}`}
+                  className="hover:underline"
+                >
+                  {a.property.name}
+                </Link>
                 {a.unit && (
-                  <span className="block text-xs text-muted-foreground">
+                  <Link
+                    href={`/units/${a.unit.id}`}
+                    className="block text-xs text-muted-foreground hover:underline"
+                  >
                     Unit {a.unit.unitNumber}
-                  </span>
+                  </Link>
                 )}
               </span>,
               makeModel || "—",

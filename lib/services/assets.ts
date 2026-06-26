@@ -30,8 +30,8 @@ export async function listAssets() {
     orderBy: [{ active: "desc" }, { name: "asc" }],
     include: {
       // timezone drives date-only render + warranty math (property-tz, not UTC).
-      property: { select: { name: true, timezone: true } },
-      unit: { select: { unitNumber: true } },
+      property: { select: { id: true, name: true, timezone: true } },
+      unit: { select: { id: true, unitNumber: true } },
     },
   });
 }

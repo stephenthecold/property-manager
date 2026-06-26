@@ -196,12 +196,20 @@ export default async function NoticesPage({
           ],
           cells: [
             n.createdAt.toLocaleDateString("en-US"),
-            <Link key="t" href={`/tenants/${n.lease.tenantId}`} className="font-medium hover:underline">
-              {n.lease.tenant.firstName} {n.lease.tenant.lastName}
-              <span className="block text-xs text-muted-foreground">
+            <div key="t">
+              <Link
+                href={`/tenants/${n.lease.tenantId}`}
+                className="font-medium hover:underline"
+              >
+                {n.lease.tenant.firstName} {n.lease.tenant.lastName}
+              </Link>
+              <Link
+                href={`/leases/${n.lease.id}/agreement`}
+                className="block text-xs text-muted-foreground hover:underline"
+              >
                 {n.lease.unit.property.name} · {n.lease.unit.unitNumber}
-              </span>
-            </Link>,
+              </Link>
+            </div>,
             noticeTypeLabel(n.type),
             n.effectiveDate ? n.effectiveDate.toLocaleDateString("en-US") : "—",
             <span key="s" className={`capitalize ${statusClass(n.status)}`}>

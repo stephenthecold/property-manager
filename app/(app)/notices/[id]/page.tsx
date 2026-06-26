@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getNoticeForPrint } from "@/lib/services/notices";
 import { noticeTypeLabel } from "@/lib/notices/templates";
+import { BackLink } from "@/components/app/back-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,9 +30,19 @@ export default async function NoticePrintPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 bg-white p-8 text-black print:p-0 dark:bg-white">
-      <div className="print-hidden">
-        <Link href="/notices" className="text-sm text-blue-700 underline">
-          ← Back to notices
+      <div className="print-hidden flex flex-wrap items-center gap-4 text-sm">
+        <BackLink href="/notices" label="Notices" />
+        <Link
+          href={`/tenants/${notice.tenantId}`}
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {notice.lease.tenant.firstName} {notice.lease.tenant.lastName}
+        </Link>
+        <Link
+          href={`/leases/${notice.lease.id}/agreement`}
+          className="text-muted-foreground hover:text-foreground hover:underline"
+        >
+          Lease agreement
         </Link>
       </div>
 

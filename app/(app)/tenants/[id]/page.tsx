@@ -50,6 +50,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { ChangeHistory } from "@/components/app/change-history";
+import { BackLink } from "@/components/app/back-link";
 import { ActivityTimeline } from "@/components/app/activity-timeline";
 import { tenantActivity } from "@/lib/services/activity";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -210,6 +211,24 @@ export default async function TenantDetail({
     .map((l) => ({ lease: l, snap: backRentSnaps.get(l.id)! }))
     .filter(({ snap }) => snap.totalOwedCents > 0n);
 
+  // Digital receipt per payment (partial unique index) for the Payments table's
+  // Receipt column — one query, mapped by paymentId.
+  const paymentReceipts = payments.length
+    ? await prisma.receipt.findMany({
+        where: {
+          paymentId: { in: payments.map((p) => p.id) },
+          receiptType: "digital",
+        },
+        select: { id: true, receiptNumber: true, paymentId: true },
+      })
+    : [];
+  const receiptByPayment = new Map(
+    paymentReceipts.map((r) => [
+      r.paymentId ?? "",
+      { id: r.id, receiptNumber: r.receiptNumber },
+    ]),
+  );
+
   const currency = activeLease?.unit.property.currency ?? "USD";
 
   // Unified activity feed (read-only aggregation of existing rows for this
@@ -306,6 +325,7 @@ export default async function TenantDetail({
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
+          <BackLink href="/tenants" label="Tenants" />
           <h1 className="text-2xl font-semibold">
             {tenant.firstName} {tenant.lastName}
           </h1>
@@ -391,7 +411,13 @@ export default async function TenantDetail({
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-base">
                 <span>
-                  {activeLease.unit.property.name} · {activeLease.unit.unitNumber}
+                  {activeLease.unit.property.name} ·{" "}
+                  <Link
+                    href={`/units/${activeLease.unitId}`}
+                    className="hover:underline"
+                  >
+                    {activeLease.unit.unitNumber}
+                  </Link>
                 </span>
                 <StatusBadge status={snap.status} />
               </CardTitle>
@@ -1115,16 +1141,23 @@ export default async function TenantDetail({
                     className: "hidden md:table-cell",
                   },
                   { key: "status", label: "Status", className: "hidden sm:table-cell" },
+                  { key: "receipt", label: "Receipt", className: "hidden lg:table-cell" },
                   { key: "amount", label: "Amount", align: "right", numeric: true },
                   { key: "action", label: "Action", align: "right", sortable: false },
                 ]}
-                rows={payments.map((p) => ({
+                rows={payments.map((p) => {
+                  const receipt =
+                    p.status !== "voided"
+                      ? receiptByPayment.get(p.id)
+                      : undefined;
+                  return {
                   key: p.id,
                   sortValues: [
                     p.paymentDate.toISOString(),
                     p.method,
                     p.referenceNumber,
                     p.status,
+                    receipt?.receiptNumber ?? null,
                     String(p.amountCents),
                     null,
                   ],
@@ -1144,6 +1177,17 @@ export default async function TenantDetail({
                     >
                       {p.status}
                     </span>,
+                    receipt ? (
+                      <Link
+                        key="r"
+                        href={`/receipts/${receipt.id}`}
+                        className="hover:underline"
+                      >
+                        {receipt.receiptNumber}
+                      </Link>
+                    ) : (
+                      "—"
+                    ),
                     <span key="a" className="tabular-nums">
                       {formatCurrency(p.amountCents, currency)}
                     </span>,
@@ -1174,7 +1218,8 @@ export default async function TenantDetail({
                       </span>
                     ),
                   ],
-                }))}
+                  };
+                })}
               />
             </CardContent>
           </Card>
@@ -1210,7 +1255,15 @@ export default async function TenantDetail({
                   className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
                 >
                   <div className="space-y-1">
-                    <div className="font-medium">{unitLabel}</div>
+                    <div className="font-medium">
+                      {lease.unit.property.name} ·{" "}
+                      <Link
+                        href={`/units/${lease.unitId}`}
+                        className="hover:underline"
+                      >
+                        {lease.unit.unitNumber}
+                      </Link>
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {lease.status === "eviction" ? "Eviction" : "Ended"}
                       {lease.endDate

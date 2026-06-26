@@ -253,7 +253,13 @@ export default async function PaymentsPage({
                   </div>
                 )}
               </div>,
-              `${p.lease.unit.property.name} · ${p.lease.unit.unitNumber}`,
+              <Link
+                key="u"
+                href={`/properties/${p.lease.unit.propertyId}`}
+                className="hover:underline"
+              >
+                {p.lease.unit.property.name} · {p.lease.unit.unitNumber}
+              </Link>,
               <span key="m" className="capitalize">
                 {p.method.replace("_", " ")}
               </span>,
