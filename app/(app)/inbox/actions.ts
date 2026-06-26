@@ -14,8 +14,14 @@ import {
   markInboundEmailRead,
   setInboundEmailArchived,
 } from "@/lib/services/inbound-email";
+import {
+  attachEmailToPayment,
+  recordInboundPayment,
+} from "@/lib/services/inbox-payment";
+import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
+import type { FormState } from "@/lib/forms";
 
 const CATEGORIES = ["utilities", "insurance", "maintenance", "taxes", "other"] as const;
 
@@ -65,6 +71,103 @@ export async function clearInboxAction(_fd: FormData): Promise<void> {
   await clearInboundEmails(await auditActor());
   revalidatePath("/inbox");
   redirect("/inbox");
+}
+
+/**
+ * Record ONE parsed payment line of an email as a tenant payment, after staff
+ * review (lease + amount confirmed). HOT ZONE — funnels straight into the
+ * battle-tested postPayment via recordInboundPayment; idempotent per (email,
+ * row) so a re-submit never double-credits. Returns FormState so the dialog
+ * shows validation inline instead of an error page.
+ */
+export async function recordInboxPaymentAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("payments.manage");
+  await assertModuleEnabled("mailbox");
+
+  const emailId = str(fd, "inboundEmailId");
+  if (!emailId) return { error: "Missing email." };
+  const leaseId = str(fd, "leaseId");
+  if (!leaseId) return { error: "Pick the tenant/lease this payment is for." };
+  const rowKey = str(fd, "rowKey") || "idx0";
+
+  let amountCents: bigint;
+  try {
+    amountCents = toCents(str(fd, "amount"));
+  } catch {
+    return { error: "Enter a valid amount (e.g. 625.00)." };
+  }
+  if (amountCents <= 0n) return { error: "Amount must be positive." };
+
+  // Date-only value → midnight in the PROPERTY timezone (matches the manual
+  // record-payment action; receipts/reports bucket income there).
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    include: { unit: { include: { property: true } } },
+  });
+  if (!lease) return { error: "Lease not found." };
+  const tz = lease.unit.property.timezone;
+  const dateRaw = str(fd, "paymentDate");
+  let paymentDate: Date;
+  if (dateRaw) {
+    const parsed = parseDateOnlyInZone(dateRaw, tz);
+    if (!parsed) return { error: "Enter a valid date (YYYY-MM-DD)." };
+    paymentDate = parsed;
+  } else {
+    paymentDate = new Date();
+  }
+  const method = (str(fd, "method") || "online") as PaymentMethod;
+
+  await recordInboundPayment({
+    emailId,
+    rowKey,
+    leaseId,
+    amountCents,
+    paymentDate,
+    method,
+    referenceNumber: str(fd, "referenceNumber") || null,
+    notes: str(fd, "notes") || null,
+    actor: await auditActor(),
+  });
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${emailId}`);
+  revalidatePath("/payments");
+  revalidatePath("/dashboard");
+  revalidatePath("/tenants", "layout");
+  return { ok: true };
+}
+
+/** Attach an email to an EXISTING payment as documentation (no ledger write). */
+export async function attachInboxPaymentAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("payments.manage");
+  await assertModuleEnabled("mailbox");
+
+  const emailId = str(fd, "inboundEmailId");
+  if (!emailId) return { error: "Missing email." };
+  const paymentId = str(fd, "paymentId");
+  if (!paymentId) return { error: "Pick a payment to attach to." };
+
+  const res = await attachEmailToPayment({
+    emailId,
+    paymentId,
+    actor: await auditActor(),
+  });
+  if (!res.ok) {
+    return {
+      error:
+        res.reason === "linked_elsewhere"
+          ? "That payment is already linked to another email."
+          : "That payment no longer exists.",
+    };
+  }
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${emailId}`);
+  return { ok: true };
 }
 
 /**

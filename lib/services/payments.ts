@@ -25,6 +25,9 @@ export interface PostPaymentInput {
   /** Non-tenant payer (e.g. a housing authority paying the HAP portion). null =
    * the tenant paid. Attribution only — never affects FIFO allocation. */
   payerId?: string | null;
+  /** Captured inbound email this payment was recorded from (module "mailbox").
+   * Attribution only — never affects allocation or balances. */
+  sourceEmailId?: string | null;
   idempotencyKey: string;
   actor: AuditContext;
 }
@@ -132,6 +135,7 @@ export async function postPayment(
           status: "posted",
           appliedPeriodKey: input.appliedPeriodKey ?? null,
           idempotencyKey: input.idempotencyKey,
+          sourceEmailId: input.sourceEmailId ?? null,
           notes: input.notes ?? null,
           createdBy: input.actor.actorId ?? null,
         },
