@@ -121,12 +121,17 @@ export default async function InspectionsPage() {
           ],
           cells: [
             i.scheduledFor ? i.scheduledFor.toLocaleDateString("en-US") : "—",
-            <Link key="t" href={`/tenants/${i.lease.tenantId}`} className="font-medium hover:underline">
-              {i.lease.tenant.firstName} {i.lease.tenant.lastName}
-              <span className="block text-xs text-muted-foreground">
+            <div key="t">
+              <Link href={`/tenants/${i.lease.tenantId}`} className="font-medium hover:underline">
+                {i.lease.tenant.firstName} {i.lease.tenant.lastName}
+              </Link>
+              <Link
+                href={`/units/${i.lease.unit.id}`}
+                className="block text-xs text-muted-foreground hover:underline"
+              >
                 {i.lease.unit.property.name} · {i.lease.unit.unitNumber}
-              </span>
-            </Link>,
+              </Link>
+            </div>,
             inspectionTypeLabel(i.type),
             <span key="s" className={statusClass(i.status)}>
               {inspectionStatusLabel(i.status)}

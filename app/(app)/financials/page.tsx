@@ -67,9 +67,11 @@ export default async function FinancialsPage({
       orderBy: { incurredOn: "desc" },
       take: 200,
       include: {
-        property: { select: { name: true, currency: true } },
+        property: { select: { id: true, name: true, currency: true } },
         unit: { select: { unitNumber: true } },
-        lease: { include: { tenant: { select: { firstName: true, lastName: true } } } },
+        lease: {
+          include: { tenant: { select: { id: true, firstName: true, lastName: true } } },
+        },
         vendor: { select: { name: true } },
       },
     }),
@@ -417,9 +419,25 @@ export default async function FinancialsPage({
               ],
               cells: [
                 e.incurredOn.toLocaleDateString("en-US", { timeZone: "UTC" }),
-                e.property.name,
+                <Link
+                  key="p"
+                  href={`/properties/${e.property.id}`}
+                  className="hover:underline"
+                >
+                  {e.property.name}
+                </Link>,
                 e.unit?.unitNumber ?? "—",
-                e.lease ? `${e.lease.tenant.firstName} ${e.lease.tenant.lastName}` : "—",
+                e.lease ? (
+                  <Link
+                    key="t"
+                    href={`/tenants/${e.lease.tenant.id}`}
+                    className="hover:underline"
+                  >
+                    {e.lease.tenant.firstName} {e.lease.tenant.lastName}
+                  </Link>
+                ) : (
+                  "—"
+                ),
                 <span key="c" className="capitalize">
                   {e.category}
                 </span>,

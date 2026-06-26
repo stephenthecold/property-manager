@@ -14,6 +14,7 @@ import {
   completeInspectionAction,
   removeDeductionAction,
 } from "../actions";
+import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,9 +49,7 @@ export default async function InspectionDetailPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/inspections" className="text-sm text-muted-foreground hover:underline">
-          ← All inspections
-        </Link>
+        <BackLink href="/inspections" label="All inspections" />
         <h1 className="mt-1 text-2xl font-semibold">
           {inspectionTypeLabel(inspection.type)} inspection
         </h1>
@@ -58,7 +57,10 @@ export default async function InspectionDetailPage({
           <Link href={`/tenants/${inspection.lease.tenantId}`} className="hover:underline">
             {inspection.lease.tenant.firstName} {inspection.lease.tenant.lastName}
           </Link>{" "}
-          · {inspection.lease.unit.property.name} · {inspection.lease.unit.unitNumber}
+          ·{" "}
+          <Link href={`/units/${unitId}`} className="hover:underline">
+            {inspection.lease.unit.property.name} · {inspection.lease.unit.unitNumber}
+          </Link>
         </p>
       </div>
 

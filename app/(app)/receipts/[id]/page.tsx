@@ -17,12 +17,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
-function detail(label: string, value: string, capitalize = false) {
+function detail(
+  label: string,
+  value: string,
+  capitalize = false,
+  href?: string,
+) {
   return (
     <div>
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={`font-medium tabular-nums${capitalize ? " capitalize" : ""}`}>
-        {value}
+        {href ? (
+          <Link href={href} className="hover:underline">
+            {value}
+          </Link>
+        ) : (
+          value
+        )}
       </div>
     </div>
   );
@@ -152,7 +163,18 @@ export default async function ReceiptPage({
           </div>
 
           <div className="space-y-0.5 text-center text-sm">
-            <div className="font-medium">{property?.name ?? "—"}</div>
+            <div className="font-medium">
+              {property && receipt.propertyId ? (
+                <Link
+                  href={`/properties/${receipt.propertyId}`}
+                  className="hover:underline"
+                >
+                  {property.name}
+                </Link>
+              ) : (
+                (property?.name ?? "—")
+              )}
+            </div>
             {addressParts.map((line) => (
               <div key={line} className="text-muted-foreground">
                 {line}
@@ -172,6 +194,10 @@ export default async function ReceiptPage({
             {detail(
               "Tenant",
               tenant ? `${tenant.firstName} ${tenant.lastName}` : "—",
+              false,
+              tenant && receipt.tenantId
+                ? `/tenants/${receipt.tenantId}`
+                : undefined,
             )}
             {detail("Unit", unit ? unit.unitNumber : "—")}
             {detail(

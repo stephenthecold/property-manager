@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { BackLink } from "@/components/app/back-link";
 import { ChangeHistory } from "@/components/app/change-history";
 
 export const runtime = "nodejs";
@@ -161,6 +162,7 @@ export default async function PropertyDetail({
   return (
     <div className="space-y-6">
       <div>
+        <BackLink href="/properties" label="Properties" />
         <h1 className="text-2xl font-semibold">{property.name}</h1>
         <p className="text-muted-foreground">
           {[property.addressLine1, property.city, property.state, property.zip]

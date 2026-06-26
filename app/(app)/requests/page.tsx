@@ -42,7 +42,13 @@ export default async function RequestsPage({
         where: { id: { in: leaseIds } },
         select: {
           id: true,
-          unit: { select: { unitNumber: true, property: { select: { name: true } } } },
+          unit: {
+            select: {
+              id: true,
+              unitNumber: true,
+              property: { select: { id: true, name: true } },
+            },
+          },
         },
       })
     : [];
@@ -156,7 +162,19 @@ export default async function RequestsPage({
               <span key="ty" className="capitalize">
                 {r.type.replace(/_/g, " ")}
               </span>,
-              lease ? `${lease.unit.property.name} · ${lease.unit.unitNumber}` : "—",
+              lease ? (
+                <span key="w">
+                  {lease.unit.property.name} ·{" "}
+                  <Link
+                    href={`/units/${lease.unit.id}`}
+                    className="hover:underline"
+                  >
+                    {lease.unit.unitNumber}
+                  </Link>
+                </span>
+              ) : (
+                "—"
+              ),
               <span key="m" className="block max-w-[20rem] truncate text-sm" title={r.message ?? ""}>
                 {r.message || "—"}
               </span>,
@@ -224,7 +242,16 @@ export default async function RequestsPage({
                 </div>
               ) : (
                 <span key="a" className="text-xs text-muted-foreground">
-                  {r.maintenanceJobId ? "Job created" : "—"}
+                  {r.maintenanceJobId ? (
+                    <Link
+                      href={`/maintenance/${r.maintenanceJobId}`}
+                      className="hover:underline"
+                    >
+                      Job created →
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
                 </span>
               ),
             ],

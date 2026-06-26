@@ -14,6 +14,7 @@ import {
   createPaymentFromDocumentAction,
   runOcrAction,
 } from "@/app/(app)/documents/actions";
+import { BackLink } from "@/components/app/back-link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,19 @@ export default async function DocumentDetailPage({
     ? await prisma.tenant.findUnique({ where: { id: doc.tenantId } })
     : null;
 
+  const payment = doc.paymentId
+    ? await prisma.payment.findUnique({
+        where: { id: doc.paymentId },
+        select: {
+          lease: {
+            select: {
+              tenant: { select: { id: true, firstName: true, lastName: true } },
+            },
+          },
+        },
+      })
+    : null;
+
   let download: { url: string; fileName: string | null; fileType: string | null } | null =
     null;
   try {
@@ -91,7 +105,10 @@ export default async function DocumentDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <h1 className="text-2xl font-semibold">{doc.fileName ?? "Untitled file"}</h1>
+        <div>
+          <BackLink href="/documents" label="Documents" />
+          <h1 className="text-2xl font-semibold">{doc.fileName ?? "Untitled file"}</h1>
+        </div>
         {download ? (
           <Button
             variant="outline"
@@ -157,11 +174,44 @@ export default async function DocumentDetailPage({
                 </TableCell>
               </TableRow>
               <TableRow>
+                <TableCell className="font-medium">Lease</TableCell>
+                <TableCell>
+                  {doc.leaseId ? (
+                    <Link
+                      href={`/leases/${doc.leaseId}/agreement`}
+                      className="font-medium hover:underline"
+                    >
+                      Lease agreement
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Maintenance job</TableCell>
+                <TableCell>
+                  {doc.maintenanceJobId ? (
+                    <Link
+                      href={`/maintenance/${doc.maintenanceJobId}`}
+                      className="font-medium hover:underline"
+                    >
+                      Maintenance job
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
+              </TableRow>
+              <TableRow>
                 <TableCell className="font-medium">Payment</TableCell>
                 <TableCell>
-                  {doc.paymentId ? (
-                    <Link href="/payments" className="font-medium hover:underline">
-                      Linked payment
+                  {doc.paymentId && payment?.lease.tenant ? (
+                    <Link
+                      href={`/tenants/${payment.lease.tenant.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {payment.lease.tenant.firstName} {payment.lease.tenant.lastName}
                     </Link>
                   ) : (
                     "—"

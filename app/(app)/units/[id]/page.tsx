@@ -26,6 +26,7 @@ import {
 } from "@/lib/services/unit-condition";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -176,8 +177,12 @@ export default async function UnitDetail({
   return (
     <div className="space-y-6">
       <div>
+        <BackLink href={`/properties/${unit.propertyId}`} label="Property" />
         <h1 className="text-2xl font-semibold">
-          {unit.property.name} · {unit.unitNumber}
+          <Link href={`/properties/${unit.propertyId}`} className="hover:underline">
+            {unit.property.name}
+          </Link>{" "}
+          · {unit.unitNumber}
         </h1>
         <p className="text-muted-foreground capitalize">
           {unit.building?.name ? `${unit.building.name} · ` : ""}
@@ -474,7 +479,18 @@ export default async function UnitDetail({
               value={<span className="capitalize">{unit.serviceStatus.replace(/_/g, " ")}</span>}
             />
             <Field label="Availability" value={availabilityLabel} />
-            <Field label="Building" value={unit.building?.name ?? "—"} />
+            <Field
+              label="Building"
+              value={
+                unit.buildingId && unit.building ? (
+                  <Link href={`/buildings/${unit.buildingId}`} className="hover:underline">
+                    {unit.building.name}
+                  </Link>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <Field
               label="Default rent"
               value={formatCurrency(unit.defaultRentAmountCents, currency)}
@@ -520,7 +536,9 @@ export default async function UnitDetail({
                     >
                       {statusLabel(j.status)}
                     </Badge>
-                    <span className="font-medium">{j.title}</span>
+                    <Link href={`/maintenance/${j.id}`} className="font-medium hover:underline">
+                      {j.title}
+                    </Link>
                     {j.dueDate && (
                       <span className="text-muted-foreground">
                         — due {j.dueDate.toLocaleDateString("en-US", { timeZone: "UTC" })}

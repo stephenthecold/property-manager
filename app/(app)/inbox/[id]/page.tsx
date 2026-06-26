@@ -31,6 +31,7 @@ import {
   postInboxExpenseAction,
   recordInboxPaymentAction,
 } from "../actions";
+import { BackLink } from "@/components/app/back-link";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -185,9 +186,7 @@ export default async function InboxDetailPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href="/inbox" className="text-sm text-muted-foreground hover:underline">
-            ← Email inbox
-          </Link>
+          <BackLink href="/inbox" label="Email inbox" />
           <h1 className="text-2xl font-semibold">
             {email.subject || "(no subject)"}
           </h1>
@@ -491,12 +490,18 @@ export default async function InboxDetailPage({
             {attachedPayments.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Attached to{" "}
-                {attachedPayments
-                  .map(
-                    (p) =>
-                      `${p.lease.tenant.firstName} ${p.lease.tenant.lastName} (${formatCurrency(p.amountCents, "USD")})`,
-                  )
-                  .join(", ")}
+                {attachedPayments.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 ? ", " : ""}
+                    <Link
+                      href={`/tenants/${p.lease.tenant.id}`}
+                      className="hover:underline"
+                    >
+                      {p.lease.tenant.firstName} {p.lease.tenant.lastName}
+                    </Link>{" "}
+                    ({formatCurrency(p.amountCents, "USD")})
+                  </span>
+                ))}
                 .
               </p>
             )}
