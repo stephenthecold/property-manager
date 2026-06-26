@@ -104,10 +104,12 @@ export default async function DocumentDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <BackLink href="/documents" label="Documents" />
-          <h1 className="text-2xl font-semibold">{doc.fileName ?? "Untitled file"}</h1>
+          <h1 className="text-2xl font-semibold break-words">
+            {doc.fileName ?? "Untitled file"}
+          </h1>
         </div>
         {download ? (
           <Button

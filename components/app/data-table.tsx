@@ -168,7 +168,7 @@ export function DataTable({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="overflow-hidden rounded-lg border bg-card text-card-foreground">
+      <div className="overflow-x-auto rounded-lg border bg-card text-card-foreground">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/60 hover:bg-muted/60">
