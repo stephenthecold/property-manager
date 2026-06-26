@@ -47,7 +47,7 @@ export function SettingsImpersonatePanel({
           id="imp-tenant"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
-          className="h-9 w-full max-w-sm rounded-md border px-3 text-sm"
+          className="h-9 w-full rounded-md border px-3 text-sm"
         >
           {tenants.map((t) => (
             <option key={t.id} value={t.id}>

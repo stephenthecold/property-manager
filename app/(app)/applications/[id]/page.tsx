@@ -275,6 +275,7 @@ export default async function ApplicationDetail({
                   <input type="hidden" name="id" value={app.id} />
                   <ConfirmSubmitButton
                     confirmMessage="Create a tenant record from this applicant?"
+                    variant="default"
                     size="sm"
                   >
                     Convert to tenant

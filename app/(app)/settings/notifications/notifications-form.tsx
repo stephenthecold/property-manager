@@ -44,7 +44,7 @@ export function NotificationsForm({ initial }: { initial: NotificationsInitial }
   );
 
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <form action={formAction} className="space-y-4">
       {state.error && (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>
@@ -80,7 +80,6 @@ export function NotificationsForm({ initial }: { initial: NotificationsInitial }
           type="tel"
           placeholder="+1 555 000 1234"
           defaultValue={initial.phone}
-          className="max-w-xs"
         />
         <p className="text-xs text-muted-foreground">
           Leave blank for email-only alerts. Texts use the org SMS provider.

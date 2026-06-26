@@ -344,6 +344,8 @@ export default async function PayersPage({
             <div key="a" className="flex justify-end gap-2">
               <FormDialog
                 trigger="Edit"
+                triggerVariant="outline"
+                triggerSize="xs"
                 title={`Edit ${p.name}`}
                 action={updatePayerAction}
                 submitLabel="Save"
@@ -364,7 +366,7 @@ export default async function PayersPage({
               <form action={setPayerActiveAction}>
                 <input type="hidden" name="payerId" value={p.id} />
                 <input type="hidden" name="isActive" value={p.isActive ? "false" : "true"} />
-                <Button type="submit" variant="outline" size="sm">
+                <Button type="submit" variant="outline" size="xs">
                   {p.isActive ? "Deactivate" : "Reactivate"}
                 </Button>
               </form>

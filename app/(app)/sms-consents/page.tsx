@@ -146,7 +146,7 @@ export default async function SmsConsentsPage({
                   {t.status !== "opted_in" && t.email && (
                     <FormDialog
                       trigger="Email invite"
-                      triggerVariant="ghost"
+                      triggerVariant="outline"
                       triggerSize="xs"
                       title="Invite to opt in (email)"
                       description={`Email ${t.firstName} a link to the public opt-in page. No SMS is sent.`}
@@ -161,7 +161,7 @@ export default async function SmsConsentsPage({
                   )}
                   {t.status !== "opted_in" && (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="xs"
                       render={
                         <Link href={`/sms-consents/letter?tenantId=${t.id}`} target="_blank" />

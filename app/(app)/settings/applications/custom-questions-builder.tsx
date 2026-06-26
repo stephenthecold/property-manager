@@ -181,7 +181,7 @@ export function CustomQuestionsBuilder({
                       onChange={(e) =>
                         patchQuestion(si, qi, { type: e.target.value as QuestionType })
                       }
-                      className="h-9 w-56 rounded-md border px-3 text-sm"
+                      className="h-9 w-full rounded-md border px-3 text-sm"
                     >
                       {QUESTION_TYPES.map((t) => (
                         <option key={t} value={t}>

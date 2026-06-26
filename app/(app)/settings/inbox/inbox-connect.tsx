@@ -119,7 +119,6 @@ export function InboxConnect({ initial }: { initial: InboxConnectInitial }) {
               defaultValue={initial.provider === "microsoft" ? initial.tenant : ""}
               placeholder="common, or your tenant GUID"
               autoComplete="off"
-              className="md:max-w-sm"
             />
           </div>
         )}

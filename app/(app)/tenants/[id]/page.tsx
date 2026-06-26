@@ -596,7 +596,7 @@ export default async function TenantDetail({
                       <form action={removeCoTenant}>
                         <input type="hidden" name="leaseTenantId" value={ct.id} />
                         <ConfirmSubmitButton
-                          variant="ghost"
+                          variant="destructive"
                           size="xs"
                           confirmMessage={`Remove co-tenant ${ct.tenant.firstName} ${ct.tenant.lastName} from this lease?`}
                         >

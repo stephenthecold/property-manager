@@ -108,7 +108,6 @@ export function EmailForm({ initial }: { initial: EmailInitial }) {
                 name="emailFromName"
                 defaultValue={initial.emailFromName}
                 placeholder="Shown to recipients, e.g. your business name"
-                className="md:max-w-sm"
               />
             </div>
 
@@ -184,7 +183,6 @@ export function EmailForm({ initial }: { initial: EmailInitial }) {
                       : "Required"
                   }
                   autoComplete="off"
-                  className="md:max-w-sm"
                 />
                 <p className="text-xs text-muted-foreground">{SECRET_HINT}</p>
               </div>
@@ -304,7 +302,6 @@ export function EmailForm({ initial }: { initial: EmailInitial }) {
               name="testEmail"
               type="email"
               placeholder="you@example.com"
-              className="w-64"
             />
           </div>
           <Button type="submit" variant="outline" disabled={testPending}>

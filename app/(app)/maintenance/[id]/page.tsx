@@ -235,7 +235,7 @@ export default async function MaintenanceJobPage({
                 {open && (
                   <FormDialog
                     trigger="Change"
-                    triggerVariant="ghost"
+                    triggerVariant="outline"
                     triggerSize="xs"
                     title="Change status"
                     description={job.title}
@@ -275,7 +275,7 @@ export default async function MaintenanceJobPage({
                 {open && (
                   <FormDialog
                     trigger="Assign"
-                    triggerVariant="ghost"
+                    triggerVariant="outline"
                     triggerSize="xs"
                     title="Assign job"
                     description={job.title}
