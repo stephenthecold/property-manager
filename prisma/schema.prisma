@@ -813,6 +813,10 @@ model Payment {
   appliedPeriodKey String? // non-authoritative hint for receipts/reports
   // Client-minted UUID; UNIQUE so a double-submit cannot create two payments.
   idempotencyKey   String        @unique
+  // Attribution: set when this payment was recorded from / attached to a
+  // captured inbound email (module "mailbox"). Loose ref like tenantId — never
+  // affects allocation or balances.
+  sourceEmailId    String?
   notes            String?
   createdBy        String?
   createdAt        DateTime      @default(now())
@@ -826,6 +830,7 @@ model Payment {
   @@index([paymentDate])
   @@index([status, paymentDate])
   @@index([payerId])
+  @@index([sourceEmailId])
 }
 
 // ---------------------------------------------------------------------------

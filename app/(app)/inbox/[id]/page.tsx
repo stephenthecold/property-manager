@@ -1,24 +1,40 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireCapability } from "@/lib/auth/session";
+import { getDisplayRole, requireCapability } from "@/lib/auth/session";
+import { hasCapability } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db";
-import { fromCents } from "@/lib/money";
+import { formatCurrency, fromCents } from "@/lib/money";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getInboundEmail } from "@/lib/services/inbound-email";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { listActiveVendors } from "@/lib/services/vendors";
+import {
+  parsePaymentEmail,
+  paymentLineKey,
+} from "@/lib/services/payment-email/parse";
+import { suggestLeaseId } from "@/lib/services/payment-email/match";
+import {
+  emailPaymentIdempotencyKey,
+  listActiveLeaseOptions,
+  paymentsForEmail,
+  recentPaymentsForAttach,
+} from "@/lib/services/inbox-payment";
 import {
   suggestFromOcrText,
   type OcrSuggestion,
 } from "@/lib/providers/ocr/suggest";
 import {
   archiveInboxAction,
+  attachInboxPaymentAction,
   deleteInboxAction,
   markInboxReadAction,
   postInboxExpenseAction,
+  recordInboxPaymentAction,
 } from "../actions";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { FormDialog } from "@/components/app/form-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,6 +129,57 @@ export default async function InboxDetailPage({
     : undefined;
 
   const posted = email.status === "posted";
+
+  // Payment capture: parse the email for payment lines and, if any (and the
+  // viewer can record payments), gather what the "Record as payment" card needs.
+  const { actingRole } = await getDisplayRole();
+  const canRecordPayment = hasCapability(
+    actingRole,
+    "payments.manage",
+    app.rolePermissions,
+  );
+  const parsedPayments = parsePaymentEmail({
+    fromEmail: email.fromEmail,
+    subject: email.subject,
+    body: email.body,
+  });
+  const showPaymentCard = canRecordPayment && parsedPayments.lines.length > 0;
+
+  const [leaseOptions, linkedPayments, attachablePayments] = showPaymentCard
+    ? await Promise.all([
+        listActiveLeaseOptions(),
+        paymentsForEmail(email.id),
+        recentPaymentsForAttach(),
+      ])
+    : [[], [], []];
+
+  // Per parsed line: a stable row key, whether it's already recorded (a payment
+  // with the matching idempotency key), and a best-effort suggested lease.
+  const paymentLines = parsedPayments.lines.map((line, i) => {
+    const rowKey = paymentLineKey(line, i);
+    const recorded = linkedPayments.find(
+      (p) => p.idempotencyKey === emailPaymentIdempotencyKey(email.id, rowKey),
+    );
+    return {
+      line,
+      rowKey,
+      recorded,
+      suggestedLeaseId: suggestLeaseId(line.payerName, leaseOptions),
+      defaultNote: [
+        parsedPayments.provider !== "unknown" ? parsedPayments.provider : null,
+        line.payerName ? `from ${line.payerName}` : null,
+        line.memo,
+        line.reference ? `ref ${line.reference}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  });
+  // Payments ATTACHED (not recorded-from) this email — different idempotency key.
+  const attachedPayments = linkedPayments.filter(
+    (p) => !p.idempotencyKey.startsWith(`inbound_email:${email.id}:`),
+  );
+  const emailDateDefault = email.receivedAt.toLocaleDateString("en-CA");
 
   return (
     <div className="space-y-6">
@@ -263,6 +330,216 @@ export default async function InboxDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {showPaymentCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Record as payment</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Parsed from this {parsedPayments.provider} email — review and confirm
+              the tenant before recording. Nothing posts to a ledger until you do.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {paymentLines.map(
+              ({ line, rowKey, recorded, suggestedLeaseId, defaultNote }) => (
+                <div
+                  key={rowKey}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="text-sm">
+                    <span className="font-medium">
+                      {formatCurrency(line.amountCents, "USD")}
+                    </span>
+                    {line.payerName && (
+                      <span className="text-muted-foreground"> · {line.payerName}</span>
+                    )}
+                    {line.memo && (
+                      <span className="text-muted-foreground"> · {line.memo}</span>
+                    )}
+                    {line.reference && (
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {line.reference}
+                      </span>
+                    )}
+                  </div>
+                  {recorded ? (
+                    <span className="flex items-center gap-2 text-sm">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                      >
+                        Recorded
+                      </Badge>
+                      <Link
+                        href={`/tenants/${recorded.lease.id}`}
+                        className="text-muted-foreground hover:underline"
+                      >
+                        {recorded.lease.tenant.firstName}{" "}
+                        {recorded.lease.tenant.lastName}
+                      </Link>
+                    </span>
+                  ) : (
+                    <FormDialog
+                      trigger="Record payment"
+                      title="Record payment"
+                      wide
+                      action={recordInboxPaymentAction}
+                      submitLabel="Record payment"
+                    >
+                      <input type="hidden" name="inboundEmailId" value={email.id} />
+                      <input type="hidden" name="rowKey" value={rowKey} />
+                      <div className="space-y-2">
+                        <Label htmlFor={`lease-${rowKey}`}>Tenant / lease</Label>
+                        <select
+                          id={`lease-${rowKey}`}
+                          name="leaseId"
+                          required
+                          defaultValue={suggestedLeaseId ?? ""}
+                          className="h-9 w-full rounded-md border px-3 text-sm"
+                        >
+                          <option value="" disabled>
+                            Select tenant…
+                          </option>
+                          {leaseOptions.map((o) => (
+                            <option key={o.leaseId} value={o.leaseId}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {suggestedLeaseId && (
+                          <p className="text-xs text-muted-foreground">
+                            Suggested from “{line.payerName}” — confirm it&apos;s right.
+                          </p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label htmlFor={`amount-${rowKey}`}>Amount</Label>
+                          <Input
+                            id={`amount-${rowKey}`}
+                            name="amount"
+                            inputMode="decimal"
+                            defaultValue={fromCents(line.amountCents)}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`date-${rowKey}`}>Date</Label>
+                          <Input
+                            id={`date-${rowKey}`}
+                            name="paymentDate"
+                            type="date"
+                            defaultValue={
+                              line.paymentDate
+                                ? line.paymentDate.toLocaleDateString("en-CA")
+                                : emailDateDefault
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`method-${rowKey}`}>Method</Label>
+                          <select
+                            id={`method-${rowKey}`}
+                            name="method"
+                            defaultValue={parsedPayments.method}
+                            className="h-9 w-full rounded-md border px-3 text-sm"
+                          >
+                            {[
+                              "online",
+                              "cash_app",
+                              "ach",
+                              "card",
+                              "check",
+                              "money_order",
+                              "cash",
+                              "other",
+                            ].map((m) => (
+                              <option key={m} value={m}>
+                                {m.replace(/_/g, " ")}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`ref-${rowKey}`}>Reference</Label>
+                        <Input
+                          id={`ref-${rowKey}`}
+                          name="referenceNumber"
+                          defaultValue={line.reference ?? ""}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`notes-${rowKey}`}>Notes</Label>
+                        <Input
+                          id={`notes-${rowKey}`}
+                          name="notes"
+                          defaultValue={defaultNote}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Records a tenant payment (money in) and applies it to the
+                        oldest open charges. Re-recording the same line is a no-op.
+                      </p>
+                    </FormDialog>
+                  )}
+                </div>
+              ),
+            )}
+
+            {attachedPayments.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Attached to{" "}
+                {attachedPayments
+                  .map(
+                    (p) =>
+                      `${p.lease.tenant.firstName} ${p.lease.tenant.lastName} (${formatCurrency(p.amountCents, "USD")})`,
+                  )
+                  .join(", ")}
+                .
+              </p>
+            )}
+
+            <div className="border-t pt-3">
+              <FormDialog
+                trigger="Attach to an existing payment"
+                triggerVariant="ghost"
+                title="Attach to an existing payment"
+                action={attachInboxPaymentAction}
+                submitLabel="Attach"
+              >
+                <input type="hidden" name="inboundEmailId" value={email.id} />
+                <p className="text-sm text-muted-foreground">
+                  Already recorded this in Payments? Link this email to it as
+                  documentation — no new payment is created.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="attach-payment">Payment</Label>
+                  <select
+                    id="attach-payment"
+                    name="paymentId"
+                    required
+                    defaultValue=""
+                    className="h-9 w-full rounded-md border px-3 text-sm"
+                  >
+                    <option value="" disabled>
+                      Select a recent payment…
+                    </option>
+                    {attachablePayments.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.lease.tenant.firstName} {p.lease.tenant.lastName} —{" "}
+                        {formatCurrency(p.amountCents, "USD")} ·{" "}
+                        {p.paymentDate.toLocaleDateString("en-US")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </FormDialog>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {posted ? (
         <Card>
