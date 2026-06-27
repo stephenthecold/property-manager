@@ -26,6 +26,11 @@ Built across parallel worktree-agent batches (each through the verification gate
   Asset/warranty registry (#80) · **D** — Lease-expiration alerts (#81) · **E** — Portal notices inbox
   (#82) · **I** — Audit-log CSV export (#83) · **D** — Printable lease abstract (#85) · **H** —
   Reminder delivery tracking (#86).
+- **Later batch (this session):** **D** — Renewal offer→acceptance (extend or successor lease) with
+  portal + dashboard surfacing and successor-handoff hardening (#117–#120) · **E** — tenant ledger CSV
+  export (#121) · **D** — lease-expiration weekly digest + configurable window (#122) · **D/G** — 🔥
+  deposit→ledger move-out statement + damage chargeback, applying the deposit as a FIFO-allocated credit
+  so the open-charge/aging view stays consistent (#123).
 - Plus tooling: the `/competitive-audit` + `/feature-intake` skills (#70) and the CLAUDE.md
   "parallelize with agents" clause (#72).
 
@@ -45,12 +50,14 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
 ## Focus areas — what's left
 
 ### D. Leasing lifecycle
-- ✅ **#81** Lease-expiration alerts — *shipped as a dashboard section.* Follow-up: the weekly **digest**
-  + a configurable window (`AppSettings.leaseExpirationAlertDays`) are still open.
-- `[GAP] V:H E:M` — **Renewal offer→acceptance** — staff mints an offer (new rent/term), tenant
-  accepts + e-signs. New `LeaseRenewalOffer`; reuse e-sign token/signature path (`SigningRequest.kind`).
-- `[COHESION] V:H E:M` — 🔥 **Deposit→ledger move-out statement** — itemize deductions, post refund or
-  balance-owed as ledger entries (`sourceType="inspection_disposition"`). Touches `postPayment`/ledger.
+- ✅ **#81** Lease-expiration alerts — *shipped as a dashboard section.* The weekly **digest** + a
+  configurable window (`AppSettings.leaseExpirationAlertDays`) shipped in **#122**.
+- ✅ **#117** **Renewal offer→acceptance** — staff mint an offer (new rent/term), tenant accepts +
+  e-signs via the existing token/signature path (extend-in-place or successor lease). Follow-ups:
+  dashboard entry (**#118**), portal surfacing (**#119**), successor-handoff hardening (**#120**).
+- ✅ **#123** 🔥 **Deposit→ledger move-out statement** — itemize deductions; finalize posts damages as a
+  charge and the applied deposit as a FIFO-allocated credit (retiring open charges so aging stays
+  consistent), recording the refund due. `sourceType="deposit_disposition"`.
 - ✅ **#85** **Lease abstract** — one-page printable summary (links from the agreement page + leases list).
 - `[GAP] V:M E:M` — **Amendments/addenda** — rider text + signature (`SigningRequest.kind="amendment"`).
 - `[POLISH] V:M E:S` — **Prorate-first-period UI** — `Lease.prorateFirstPeriod` exists; expose at create.
@@ -59,9 +66,9 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
 ### E. Resident portal
 - ✅ **#71** Maintenance-request photos. ✅ **#82** Notices inbox.
 - `[GAP] V:H E:M` — In-portal **autopay enrollment** *(depends on a real payment gateway — see C)*.
-- `[GAP] V:H E:S` — **Renewal acceptance in portal** (pairs with D renewal flow).
-- `[POLISH] V:M E:S` — Ledger date/type filters + **tenant CSV download** of their ledger; payment-method
-  hint on Pay-now.
+- ✅ **#119** **Renewal acceptance in portal** — pending offers surfaced read-only in the resident portal.
+- ✅ **#121** Ledger date/type filters + **tenant CSV download** of their ledger (settings-gated module).
+  *(Payment-method hint on Pay-now remains.)*
 - `[GAP] V:M E:L` — PWA/offline.
 
 ### G. Maintenance & ops
@@ -69,7 +76,8 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
   ✅ **#80** Asset/warranty registry.
 - `[POLISH] V:M E:M` — **Inspection templates + photos + report** — *Inspections exist;* the gap is
   reusable templates (predefined item lists), photo capture on items, and a printable report.
-- `[COHESION] V:M E:S` — 🔥 **Damage chargeback** from a move-out inspection item → ledger (with D).
+- ✅ **#123** 🔥 **Damage chargeback** — move-out deductions post to the ledger as part of the deposit
+  disposition (see D).
 - `[COHESION] V:M E:S` — Turnover/make-ready checklist/Kanban; parts/inventory tags.
 - `[POLISH] V:M E:S` — Link an `Asset` to a `MaintenanceJob` (`MaintenanceJob.assetId`) — deferred out
   of #80 to keep it standalone.
@@ -107,16 +115,16 @@ status (`ReminderStatus` delivered/failed + `recordDeliveryStatus`).
 
 ## Next up — recommended order
 
-**Clean (no hot zone), good for parallel worktree agents** — best done once the open PRs merge, so
-schema additions don't cascade-conflict:
-1. **Renewal offer→acceptance** (D + E) — the biggest remaining small-operator win; new `LeaseRenewalOffer`,
-   reuse the e-sign path.
-2. **Turnover/make-ready checklist** (G) and **Asset↔Job link** (`MaintenanceJob.assetId`, G).
-3. **Lease-expiration digest** (D follow-up) and **tenant ledger CSV** (E).
+**Shipped since this list was last ordered:** Renewal offer→acceptance + portal + dashboard + hardening
+(#117–#120), tenant ledger CSV (#121), lease-expiration digest + window (#122), and the 🔥
+deposit→ledger move-out statement + damage chargeback with FIFO open-charge retirement (#123).
+
+**Still clean (no hot zone), good for parallel worktree agents:**
+1. **Turnover/make-ready checklist** (G) and **Asset↔Job link** (`MaintenanceJob.assetId`, G).
+2. **Inspection templates + photos + report** (G) — reusable item lists, per-item photos, printable report.
 
 **Hot zones — need an explicit go-ahead + blast-radius writeup first** (CLAUDE.md):
-- 🔥 **Deposit→ledger move-out statement** (D) — posts real ledger entries; blast radius = tenant balances.
-- 🔥 **Damage chargeback → ledger** (G, pairs with the above).
+- 🔥 Staff **2FA/TOTP** (I) — touches auth.
 - 🔥 **Staff 2FA/TOTP** (I) — touches the auth/session lane.
 
 Build each with `/feature-intake`; refresh this file with `/competitive-audit` as the app evolves.

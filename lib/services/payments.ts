@@ -32,7 +32,7 @@ export interface PostPaymentInput {
   actor: AuditContext;
 }
 
-async function loadOpenChargesTx(
+export async function loadOpenChargesTx(
   tx: Tx,
   leaseId: string,
 ): Promise<OpenCharge[]> {
