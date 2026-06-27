@@ -6,7 +6,6 @@ import {
   cancelSigningRequest,
 } from "@/lib/services/esign";
 import { snapshotAgreementTemplate } from "@/lib/lease/agreement-format";
-import { getAppSettings } from "@/lib/services/app-settings";
 import { formatCurrency } from "@/lib/money";
 import { formatDateInTz } from "@/lib/dates";
 import {
@@ -210,11 +209,12 @@ export async function applyAcceptedRenewal(
   tx: Tx,
   signingRequestId: string,
   now: Date,
-): Promise<void> {
+  app: Parameters<typeof snapshotAgreementTemplate>[0],
+): Promise<{ model: string } | null> {
   const offer = await tx.leaseRenewalOffer.findFirst({
     where: { signingRequestId, status: "sent" },
   });
-  if (!offer) return;
+  if (!offer) return null;
 
   if (offer.renewalModel === "successor") {
     // Successor: mint a NEW lease as "draft" copying the prior lease's terms with
@@ -229,8 +229,7 @@ export async function applyAcceptedRenewal(
       where: { id: offer.leaseId },
       include: { coTenants: { select: { tenantId: true } } },
     });
-    if (!old) return;
-    const app = await getAppSettings();
+    if (!old) return null;
     const successor = await tx.lease.create({
       data: {
         tenantId: old.tenantId,
@@ -273,14 +272,14 @@ export async function applyAcceptedRenewal(
         endDate: offer.proposedEndDate.toISOString(),
       },
     });
-    return;
+    return { model: "successor" };
   }
 
   if (offer.renewalModel !== "extend") {
     console.error(
       `[renewal] offer ${offer.id} has unsupported model "${offer.renewalModel}"; not applying.`,
     );
-    return;
+    return null;
   }
 
   // Capture the prior endDate + scheduled rent so the audit trail records what
@@ -328,6 +327,7 @@ export async function applyAcceptedRenewal(
       effectiveDate: offer.effectiveDate.toISOString(),
     },
   });
+  return { model: "extend" };
 }
 
 /** Open + recent renewal offers for a lease (staff agreement page), newest first. */

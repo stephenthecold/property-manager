@@ -187,33 +187,50 @@ export async function endRenewedLeases(now: Date): Promise<number> {
 
   let handed = 0;
   for (const offer of offers) {
-    await prisma.$transaction(async (tx) => {
-      // End the prior lease first, freeing the unit.
-      const endRes = await tx.lease.updateMany({
-        where: { id: offer.leaseId, status: "active" },
-        data: { status: "ended" },
+    try {
+      // Isolate per offer: one stuck handoff must not abort the rest of the run
+      // (nor the expiry sweep that follows in runBilling).
+      const ok = await prisma.$transaction(async (tx) => {
+        // End the prior lease first, freeing the unit.
+        const endRes = await tx.lease.updateMany({
+          where: { id: offer.leaseId, status: "active" },
+          data: { status: "ended" },
+        });
+        if (endRes.count === 0) return false; // handed off elsewhere / status changed
+        // Then activate the successor (draft -> active): same tx, so at no
+        // committed point are two leases active on the unit. If the successor is
+        // no longer a clean draft (e.g. it was terminated), DON'T leave the prior
+        // lease ended with nothing to replace it — throw to roll the whole tx
+        // back, keeping the prior lease active. It surfaces in the log and is
+        // retried next run rather than silently vacating the unit.
+        const actRes = await tx.lease.updateMany({
+          where: { id: offer.successorLeaseId!, status: "draft" },
+          data: { status: "active" },
+        });
+        if (actRes.count !== 1) {
+          throw new Error(
+            `handoff abort: successor ${offer.successorLeaseId} not draft ` +
+              `(activated ${actRes.count}); prior lease ${offer.leaseId} kept active`,
+          );
+        }
+        await writeAudit(tx, {
+          actorType: "system",
+          action: "lease.renewal_handoff",
+          entityType: "Lease",
+          entityId: offer.leaseId,
+          after: {
+            reason: "successor_renewal",
+            offerId: offer.id,
+            endedLeaseId: offer.leaseId,
+            activatedLeaseId: offer.successorLeaseId,
+          },
+        });
+        return true;
       });
-      if (endRes.count === 0) return; // handed off elsewhere / status changed
-      // Then activate the successor (draft -> active): same tx, so at no
-      // committed point are two leases active on the same unit.
-      await tx.lease.updateMany({
-        where: { id: offer.successorLeaseId!, status: "draft" },
-        data: { status: "active" },
-      });
-      await writeAudit(tx, {
-        actorType: "system",
-        action: "lease.renewal_handoff",
-        entityType: "Lease",
-        entityId: offer.leaseId,
-        after: {
-          reason: "successor_renewal",
-          offerId: offer.id,
-          endedLeaseId: offer.leaseId,
-          activatedLeaseId: offer.successorLeaseId,
-        },
-      });
-      handed++;
-    });
+      if (ok) handed++;
+    } catch (e) {
+      console.error(`[renewal] handoff failed for offer ${offer.id}:`, e);
+    }
   }
   return handed;
 }
@@ -242,20 +259,25 @@ export async function expireLapsedRenewalOffers(now: Date): Promise<number> {
     // Lapsed = the linked request is gone, or still "sent" but past its expiry.
     const lapsed = !req || (req.status === "sent" && req.expiresAt < now);
     if (!lapsed) continue;
-    await prisma.$transaction(async (tx) => {
-      const res = await tx.leaseRenewalOffer.updateMany({
-        where: { id: offer.id, status: "sent" },
-        data: { status: "expired" },
+    try {
+      const ok = await prisma.$transaction(async (tx) => {
+        const res = await tx.leaseRenewalOffer.updateMany({
+          where: { id: offer.id, status: "sent" },
+          data: { status: "expired" },
+        });
+        if (res.count === 0) return false;
+        await writeAudit(tx, {
+          actorType: "system",
+          action: "renewal.offer_expired",
+          entityType: "LeaseRenewalOffer",
+          entityId: offer.id,
+        });
+        return true;
       });
-      if (res.count === 0) return;
-      await writeAudit(tx, {
-        actorType: "system",
-        action: "renewal.offer_expired",
-        entityType: "LeaseRenewalOffer",
-        entityId: offer.id,
-      });
-      expired++;
-    });
+      if (ok) expired++;
+    } catch (e) {
+      console.error(`[renewal] expire failed for offer ${offer.id}:`, e);
+    }
   }
   return expired;
 }
