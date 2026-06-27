@@ -8,6 +8,7 @@ import {
   groupIncomeByMonth,
   type IncomeEntry,
 } from "@/lib/accounting/income";
+import type { LedgerEntryType } from "@/lib/generated/prisma/enums";
 
 export interface RentRollRow {
   property: string;
@@ -151,9 +152,14 @@ export interface LedgerReportRow {
   date: string;
   type: string;
   description: string;
+  /** Decimal string ("-50.00") — the CSV column (LEDGER_HEADERS). */
   amount: string;
   /** Running SUM(amountCents) in effectiveDate, createdAt, id order. */
   balance: string;
+  /** Integer cents as a string, for callers that re-format (e.g. the portal
+   *  ledger page formats via lib/money). Not a CSV column. */
+  amountCents?: string;
+  balanceCents?: string;
 }
 
 export const LEDGER_HEADERS = [
@@ -168,6 +174,34 @@ export const LEDGER_HEADERS = [
 export async function getTenantLedger(
   tenantId: string,
 ): Promise<LedgerReportRow[]> {
+  return getTenantLedgerFiltered(tenantId, {});
+}
+
+/** Optional date/type narrowing for a tenant's own ledger (portal export). */
+export interface TenantLedgerFilter {
+  /** Inclusive lower bound on effectiveDate (already resolved to an instant). */
+  from?: Date;
+  /** Inclusive upper bound on effectiveDate (already resolved to an instant). */
+  to?: Date;
+  /** Restrict to a single entry type; undefined = all types. */
+  entryType?: LedgerEntryType;
+}
+
+/**
+ * A tenant's own ledger rows (primary OR co-tenant leases — matching the portal
+ * dashboard), optionally narrowed by effectiveDate range and/or entry type,
+ * with a running SUM(amountCents) balance.
+ *
+ * Scoping is ALWAYS by the supplied tenantId; callers pass the SIGNED-IN
+ * tenant's id (never a client-supplied one). The running balance accumulates
+ * over the returned (filtered) rows in chronological order — the portal shows
+ * "this tenant's activity", matching getTenantLedger above; note that narrowing
+ * the range therefore yields a partial running total, not an opening balance.
+ */
+export async function getTenantLedgerFiltered(
+  tenantId: string,
+  filter: TenantLedgerFilter,
+): Promise<LedgerReportRow[]> {
   const entries = await prisma.ledgerEntry.findMany({
     // Leases where the tenant is primary OR a co-tenant (the on-screen ledger
     // shows co-tenant leases too; the CSV must match).
@@ -175,6 +209,15 @@ export async function getTenantLedger(
       lease: {
         OR: [{ tenantId }, { coTenants: { some: { tenantId } } }],
       },
+      ...(filter.entryType ? { entryType: filter.entryType } : {}),
+      ...(filter.from || filter.to
+        ? {
+            effectiveDate: {
+              ...(filter.from ? { gte: filter.from } : {}),
+              ...(filter.to ? { lte: filter.to } : {}),
+            },
+          }
+        : {}),
     },
     orderBy: [{ effectiveDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     include: { lease: { include: { unit: { include: { property: true } } } } },
@@ -190,6 +233,8 @@ export async function getTenantLedger(
       description: e.description ?? "",
       amount: fromCents(e.amountCents),
       balance: fromCents(balance),
+      amountCents: e.amountCents.toString(),
+      balanceCents: balance.toString(),
     };
   });
 }

@@ -467,8 +467,17 @@ export default async function PortalHomePage({
       {/* Charges & payments */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">Recent activity</CardTitle>
+            {settings.modules.tenantLedgerExport && (
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href="/portal/ledger" />}
+              >
+                Full ledger &amp; export
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {ledger.length === 0 ? (

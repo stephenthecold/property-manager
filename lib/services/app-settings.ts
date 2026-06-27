@@ -63,6 +63,8 @@ export interface ModuleFlags {
   publicSite: boolean;
   /** Inbound email inbox: capture a mailbox for invoices/receipts (/inbox). */
   mailbox: boolean;
+  /** Resident-portal ledger CSV export + date/type filters (/portal/ledger). */
+  tenantLedgerExport: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -77,6 +79,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   vendors: false,
   publicSite: false,
   mailbox: false,
+  tenantLedgerExport: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -110,6 +113,10 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.publicSite === "boolean" ? obj.publicSite : MODULE_DEFAULTS.publicSite,
     mailbox:
       typeof obj.mailbox === "boolean" ? obj.mailbox : MODULE_DEFAULTS.mailbox,
+    tenantLedgerExport:
+      typeof obj.tenantLedgerExport === "boolean"
+        ? obj.tenantLedgerExport
+        : MODULE_DEFAULTS.tenantLedgerExport,
   };
 }
 
