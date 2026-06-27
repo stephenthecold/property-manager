@@ -8,6 +8,7 @@ import {
   getInspectionChecklist,
 } from "@/lib/services/inspections";
 import { inspectionStatusLabel, inspectionTypeLabel } from "@/lib/inspections/disposition";
+import { sumChecklistDeductions } from "@/lib/inspections/checklist";
 import {
   conditionPhaseLabel,
   listConditionLogsForLease,
@@ -38,15 +39,14 @@ export default async function InspectionDetailPage({
   if (!inspection) notFound();
 
   const isMoveOut = inspection.type === "move_out";
-  const disposition = isMoveOut
-    ? await dispositionForInspection(inspection.id, inspection.lease.id)
-    : null;
-
   const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US") : "—");
   const [conditionLogs, checklist] = await Promise.all([
     listConditionLogsForLease(inspection.lease.id),
     getInspectionChecklist(inspection.id),
   ]);
+  const disposition = isMoveOut
+    ? await dispositionForInspection(inspection.lease.id, sumChecklistDeductions(checklist))
+    : null;
   const unitId = inspection.lease.unit.id;
   const checklistEditable = inspection.status !== "canceled";
 

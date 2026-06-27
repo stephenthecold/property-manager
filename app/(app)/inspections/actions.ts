@@ -107,8 +107,14 @@ export async function addChecklistItemAction(
   const label = str(fd, "label");
   if (!label) return { error: "Describe what to check." };
 
-  const amountCents = parseAmount(str(fd, "amount"));
-  if (amountCents === null) return { error: "Enter a valid deduction amount." };
+  // Only touch the deduction when the form actually carried the field (move-out);
+  // otherwise leave it to the service default. Blank-but-present means "clear".
+  let amountCents: bigint | undefined;
+  if (fd.has("amount")) {
+    const parsed = parseAmount(str(fd, "amount"));
+    if (parsed === null) return { error: "Enter a valid deduction amount." };
+    amountCents = parsed;
+  }
 
   const res = await addChecklistItem({
     inspectionId,
@@ -132,8 +138,14 @@ export async function updateChecklistItemAction(
   const inspectionId = str(fd, "inspectionId");
   if (!itemId) return { error: "Missing item id." };
 
-  const amountCents = parseAmount(str(fd, "amount"));
-  if (amountCents === null) return { error: "Enter a valid deduction amount." };
+  // Only touch the deduction when the form carried the field (move-out edit);
+  // a status/note-only edit omits it and the service preserves the prior amount.
+  let amountCents: bigint | undefined;
+  if (fd.has("amount")) {
+    const parsed = parseAmount(str(fd, "amount"));
+    if (parsed === null) return { error: "Enter a valid deduction amount." };
+    amountCents = parsed;
+  }
 
   const res = await updateChecklistItem({
     itemId,

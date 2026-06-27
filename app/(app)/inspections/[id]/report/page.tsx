@@ -12,6 +12,7 @@ import { inspectionStatusLabel, inspectionTypeLabel } from "@/lib/inspections/di
 import {
   checklistStatusClass,
   checklistStatusLabel,
+  sumChecklistDeductions,
   tallyChecklist,
 } from "@/lib/inspections/checklist";
 import { formatCurrency } from "@/lib/money";
@@ -36,12 +37,11 @@ export default async function InspectionReportPage({
   if (!inspection) notFound();
 
   const app = settings;
-  const [checklist, disposition] = await Promise.all([
-    getInspectionChecklist(inspection.id),
+  const checklist = await getInspectionChecklist(inspection.id);
+  const disposition =
     inspection.type === "move_out"
-      ? dispositionForInspection(inspection.id, inspection.lease.id)
-      : Promise.resolve(null),
-  ]);
+      ? await dispositionForInspection(inspection.lease.id, sumChecklistDeductions(checklist))
+      : null;
   const tally = tallyChecklist(checklist);
 
   const property = inspection.lease.unit.property;

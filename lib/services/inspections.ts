@@ -73,22 +73,18 @@ async function depositTotals(leaseId: string): Promise<{
   };
 }
 
-/** Move-out deposit disposition for an inspection (deposits − its deductions). */
+/**
+ * Move-out deposit disposition: the lease's deposits − the checklist deductions.
+ * The caller passes the deductions total (summed from the already-loaded
+ * checklist via sumChecklistDeductions), so the list and the total share one
+ * source and we don't re-aggregate.
+ */
 export async function dispositionForInspection(
-  inspectionId: string,
   leaseId: string,
+  deductionsCents: bigint,
 ): Promise<DepositDisposition> {
-  const [totals, items] = await Promise.all([
-    depositTotals(leaseId),
-    prisma.inspectionChecklistItem.aggregate({
-      where: { inspectionId },
-      _sum: { amountCents: true },
-    }),
-  ]);
-  return computeDisposition({
-    ...totals,
-    deductionsCents: items._sum.amountCents ?? 0n,
-  });
+  const totals = await depositTotals(leaseId);
+  return computeDisposition({ ...totals, deductionsCents });
 }
 
 export async function createInspection(input: {
@@ -325,7 +321,7 @@ export async function removeChecklistItem(input: {
 }): Promise<{ ok: boolean }> {
   const item = await prisma.inspectionChecklistItem.findUnique({
     where: { id: input.itemId },
-    select: { id: true, inspectionId: true, label: true },
+    select: { id: true, inspectionId: true, label: true, amountCents: true },
   });
   if (!item) return { ok: true };
   const docs = await prisma.uploadedDocument.findMany({
@@ -338,7 +334,7 @@ export async function removeChecklistItem(input: {
       action: "inspection.checklist_item_removed",
       entityType: "Inspection",
       entityId: item.inspectionId,
-      before: { label: item.label },
+      before: { label: item.label, amountCents: item.amountCents.toString() },
     },
     async (tx) => {
       await tx.uploadedDocument.deleteMany({ where: { inspectionChecklistItemId: item.id } });
