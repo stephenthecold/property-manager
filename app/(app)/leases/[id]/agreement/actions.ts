@@ -273,12 +273,13 @@ export async function createRenewalOfferAction(fd: FormData): Promise<void> {
     backToAgreement(leaseId, { error: "New rent must be a valid amount (e.g. 1300.00)." });
   }
   const termMonths = Number(String(fd.get("termMonths") ?? "12").trim() || "12");
+  const renewalModel = String(fd.get("renewalModel") ?? "extend").trim();
 
   let result;
   try {
     result = await createRenewalOffer({
       leaseId,
-      renewalModel: "extend",
+      renewalModel,
       proposedRentCents,
       termMonths,
       actor,

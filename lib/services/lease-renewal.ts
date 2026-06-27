@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { writeAudit, type AuditContext, type Tx } from "@/lib/audit/audit";
 import {
   createSigningRequest,
   cancelSigningRequest,
 } from "@/lib/services/esign";
+import { snapshotAgreementTemplate } from "@/lib/lease/agreement-format";
 import { formatCurrency } from "@/lib/money";
 import { formatDateInTz } from "@/lib/dates";
 import {
@@ -43,13 +45,6 @@ export async function createRenewalOffer(i: {
 
   if (!isRenewalModel(i.renewalModel)) {
     return { ok: false, error: "Invalid renewal model." };
-  }
-  if (i.renewalModel === "successor") {
-    return {
-      ok: false,
-      error:
-        "Successor-lease renewals aren't available yet — use Extend (same lease, new term + rent) for now.",
-    };
   }
   if (!Number.isInteger(i.termMonths) || i.termMonths < 1 || i.termMonths > 60) {
     return { ok: false, error: "Renewal term must be between 1 and 60 months." };
@@ -214,18 +209,77 @@ export async function applyAcceptedRenewal(
   tx: Tx,
   signingRequestId: string,
   now: Date,
-): Promise<void> {
+  app: Parameters<typeof snapshotAgreementTemplate>[0],
+): Promise<{ model: string } | null> {
   const offer = await tx.leaseRenewalOffer.findFirst({
     where: { signingRequestId, status: "sent" },
   });
-  if (!offer) return;
+  if (!offer) return null;
+
+  if (offer.renewalModel === "successor") {
+    // Successor: mint a NEW lease as "draft" copying the prior lease's terms with
+    // the new rent + dates (contiguous: starts the day after the prior endDate).
+    // It stays DRAFT — so it doesn't bill yet and doesn't trip the
+    // one-active-lease-per-unit invariant while the prior lease is still active.
+    // The prior lease keeps billing through its own endDate; the billing worker
+    // (`endRenewedLeases`) then ENDS it and ACTIVATES the successor in one tx once
+    // that date passes — no early-end, double-bill, or two-active window. The
+    // deposit carries as an informational copy (no ledger entry); co-tenants too.
+    const old = await tx.lease.findUnique({
+      where: { id: offer.leaseId },
+      include: { coTenants: { select: { tenantId: true } } },
+    });
+    if (!old) return null;
+    const successor = await tx.lease.create({
+      data: {
+        tenantId: old.tenantId,
+        unitId: old.unitId,
+        startDate: offer.effectiveDate,
+        endDate: offer.proposedEndDate,
+        rentAmountCents: offer.proposedRentAmountCents,
+        dueDay: old.dueDay,
+        gracePeriodDays: old.gracePeriodDays,
+        lateFeeType: old.lateFeeType,
+        lateFeeAmountCents: old.lateFeeAmountCents,
+        lateFeeBps: old.lateFeeBps,
+        lateFeeMaxCents: old.lateFeeMaxCents,
+        securityDepositCents: old.securityDepositCents,
+        internetEnabled: old.internetEnabled,
+        internetFeeCents: old.internetFeeCents,
+        utilitiesPaid: old.utilitiesPaid as Prisma.InputJsonValue,
+        utilitiesNotes: old.utilitiesNotes,
+        status: "draft",
+        agreementText: snapshotAgreementTemplate(app),
+        coTenants: old.coTenants.length
+          ? { create: old.coTenants.map((ct) => ({ tenantId: ct.tenantId })) }
+          : undefined,
+      },
+    });
+    await tx.leaseRenewalOffer.update({
+      where: { id: offer.id },
+      data: { status: "accepted", acceptedAt: now, successorLeaseId: successor.id },
+    });
+    await writeAudit(tx, {
+      actorType: "system",
+      action: "renewal.applied_successor",
+      entityType: "Lease",
+      entityId: successor.id,
+      after: {
+        offerId: offer.id,
+        fromLeaseId: old.id,
+        rentAmountCents: offer.proposedRentAmountCents.toString(),
+        startDate: offer.effectiveDate.toISOString(),
+        endDate: offer.proposedEndDate.toISOString(),
+      },
+    });
+    return { model: "successor" };
+  }
 
   if (offer.renewalModel !== "extend") {
-    // Should be unreachable — only "extend" offers can be created today.
     console.error(
       `[renewal] offer ${offer.id} has unsupported model "${offer.renewalModel}"; not applying.`,
     );
-    return;
+    return null;
   }
 
   // Capture the prior endDate + scheduled rent so the audit trail records what
@@ -273,6 +327,7 @@ export async function applyAcceptedRenewal(
       effectiveDate: offer.effectiveDate.toISOString(),
     },
   });
+  return { model: "extend" };
 }
 
 /** Open + recent renewal offers for a lease (staff agreement page), newest first. */

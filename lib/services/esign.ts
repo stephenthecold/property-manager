@@ -510,15 +510,21 @@ export async function completeIfAllSigned(
     // operative wording, so the printable agreement matches what was just
     // signed. Initial leases keep their creation-time snapshot.
     if (lease && request.kind === "renewal") {
-      await tx.lease.update({
-        where: { id: lease.id },
-        data: { agreementText: snapshotAgreementTemplate(app) },
-      });
       // Apply any renewal OFFER attached to this request (new rent/term). Dynamic
       // import breaks the static cycle (lease-renewal imports createSigningRequest
       // from here); it runs in this same tx so terms + completion commit together.
       const { applyAcceptedRenewal } = await import("@/lib/services/lease-renewal");
-      await applyAcceptedRenewal(tx, request.id, now);
+      const applied = await applyAcceptedRenewal(tx, request.id, now, app);
+      // Adopt the current org wording on the signed lease — but NOT for a
+      // SUCCESSOR renewal, where the prior lease is ending (its historical
+      // agreement stays frozen) and the new lease already carries the snapshot.
+      // A wording-only renewal with no offer (applied === null) re-snapshots here.
+      if (applied?.model !== "successor") {
+        await tx.lease.update({
+          where: { id: lease.id },
+          data: { agreementText: snapshotAgreementTemplate(app) },
+        });
+      }
     }
     await writeAudit(tx, {
       actorType: "system",

@@ -167,6 +167,121 @@ export async function applyScheduledRentIncreases(now: Date): Promise<number> {
   return applied;
 }
 
+/**
+ * Hand off an accepted SUCCESSOR renewal once the prior lease's term has passed:
+ * END the prior lease and ACTIVATE the (draft) successor lease — in ONE
+ * transaction so the "one active lease per unit" invariant is never momentarily
+ * violated (the prior lease is ended before the successor is activated).
+ * Idempotent (compare-and-swap on each status) and audited.
+ */
+export async function endRenewedLeases(now: Date): Promise<number> {
+  const offers = await prisma.leaseRenewalOffer.findMany({
+    where: {
+      status: "accepted",
+      renewalModel: "successor",
+      successorLeaseId: { not: null },
+      lease: { status: "active", endDate: { lt: now } },
+    },
+    select: { id: true, leaseId: true, successorLeaseId: true },
+  });
+
+  let handed = 0;
+  for (const offer of offers) {
+    try {
+      // Isolate per offer: one stuck handoff must not abort the rest of the run
+      // (nor the expiry sweep that follows in runBilling).
+      const ok = await prisma.$transaction(async (tx) => {
+        // End the prior lease first, freeing the unit.
+        const endRes = await tx.lease.updateMany({
+          where: { id: offer.leaseId, status: "active" },
+          data: { status: "ended" },
+        });
+        if (endRes.count === 0) return false; // handed off elsewhere / status changed
+        // Then activate the successor (draft -> active): same tx, so at no
+        // committed point are two leases active on the unit. If the successor is
+        // no longer a clean draft (e.g. it was terminated), DON'T leave the prior
+        // lease ended with nothing to replace it — throw to roll the whole tx
+        // back, keeping the prior lease active. It surfaces in the log and is
+        // retried next run rather than silently vacating the unit.
+        const actRes = await tx.lease.updateMany({
+          where: { id: offer.successorLeaseId!, status: "draft" },
+          data: { status: "active" },
+        });
+        if (actRes.count !== 1) {
+          throw new Error(
+            `handoff abort: successor ${offer.successorLeaseId} not draft ` +
+              `(activated ${actRes.count}); prior lease ${offer.leaseId} kept active`,
+          );
+        }
+        await writeAudit(tx, {
+          actorType: "system",
+          action: "lease.renewal_handoff",
+          entityType: "Lease",
+          entityId: offer.leaseId,
+          after: {
+            reason: "successor_renewal",
+            offerId: offer.id,
+            endedLeaseId: offer.leaseId,
+            activatedLeaseId: offer.successorLeaseId,
+          },
+        });
+        return true;
+      });
+      if (ok) handed++;
+    } catch (e) {
+      console.error(`[renewal] handoff failed for offer ${offer.id}:`, e);
+    }
+  }
+  return handed;
+}
+
+/**
+ * Expire renewal offers still "sent" whose e-sign window has closed (the request
+ * is past its expiry, or gone) without completion — so a stale offer stops
+ * wedging the one-open-offer guard. A "completed" or "canceled" request is left
+ * alone (handled by acceptance / cancellation). Idempotent + audited.
+ */
+export async function expireLapsedRenewalOffers(now: Date): Promise<number> {
+  const sent = await prisma.leaseRenewalOffer.findMany({
+    where: { status: "sent", signingRequestId: { not: null } },
+    select: { id: true, signingRequestId: true },
+  });
+  if (sent.length === 0) return 0;
+  const requests = await prisma.signingRequest.findMany({
+    where: { id: { in: sent.map((o) => o.signingRequestId!) } },
+    select: { id: true, status: true, expiresAt: true },
+  });
+  const byId = new Map(requests.map((r) => [r.id, r]));
+
+  let expired = 0;
+  for (const offer of sent) {
+    const req = byId.get(offer.signingRequestId!);
+    // Lapsed = the linked request is gone, or still "sent" but past its expiry.
+    const lapsed = !req || (req.status === "sent" && req.expiresAt < now);
+    if (!lapsed) continue;
+    try {
+      const ok = await prisma.$transaction(async (tx) => {
+        const res = await tx.leaseRenewalOffer.updateMany({
+          where: { id: offer.id, status: "sent" },
+          data: { status: "expired" },
+        });
+        if (res.count === 0) return false;
+        await writeAudit(tx, {
+          actorType: "system",
+          action: "renewal.offer_expired",
+          entityType: "LeaseRenewalOffer",
+          entityId: offer.id,
+        });
+        return true;
+      });
+      if (ok) expired++;
+    } catch (e) {
+      console.error(`[renewal] expire failed for offer ${offer.id}:`, e);
+    }
+  }
+  return expired;
+}
+
 export async function assessLateFeesForLease(
   lease: Lease,
   tz: string,
@@ -322,6 +437,10 @@ export interface BillingRunResult {
   /** Leases that threw and were skipped this run (isolated, not fatal). */
   failed: number;
   rentIncreasesApplied: number;
+  /** Prior leases of accepted successor renewals ended now that their term passed. */
+  leasesEndedAfterRenewal: number;
+  /** Renewal offers expired because their e-sign window lapsed unsigned. */
+  renewalOffersExpired: number;
 }
 
 /** Run charge generation + late-fee assessment across all active leases. */
@@ -349,11 +468,17 @@ export async function runBilling(now = new Date()): Promise<BillingRunResult> {
   }
   // After charging, so back-filled periods keep their historical pricing.
   const rentIncreasesApplied = await applyScheduledRentIncreases(now);
+  // Renewal housekeeping: end prior leases whose successor term has begun, and
+  // expire offers whose signing window lapsed unsigned.
+  const leasesEndedAfterRenewal = await endRenewedLeases(now);
+  const renewalOffersExpired = await expireLapsedRenewalOffers(now);
   return {
     leasesProcessed: leases.length,
     chargesCreated,
     lateFeesCreated,
     failed,
     rentIncreasesApplied,
+    leasesEndedAfterRenewal,
+    renewalOffersExpired,
   };
 }
