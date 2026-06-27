@@ -22,7 +22,7 @@ import {
   setJobStatusAction,
   uncancelJobAction,
 } from "./actions";
-import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { getSignedUrlForDoc } from "@/lib/services/documents";
 import { listActiveVendors } from "@/lib/services/vendors";
 import {
   MAINTENANCE_PRIORITIES,
@@ -184,25 +184,24 @@ export default async function MaintenancePage({
     ? await prisma.uploadedDocument.findMany({
         where: { maintenanceJobId: { in: jobIds } },
         orderBy: { createdAt: "desc" },
-        select: { id: true, fileName: true, maintenanceJobId: true },
+        select: { id: true, fileName: true, fileUrl: true, maintenanceJobId: true },
       })
     : [];
   const attachmentsByJob = new Map<
     string,
     { id: string; fileName: string; url: string | null }[]
   >();
-  for (const d of attachmentDocs) {
-    if (!d.maintenanceJobId) continue;
-    let url: string | null = null;
-    try {
-      url = (await getDocumentDownloadUrl(d.id))?.url ?? null;
-    } catch {
-      url = null; // storage not configured — list the name without a link
-    }
+  // Sign the already-loaded rows in parallel (no per-attachment DB re-fetch),
+  // then group in the original createdAt-desc order.
+  const attachmentUrls = await Promise.all(
+    attachmentDocs.map((d) => getSignedUrlForDoc(d)),
+  );
+  attachmentDocs.forEach((d, i) => {
+    if (!d.maintenanceJobId) return;
     const arr = attachmentsByJob.get(d.maintenanceJobId) ?? [];
-    arr.push({ id: d.id, fileName: d.fileName ?? "file", url });
+    arr.push({ id: d.id, fileName: d.fileName ?? "file", url: attachmentUrls[i] });
     attachmentsByJob.set(d.maintenanceJobId, arr);
-  }
+  });
 
   // Recent completion history for the visible tasks (one batched query). The
   // dialog shows the most recent 12 per task; `total` keeps the trigger count

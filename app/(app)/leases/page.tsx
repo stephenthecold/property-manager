@@ -56,6 +56,9 @@ export default async function LeasesPage({
   const leases = await prisma.lease.findMany({
     where,
     orderBy: [{ status: "asc" }, { startDate: "desc" }],
+    // Cap like the other lists (payments/financials/maintenance/audit); the
+    // client DataTable paginates within this set.
+    take: 200,
     include: {
       tenant: true,
       unit: { include: { property: true } },

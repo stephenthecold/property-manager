@@ -997,6 +997,8 @@ model Notice {
 
   @@index([leaseId])
   @@index([status])
+  // Hit on every tenant-portal home load (served-notice count) + activity timeline.
+  @@index([tenantId, servedAt])
 }
 
 // ---------------------------------------------------------------------------
