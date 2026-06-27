@@ -10,6 +10,7 @@ import {
   SearchIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -195,8 +196,8 @@ export function DataTable({
     <div className={cn("space-y-3", className)}>
       {showSearch && (
         <div className="relative max-w-xs">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
             type="search"
             value={query}
             onChange={(e) => {
@@ -205,7 +206,7 @@ export function DataTable({
             }}
             placeholder={searchPlaceholder}
             aria-label="Search this list"
-            className="h-9 w-full rounded-md border pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground"
+            className="h-9 pl-8"
           />
         </div>
       )}
