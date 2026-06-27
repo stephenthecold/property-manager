@@ -230,7 +230,7 @@ export function CommandPalette() {
                           onMouseEnter={() => setActive(index)}
                           onClick={() => go(r)}
                           className={cn(
-                            "flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left",
+                            "flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors duration-150 active:translate-y-px",
                             index === active
                               ? "bg-muted text-foreground"
                               : "hover:bg-muted/60",
