@@ -553,6 +553,9 @@ model Asset {
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  // Maintenance jobs that reference this asset (the job's assetId is optional and
+  // clears to null if the asset is deleted — see MaintenanceJob.asset).
+  jobs     MaintenanceJob[]
 
   @@index([propertyId])
   @@index([unitId])
@@ -610,6 +613,7 @@ model Unit {
   rentalApplications RentalApplication[]
   assets          Asset[]
   conditionLogs   UnitConditionLog[]
+  turnoverChecklists TurnoverChecklist[]
 
   @@index([propertyId])
   @@index([buildingId])
@@ -716,6 +720,9 @@ model Lease {
   conditionLogs UnitConditionLog[]
   renewalOffers LeaseRenewalOffer[]
   dispositions  DepositDisposition[]
+  // Make-ready checklists worked when this lease ended (optional ref; clears to
+  // null if the lease is removed — see TurnoverChecklist.lease).
+  turnoverChecklists TurnoverChecklist[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -1438,6 +1445,9 @@ model MaintenanceJob {
   completedAt DateTime?
   costCents   BigInt? // entered on completion; mirrored to PropertyExpense
   vendorId    String? // optional assigned vendor (module "vendors")
+  // Optional link to a registered Asset (water heater, HVAC, …) this job is
+  // about. Clears to null if the asset is deleted (the job history survives).
+  assetId     String?
   // Loose ref to a staff User (no FK relation — keep the schema additive and
   // avoid a back-relation on User). Cleared in the app when a user is removed.
   assignedToUserId String?
@@ -1448,11 +1458,13 @@ model MaintenanceJob {
   property Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   unit     Unit?               @relation(fields: [unitId], references: [id], onDelete: SetNull)
   vendor   Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  asset    Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
   updates  MaintenanceUpdate[]
 
   @@index([propertyId, status])
   @@index([unitId, status])
   @@index([vendorId])
+  @@index([assetId])
   @@index([assignedToUserId])
 }
 
@@ -1512,6 +1524,72 @@ model RecurringTaskExecution {
 
   @@unique([taskId, periodKey])
   @@index([taskId])
+}
+
+/// Lifecycle of a unit make-ready (turnover) checklist. Mirrors the
+/// maintenance-job lifecycle pattern (open work -> terminal), with a status
+/// helper in lib/maintenance/turnover-status.ts — never compare these literals
+/// inline. `ready` means the unit is rent-ready; `open`/`in_progress` are the
+/// non-terminal "still being made ready" states.
+enum TurnoverChecklistStatus {
+  open
+  in_progress
+  ready
+}
+
+/// A make-ready / turnover checklist for a unit between tenancies. An OPERATING
+/// record only — it never touches the ledger or tenant balances (like
+/// MaintenanceJob / RecurringTask). Optionally references the lease that ended
+/// (the turnover it follows). Items live in TurnoverChecklistItem; every
+/// mutation is audited. Disabling the maintenance module hides the UI but never
+/// deletes this data.
+model TurnoverChecklist {
+  id        String                  @id @default(cuid())
+  unitId    String
+  // The lease whose end triggered this turnover (optional). SetNull so removing
+  // the lease never deletes the make-ready record.
+  leaseId   String?
+  status    TurnoverChecklistStatus @default(open)
+  title     String? // optional label, e.g. "Turnover — Jun 2026"
+  notes     String?
+  // Set when status first moves off `open` / reaches `ready` (display only).
+  startedOn DateTime?
+  readyOn   DateTime?
+  createdBy String?
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+
+  unit  Unit                    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lease Lease?                  @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  items TurnoverChecklistItem[]
+
+  @@index([unitId, status])
+  @@index([leaseId])
+}
+
+/// One line on a turnover checklist (e.g. "Repaint living room"). Seeded from a
+/// template at checklist creation, plus staff-added custom items. `assignedToUserId`
+/// is a loose ref to a staff User (no FK relation — matches MaintenanceJob, keeps
+/// the schema additive and avoids a User back-relation); it is cleared/validated
+/// in the app. Operating record only — never touches tenant balances.
+model TurnoverChecklistItem {
+  id          String   @id @default(cuid())
+  checklistId String
+  label       String
+  area        String? // optional grouping, e.g. "Kitchen", "Exterior"
+  done        Boolean  @default(false)
+  notes       String?
+  assignedToUserId String?
+  orderIndex  Int      @default(0)
+  doneAt      DateTime?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checklist TurnoverChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId, orderIndex])
+  @@index([assignedToUserId])
 }
 
 // ---------------------------------------------------------------------------

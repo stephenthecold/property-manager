@@ -11,6 +11,10 @@ import {
   warrantyBadgeClass,
 } from "@/lib/maintenance/warranty";
 import { createAssetAction, setAssetActiveAction, updateAssetAction } from "./actions";
+import {
+  statusBadgeClass,
+  statusLabel,
+} from "@/lib/maintenance/status";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -174,16 +178,38 @@ export default async function AssetsPage() {
   const settings = await getAppSettings();
   if (!settings.modules.maintenance) redirect("/dashboard");
 
-  const [assets, properties, units] = await Promise.all([
+  const [assets, properties, units, linkedJobs] = await Promise.all([
     listAssets(),
     prisma.property.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.unit.findMany({
       orderBy: [{ property: { name: "asc" } }, { unitNumber: "asc" }],
       select: { id: true, unitNumber: true, property: { select: { name: true } } },
     }),
+    // Maintenance jobs that reference an asset — grouped by assetId below so each
+    // asset row can list/count its linked jobs.
+    prisma.maintenanceJob.findMany({
+      where: { assetId: { not: null } },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        assetId: true,
+      },
+    }),
   ]);
 
   const now = new Date();
+
+  // assetId -> its jobs (newest-ish first; same order as fetched).
+  const jobsByAsset = new Map<string, typeof linkedJobs>();
+  for (const j of linkedJobs) {
+    if (!j.assetId) continue;
+    const arr = jobsByAsset.get(j.assetId) ?? [];
+    arr.push(j);
+    jobsByAsset.set(j.assetId, arr);
+  }
 
   return (
     <div className="space-y-6">
@@ -218,6 +244,7 @@ export default async function AssetsPage() {
           { key: "installed", label: "Installed", className: "hidden md:table-cell" },
           { key: "warranty", label: "Warranty" },
           { key: "status", label: "Status" },
+          { key: "jobs", label: "Jobs", align: "right", numeric: true, className: "hidden md:table-cell" },
           { key: "actions", label: "", align: "right", sortable: false },
         ]}
         rows={assets.map((a) => {
@@ -240,6 +267,7 @@ export default async function AssetsPage() {
               // Sort warranty by days-to-expiry feel: expired first, then soon.
               a.warrantyExpiresOn?.toISOString() ?? null,
               a.active ? "active" : "inactive",
+              (jobsByAsset.get(a.id) ?? []).length,
               null,
             ],
             cells: [
@@ -288,6 +316,60 @@ export default async function AssetsPage() {
                   Inactive
                 </span>
               ),
+              (() => {
+                const jobs = jobsByAsset.get(a.id) ?? [];
+                if (jobs.length === 0) {
+                  return (
+                    <span key="j" className="text-sm text-muted-foreground">
+                      —
+                    </span>
+                  );
+                }
+                // The dialog lists each job with its LIVE status badge, so the
+                // trigger stays a plain total (which only changes on create /
+                // delete / relink — all of which revalidate this page).
+                return (
+                  <FormDialog
+                    key="j"
+                    trigger={String(jobs.length)}
+                    triggerVariant="ghost"
+                    triggerSize="xs"
+                    title={`Maintenance jobs — ${a.name}`}
+                    description="Jobs that reference this asset."
+                    staticContent
+                  >
+                    <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+                      {jobs.map((j) => (
+                        <li
+                          key={j.id}
+                          className="flex flex-wrap items-center gap-2 rounded-md border p-2"
+                        >
+                          <Badge
+                            variant="outline"
+                            className={`font-medium ${statusBadgeClass(j.status)}`}
+                          >
+                            {statusLabel(j.status)}
+                          </Badge>
+                          <Link
+                            href={`/maintenance/${j.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {j.title}
+                          </Link>
+                          {j.dueDate && (
+                            <span className="text-xs text-muted-foreground">
+                              due{" "}
+                              {j.dueDate.toLocaleDateString("en-US", {
+                                timeZone: "UTC",
+                              })}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </FormDialog>
+                );
+              })(),
               <div key="a" className="flex justify-end gap-2">
                 <FormDialog
                   trigger="Edit"
