@@ -111,6 +111,7 @@ export function DataTable({
   defaultSort,
   defaultPageSize,
   emptyMessage = "No results.",
+  emptyState,
   className,
 }: {
   columns: DataTableColumn[];
@@ -119,6 +120,8 @@ export function DataTable({
   /** Explicit override; when omitted, the org default (context) is used. */
   defaultPageSize?: number;
   emptyMessage?: string;
+  /** Rich empty content (e.g. <EmptyState/>); falls back to `emptyMessage` text. */
+  emptyState?: React.ReactNode;
   className?: string;
 }) {
   const orgDefault = React.useContext(TablePageSizeContext);
@@ -229,12 +232,13 @@ export function DataTable({
               </TableRow>
             ))}
             {visible.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="py-6 text-center text-muted-foreground"
-                >
-                  {emptyMessage}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columns.length} className="p-0">
+                  {emptyState ?? (
+                    <div className="py-6 text-center text-muted-foreground">
+                      {emptyMessage}
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             )}
