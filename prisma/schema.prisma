@@ -709,6 +709,7 @@ model Lease {
   inspections   Inspection[]
   conditionLogs UnitConditionLog[]
   renewalOffers LeaseRenewalOffer[]
+  dispositions  DepositDisposition[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -743,6 +744,47 @@ model LeaseDeposit {
   lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
 
   @@index([leaseId])
+}
+
+/// A move-out deposit disposition (settlement statement): itemized deductions
+/// against the held deposit. On FINALIZE the net posts to the ledger — damages
+/// as a positive `adjustment`, the applied deposit as a negative `credit` — so
+/// the lease balance reflects the settlement; the refund is the cash side
+/// (recorded here, paid out separately). Ledger writes are append-only;
+/// corrections are reversals. The snapshot/total columns are filled at finalize.
+model DepositDisposition {
+  id       String @id @default(cuid())
+  leaseId  String
+  tenantId String
+  /// draft | finalized
+  status   String @default("draft")
+
+  /// Refundable deposit held; defaulted from the lease, editable until finalize.
+  depositHeldCents BigInt
+  /// Itemized deductions: [{ "label": string, "amountCents": string(cents) }].
+  deductions       Json   @default("[]")
+  notes            String?
+
+  /// Snapshots + computed totals, captured at finalize.
+  balanceAtFinalizeCents BigInt?
+  damagesTotalCents      BigInt?
+  depositAppliedCents    BigInt?
+  refundDueCents         BigInt?
+  balanceOwedCents       BigInt?
+
+  /// The ledger entries posted on finalize (loose refs, for traceability/idempotency).
+  damageEntryId        String?
+  depositCreditEntryId String?
+
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finalizedAt DateTime?
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------
