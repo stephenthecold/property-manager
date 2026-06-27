@@ -18,7 +18,7 @@ import {
   markerPassthroughVars,
 } from "@/lib/esign/markers";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
-import { renderTemplate } from "@/lib/reminders/templates";
+import { renderTemplate, type TemplateVars } from "@/lib/reminders/templates";
 import {
   diffAgreementText,
   leaseAgreementTemplate,
@@ -167,6 +167,9 @@ export async function createSigningRequest(i: {
   kind: SigningKind;
   actor: AuditContext;
   expiresInDays?: number;
+  /** Override computed agreement vars (e.g. a renewal's proposed rent/end date)
+   *  so the signed document reflects the NEW terms, not the lease's current ones. */
+  varOverrides?: TemplateVars;
   now?: Date;
 }): Promise<CreateSigningRequestResult> {
   const now = i.now ?? new Date();
@@ -212,6 +215,7 @@ export async function createSigningRequest(i: {
   const documentText = renderTemplate(sourceTemplate, {
     ...markerPassthroughVars(),
     ...vars,
+    ...(i.varOverrides ?? {}),
   });
   const documentSha256 = sha256Hex(documentText);
 
@@ -510,6 +514,11 @@ export async function completeIfAllSigned(
         where: { id: lease.id },
         data: { agreementText: snapshotAgreementTemplate(app) },
       });
+      // Apply any renewal OFFER attached to this request (new rent/term). Dynamic
+      // import breaks the static cycle (lease-renewal imports createSigningRequest
+      // from here); it runs in this same tx so terms + completion commit together.
+      const { applyAcceptedRenewal } = await import("@/lib/services/lease-renewal");
+      await applyAcceptedRenewal(tx, request.id, now);
     }
     await writeAudit(tx, {
       actorType: "system",

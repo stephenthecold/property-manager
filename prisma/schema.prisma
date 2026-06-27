@@ -708,6 +708,7 @@ model Lease {
   notices       Notice[]
   inspections   Inspection[]
   conditionLogs UnitConditionLog[]
+  renewalOffers LeaseRenewalOffer[]
 
   @@index([tenantId])
   @@index([unitId])
@@ -1533,6 +1534,49 @@ model SigningSigner {
 
   @@index([requestId])
   @@index([tenantId])
+}
+
+/// A renewal offer: staff propose new terms (rent + end date) for an existing
+/// lease; the tenant accepts by e-signing a SigningRequest with kind="renewal"
+/// (reusing the whole e-sign engine — multi-signer, landlord-applied, diffed).
+/// On completion the terms are APPLIED: "extend" pushes THIS lease's endDate and
+/// schedules the new rent (the billing worker rolls it forward, audited);
+/// "successor" mints a new lease and ends this one. An operating record — it
+/// never writes ledger entries itself (rent flows through the scheduled-increase
+/// path the worker already owns).
+model LeaseRenewalOffer {
+  id      String @id @default(cuid())
+  leaseId String
+  /// "extend" = same lease, new endDate + scheduled rent; "successor" = new lease.
+  renewalModel String @default("extend")
+  /// draft | sent | accepted | declined | expired | canceled
+  status String @default("draft")
+
+  /// Proposed terms, frozen at offer creation (integer cents).
+  proposedRentAmountCents BigInt
+  /// New lease end (contiguous: the term runs [currentEnd + 1 day .. proposedEndDate]).
+  proposedEndDate DateTime
+  /// New rent effective date = the day after the current lease's endDate.
+  effectiveDate   DateTime
+
+  /// The e-sign request carrying acceptance (kind="renewal"); set when sent.
+  signingRequestId String?
+  /// For "successor": the lease minted on acceptance (loose ref).
+  successorLeaseId String?
+  declineReason    String?
+
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  sentAt     DateTime?
+  acceptedAt DateTime?
+  declinedAt DateTime?
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
+  @@index([status])
+  @@index([signingRequestId])
 }
 
 // ---------------------------------------------------------------------------

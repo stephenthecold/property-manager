@@ -22,6 +22,11 @@ import {
   type ResendResult,
   type SignerSendStatus,
 } from "@/lib/services/esign";
+import {
+  cancelRenewalOffer,
+  createRenewalOffer,
+} from "@/lib/services/lease-renewal";
+import { toCents } from "@/lib/money";
 
 export interface GenerateDocxState {
   ok?: boolean;
@@ -243,4 +248,68 @@ export async function cancelEsignRequestAction(fd: FormData): Promise<void> {
   }
   if (!result.ok) backToAgreement(leaseId, { error: result.error });
   backToAgreement(leaseId, { message: "Signing request canceled." });
+}
+
+/**
+ * Propose a renewal: capture the new rent + term, then send the tenant(s) a
+ * renewal e-sign whose document reflects those new terms. Applied on signing.
+ */
+export async function createRenewalOfferAction(fd: FormData): Promise<void> {
+  // Renewing a lease (leases.manage) AND sending a tenant e-sign + applying the
+  // saved landlord signature (esign.manage) — require both, like every other
+  // e-sign send, so a leases-only role can't dispatch signing requests.
+  await requireCapability("leases.manage");
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = String(fd.get("leaseId") ?? "").trim();
+  if (!leaseId) redirect("/leases?error=Missing%20lease%20id.");
+
+  const rentRaw = String(fd.get("proposedRent") ?? "").trim();
+  let proposedRentCents: bigint;
+  try {
+    proposedRentCents = toCents(rentRaw);
+  } catch {
+    backToAgreement(leaseId, { error: "New rent must be a valid amount (e.g. 1300.00)." });
+  }
+  const termMonths = Number(String(fd.get("termMonths") ?? "12").trim() || "12");
+
+  let result;
+  try {
+    result = await createRenewalOffer({
+      leaseId,
+      renewalModel: "extend",
+      proposedRentCents,
+      termMonths,
+      actor,
+    });
+  } catch (e) {
+    console.error("[renewal] create offer failed:", e);
+    result = { ok: false as const, error: "Could not create the renewal offer — check the server log." };
+  }
+  if (!result.ok) backToAgreement(leaseId, { error: result.error });
+  backToAgreement(leaseId, { message: "Renewal offer sent for e-signature." });
+}
+
+/** Cancel an open renewal offer (its e-sign link stops working too). */
+export async function cancelRenewalOfferAction(fd: FormData): Promise<void> {
+  // Cancels the linked signing request too — same dual gate as creating one.
+  await requireCapability("leases.manage");
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = String(fd.get("leaseId") ?? "").trim();
+  const offerId = String(fd.get("offerId") ?? "").trim();
+  if (!leaseId) redirect("/leases?error=Missing%20lease%20id.");
+  if (!offerId) backToAgreement(leaseId, { error: "Missing offer." });
+
+  let result;
+  try {
+    result = await cancelRenewalOffer({ offerId, actor });
+  } catch (e) {
+    console.error("[renewal] cancel offer failed:", e);
+    result = { ok: false as const, error: "Could not cancel the renewal offer — check the server log." };
+  }
+  if (!result.ok) backToAgreement(leaseId, { error: result.error });
+  backToAgreement(leaseId, { message: "Renewal offer canceled." });
 }
