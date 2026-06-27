@@ -39,6 +39,8 @@ import { slaState } from "@/lib/maintenance/sla";
 import type { MaintenancePriority } from "@/lib/generated/prisma/enums";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { ToneBadge } from "@/components/status-badge";
+import type { Tone } from "@/lib/ui/status-tone";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -50,14 +52,12 @@ import { Textarea } from "@/components/ui/textarea";
 
 export const runtime = "nodejs";
 
-/** Themed badge tints per priority (every tint carries a dark: variant). */
-const PRIORITY_BADGE: Record<MaintenancePriority, string> = {
-  urgent:
-    "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
-  high: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  normal:
-    "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
-  low: "border-muted bg-muted text-muted-foreground",
+/** Priority -> badge tone, drawn from the shared tone source. */
+const PRIORITY_TONE: Record<MaintenancePriority, Tone> = {
+  urgent: "danger",
+  high: "warning",
+  normal: "info",
+  low: "neutral",
 };
 
 /**
@@ -74,12 +74,7 @@ function SlaChip({
   if (state === "overdue") {
     const days = daysUntilDue != null ? Math.abs(daysUntilDue) : 0;
     return (
-      <Badge
-        variant="outline"
-        className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
-      >
-        Overdue {days}d
-      </Badge>
+      <ToneBadge tone="danger">Overdue {days}d</ToneBadge>
     );
   }
   if (state === "due_soon") {
@@ -88,12 +83,7 @@ function SlaChip({
         ? "Due today"
         : `Due in ${daysUntilDue}d`;
     return (
-      <Badge
-        variant="outline"
-        className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-      >
-        {label}
-      </Badge>
+      <ToneBadge tone="warning">{label}</ToneBadge>
     );
   }
   return null;
@@ -461,12 +451,9 @@ export default async function MaintenancePage({
                     )}
                   </span>,
                   <span key="pri" className="inline-flex items-center gap-1">
-                    <Badge
-                      variant="outline"
-                      className={`font-medium capitalize ${PRIORITY_BADGE[j.priority]}`}
-                    >
+                    <ToneBadge tone={PRIORITY_TONE[j.priority]} className="capitalize">
                       {priorityLabel(j.priority)}
-                    </Badge>
+                    </ToneBadge>
                     <FormDialog
                       trigger="Edit"
                       triggerVariant="outline"
@@ -842,21 +829,13 @@ export default async function MaintenancePage({
                 ),
                 t.lastDoneOn ? t.lastDoneOn.toLocaleDateString() : "Never",
                 doneThisMonth(t) ? (
-                  <Badge
-                    key="m"
-                    variant="outline"
-                    className="border-emerald-200 bg-emerald-100 font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                  >
+                  <ToneBadge key="m" tone="success">
                     Done
-                  </Badge>
+                  </ToneBadge>
                 ) : (
-                  <Badge
-                    key="m"
-                    variant="outline"
-                    className="border-amber-200 bg-amber-100 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                  >
+                  <ToneBadge key="m" tone="warning">
                     Due
-                  </Badge>
+                  </ToneBadge>
                 ),
                 <span key="a" className="inline-flex justify-end gap-1">
                   {!doneThisMonth(t) && (

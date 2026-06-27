@@ -6,10 +6,11 @@ import type {
   ReminderType,
 } from "@/lib/generated/prisma/enums";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/app/data-table";
+import { ToneBadge } from "@/components/status-badge";
+import type { Tone } from "@/lib/ui/status-tone";
 
 export const runtime = "nodejs";
 
@@ -22,11 +23,11 @@ const TYPES: ReminderType[] = [
   "manual",
 ];
 
-const STATUS_CLASS: Record<ReminderStatus, string> = {
-  delivered: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
-  sent: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800",
-  queued: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
-  failed: "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800",
+const STATUS_TONE: Record<ReminderStatus, Tone> = {
+  delivered: "success",
+  sent: "info",
+  queued: "warning",
+  failed: "danger",
 };
 
 const SELECT_CLASS =
@@ -196,9 +197,9 @@ export default async function RemindersPage({
               {maskPhone(r.destinationPhone)}
             </span>,
             <div key="s" className="space-y-0.5">
-              <Badge
-                variant="outline"
-                className={`font-medium capitalize ${STATUS_CLASS[r.status]}`}
+              <ToneBadge
+                tone={STATUS_TONE[r.status]}
+                className="capitalize"
                 title={
                   r.status === "delivered" && r.deliveredAt
                     ? `Delivered ${r.deliveredAt.toLocaleString()}`
@@ -208,7 +209,7 @@ export default async function RemindersPage({
                 }
               >
                 {r.status}
-              </Badge>
+              </ToneBadge>
               {r.status === "failed" && r.failedReason && (
                 <span
                   className="block max-w-[14rem] truncate text-xs text-red-700 dark:text-red-300"
