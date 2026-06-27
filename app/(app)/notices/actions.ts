@@ -12,11 +12,7 @@ import {
   updateNoticeDraft,
   voidNotice,
 } from "@/lib/services/notices";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const SERVE_METHODS = ["hand", "mail", "posted", "email"];
 

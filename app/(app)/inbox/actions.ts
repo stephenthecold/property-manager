@@ -21,17 +21,13 @@ import {
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
-import type { FormState } from "@/lib/forms";
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const CATEGORIES = ["utilities", "insurance", "maintenance", "taxes", "other"] as const;
 
 /** Thrown inside the post transaction to roll it back when the email was already
  *  posted by a concurrent/double submit (caught to redirect, not error out). */
 class AlreadyPostedError extends Error {}
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 
 export async function markInboxReadAction(fd: FormData): Promise<void> {
   await requireCapability("mailbox.manage");

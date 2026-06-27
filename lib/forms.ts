@@ -8,3 +8,12 @@
  * components can import the type without crossing the "use client" boundary.
  */
 export type FormState = { ok?: boolean; error?: string };
+
+/**
+ * Read a trimmed string field from FormData. The one definition of the parser
+ * that was copy-pasted byte-for-byte into ~15 action files — change trimming/
+ * coercion here, not in each. Server-safe (no "use client" / DOM).
+ */
+export function getFormString(fd: FormData, key: string): string {
+  return String(fd.get(key) ?? "").trim();
+}

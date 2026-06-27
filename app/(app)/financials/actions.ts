@@ -9,13 +9,9 @@ import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { isActiveVendor } from "@/lib/services/vendors";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
-import type { FormState } from "@/lib/forms";
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const CATEGORIES = ["utilities", "insurance", "maintenance", "taxes", "other"] as const;
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 
 export async function createExpenseAction(
   _prev: FormState,

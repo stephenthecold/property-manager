@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { auditActor, requireCapability } from "@/lib/auth/session";
-import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { auditActor, requireModuleCapability } from "@/lib/auth/session";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { toCents } from "@/lib/money";
 import { parseInspectionType } from "@/lib/inspections/disposition";
@@ -14,22 +13,13 @@ import {
   createInspection,
   removeDeduction,
 } from "@/lib/services/inspections";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
-
-async function gate(): Promise<void> {
-  await requireCapability("inspections.manage");
-  await assertModuleEnabled("inspections");
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 export async function createInspectionAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("inspections.manage", "inspections");
   const leaseId = str(fd, "leaseId");
   if (!leaseId) return { error: "Pick a lease." };
   const type = parseInspectionType(str(fd, "type"));
@@ -62,7 +52,7 @@ export async function completeInspectionAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("inspections.manage", "inspections");
   const id = str(fd, "inspectionId");
   if (!id) return { error: "Missing inspection id." };
   const res = await completeInspection({
@@ -78,7 +68,7 @@ export async function completeInspectionAction(
 }
 
 export async function cancelInspectionAction(fd: FormData): Promise<void> {
-  await gate();
+  await requireModuleCapability("inspections.manage", "inspections");
   const id = String(fd.get("inspectionId") ?? "").trim();
   if (!id) throw new Error("Missing inspection id.");
   await cancelInspection({ id, actor: await auditActor() });
@@ -90,7 +80,7 @@ export async function addDeductionAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("inspections.manage", "inspections");
   const inspectionId = str(fd, "inspectionId");
   if (!inspectionId) return { error: "Missing inspection id." };
   const label = str(fd, "label");
@@ -116,7 +106,7 @@ export async function addDeductionAction(
 }
 
 export async function removeDeductionAction(fd: FormData): Promise<void> {
-  await gate();
+  await requireModuleCapability("inspections.manage", "inspections");
   const itemId = String(fd.get("itemId") ?? "").trim();
   const inspectionId = String(fd.get("inspectionId") ?? "").trim();
   if (!itemId) throw new Error("Missing item id.");

@@ -1,16 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auditActor, requireCapability } from "@/lib/auth/session";
-import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { auditActor, requireModuleCapability } from "@/lib/auth/session";
 import { parseVendorTrade } from "@/lib/vendors/vendor-trade";
 import { createVendor, setVendorActive, updateVendor } from "@/lib/services/vendors";
 import type { VendorInput } from "@/lib/services/vendors";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 function readInput(fd: FormData): VendorInput {
   return {
@@ -24,16 +19,11 @@ function readInput(fd: FormData): VendorInput {
   };
 }
 
-async function gate(): Promise<void> {
-  await requireCapability("vendors.manage");
-  await assertModuleEnabled("vendors");
-}
-
 export async function createVendorAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("vendors.manage", "vendors");
   const data = readInput(fd);
   if (!data.name) return { error: "Name is required." };
   const res = await createVendor({ data, actor: await auditActor() });
@@ -46,7 +36,7 @@ export async function updateVendorAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("vendors.manage", "vendors");
   const id = str(fd, "vendorId");
   if (!id) return { error: "Missing vendor id." };
   const data = readInput(fd);
@@ -58,7 +48,7 @@ export async function updateVendorAction(
 }
 
 export async function setVendorActiveAction(fd: FormData): Promise<void> {
-  await gate();
+  await requireModuleCapability("vendors.manage", "vendors");
   const id = String(fd.get("vendorId") ?? "").trim();
   if (!id) throw new Error("Missing vendor id.");
   const isActive = String(fd.get("isActive") ?? "") === "true";

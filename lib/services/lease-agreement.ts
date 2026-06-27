@@ -1,5 +1,5 @@
-import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
+import { formatDateInTz } from "@/lib/dates";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { formatCurrency } from "@/lib/money";
 import {
@@ -53,9 +53,7 @@ export function ordinal(n: number): string {
 }
 
 function longDate(d: Date, tz: string): string {
-  return DateTime.fromJSDate(d, { zone: tz })
-    .setLocale("en-US")
-    .toLocaleString(DateTime.DATE_FULL);
+  return formatDateInTz(d, tz);
 }
 
 function fullName(t: { firstName: string; lastName: string }): string {

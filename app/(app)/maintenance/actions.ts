@@ -4,9 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { toCents } from "@/lib/money";
-import { auditActor, requireCapability } from "@/lib/auth/session";
+import { auditActor, requireModuleCapability } from "@/lib/auth/session";
 import { withAudit } from "@/lib/audit/audit";
-import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
 import { syncTenantRequestForJob } from "@/lib/services/tenant-requests";
 import { isActiveVendor } from "@/lib/services/vendors";
@@ -17,7 +16,7 @@ import {
   isOpenStatus,
   parseMaintenanceStatus,
 } from "@/lib/maintenance/status";
-import type { FormState } from "@/lib/forms";
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const ATTACH_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const ATTACH_TYPES = new Set([
@@ -27,10 +26,6 @@ const ATTACH_TYPES = new Set([
   "image/heic",
   "application/pdf",
 ]);
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 
 /**
  * Validation failures land back on the maintenance page as a banner instead
@@ -79,8 +74,7 @@ function revalidate(unitId?: string | null): void {
 }
 
 export async function createJobAction(fd: FormData): Promise<void> {
-  const { dbUser } = await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  const { dbUser } = await requireModuleCapability("maintenance.manage", "maintenance");
 
   const title = str(fd, "title");
   if (!title) fail("Job title is required.");
@@ -163,8 +157,7 @@ export async function completeJobAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  const { dbUser } = await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  const { dbUser } = await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job) return { error: "Job not found." };
@@ -234,8 +227,7 @@ export async function completeJobAction(
 }
 
 export async function reopenJobAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job || job.status !== "completed") return;
@@ -268,8 +260,7 @@ export async function reopenJobAction(fd: FormData): Promise<void> {
 }
 
 export async function deleteJobAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job) return;
@@ -298,8 +289,7 @@ export async function addJobUpdateAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  const { dbUser } = await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  const { dbUser } = await requireModuleCapability("maintenance.manage", "maintenance");
   const jobId = str(fd, "jobId");
   const note = str(fd, "note");
   if (!note) return { error: "An update note is required." };
@@ -334,8 +324,7 @@ export async function setJobPriorityAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const jobId = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
   if (!job) return { error: "Job not found." };
@@ -372,8 +361,7 @@ export async function setJobStatusAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const jobId = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
   if (!job) return { error: "Job not found." };
@@ -428,8 +416,7 @@ export async function assignJobAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const jobId = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
   if (!job) return { error: "Job not found." };
@@ -471,8 +458,7 @@ export async function assignJobAction(
  * to in-progress, since cancelling resolved it (mirrors reopenJobAction).
  */
 export async function uncancelJobAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id } });
   if (!job || job.status !== "canceled") return;
@@ -508,8 +494,7 @@ export async function addJobAttachmentAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const jobId = str(fd, "jobId");
   const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
   if (!job) return { error: "Job not found." };
@@ -549,8 +534,7 @@ export async function addJobAttachmentAction(
 }
 
 export async function createTaskAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const propertyId = str(fd, "propertyId");
   const title = str(fd, "title");
   if (!propertyId || !title) fail("Property and task title are required.");
@@ -592,8 +576,7 @@ export async function createTaskAction(fd: FormData): Promise<void> {
 
 /** Change an existing task's monthly schedule / tenant-notification settings. */
 export async function editTaskScheduleAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "taskId");
   const task = await prisma.recurringTask.findUnique({ where: { id } });
   if (!task) fail("Task not found.");
@@ -638,8 +621,7 @@ export async function editTaskScheduleAction(fd: FormData): Promise<void> {
 }
 
 export async function markTaskDoneAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "taskId");
   const task = await prisma.recurringTask.findUnique({
     where: { id },
@@ -689,8 +671,7 @@ export async function markTaskDoneAction(fd: FormData): Promise<void> {
 }
 
 export async function removeTaskAction(fd: FormData): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "taskId");
   const task = await prisma.recurringTask.findUnique({ where: { id } });
   if (!task) return;

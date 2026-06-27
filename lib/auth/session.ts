@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { effectiveRole, roleAtLeast } from "@/lib/auth/rbac";
 import { getViewAsRole } from "@/lib/auth/view-as";
 import { hasCapability, type Capability } from "@/lib/auth/permissions";
-import { getAppSettings } from "@/lib/services/app-settings";
+import { getAppSettings, assertModuleEnabled } from "@/lib/services/app-settings";
 import type { Role } from "@/lib/generated/prisma/enums";
 
 type DbUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
@@ -65,6 +65,21 @@ export async function requireCapability(cap: Capability): Promise<{
     throw new Error(`Forbidden: missing capability ${cap}`);
   }
   return { user, dbUser };
+}
+
+/**
+ * requireCapability + assert the optional feature module is enabled — the gate
+ * prelude module-gated actions (maintenance, vendors, assets, inspections) all
+ * run. Returns the same { user, dbUser } as requireCapability so call sites that
+ * need dbUser keep it.
+ */
+export async function requireModuleCapability(
+  cap: Capability,
+  module: Parameters<typeof assertModuleEnabled>[0],
+): Promise<{ user: SessionUser; dbUser: DbUser }> {
+  const res = await requireCapability(cap);
+  await assertModuleEnabled(module);
+  return res;
 }
 
 /**
