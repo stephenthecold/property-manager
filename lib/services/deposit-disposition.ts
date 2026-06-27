@@ -46,7 +46,7 @@ export function parseDeductions(raw: unknown): DepositDeduction[] {
 }
 
 /** Default refundable deposit = base security deposit + refundable extras. */
-function defaultDepositHeld(lease: {
+export function defaultDepositHeld(lease: {
   securityDepositCents: bigint;
   deposits: { amountCents: bigint; nonRefundableCents: bigint }[];
 }): bigint {
@@ -273,6 +273,33 @@ export async function finalizeDisposition(i: {
   });
 }
 
+/**
+ * Discard a DRAFT disposition. A draft is a scratchpad with no ledger impact,
+ * so it can be deleted outright (unlike anything that has posted). A finalized
+ * disposition is never touched here — its postings stand and are corrected, if
+ * ever, through normal offsetting ledger entries.
+ */
+export async function discardDraftDisposition(i: {
+  dispositionId: string;
+  actor: AuditContext;
+}): Promise<Ok<Record<never, never>> | Err> {
+  return prisma.$transaction(async (tx) => {
+    const claim = await tx.depositDisposition.deleteMany({
+      where: { id: i.dispositionId, status: "draft" },
+    });
+    if (claim.count === 0) {
+      return { ok: false, error: "Only a draft disposition can be discarded." };
+    }
+    await writeAudit(tx, {
+      ...i.actor,
+      action: "deposit.disposition_discarded",
+      entityType: "DepositDisposition",
+      entityId: i.dispositionId,
+    });
+    return { ok: true };
+  });
+}
+
 export function getDisposition(dispositionId: string) {
   return prisma.depositDisposition.findUnique({ where: { id: dispositionId } });
 }
@@ -283,4 +310,57 @@ export function listDispositionsForLease(leaseId: string) {
     orderBy: { createdAt: "desc" },
     take: 10,
   });
+}
+
+/** Client-facing shape: every cents value crosses the boundary as a string. */
+export interface SerializedDisposition {
+  id: string;
+  status: string;
+  depositHeldCents: string;
+  deductions: { label: string; amountCents: string }[];
+  notes: string | null;
+  balanceAtFinalizeCents: string | null;
+  damagesTotalCents: string | null;
+  depositAppliedCents: string | null;
+  refundDueCents: string | null;
+  balanceOwedCents: string | null;
+  finalizedAt: string | null;
+  createdAt: string;
+}
+
+type DispositionRow = {
+  id: string;
+  status: string;
+  depositHeldCents: bigint;
+  deductions: unknown;
+  notes: string | null;
+  balanceAtFinalizeCents: bigint | null;
+  damagesTotalCents: bigint | null;
+  depositAppliedCents: bigint | null;
+  refundDueCents: bigint | null;
+  balanceOwedCents: bigint | null;
+  finalizedAt: Date | null;
+  createdAt: Date;
+};
+
+/** Map a DepositDisposition row to its client-facing serialized form. */
+export function serializeDisposition(d: DispositionRow): SerializedDisposition {
+  const s = (v: bigint | null) => (v == null ? null : v.toString());
+  return {
+    id: d.id,
+    status: d.status,
+    depositHeldCents: d.depositHeldCents.toString(),
+    deductions: parseDeductions(d.deductions).map((x) => ({
+      label: x.label,
+      amountCents: x.amountCents.toString(),
+    })),
+    notes: d.notes,
+    balanceAtFinalizeCents: s(d.balanceAtFinalizeCents),
+    damagesTotalCents: s(d.damagesTotalCents),
+    depositAppliedCents: s(d.depositAppliedCents),
+    refundDueCents: s(d.refundDueCents),
+    balanceOwedCents: s(d.balanceOwedCents),
+    finalizedAt: d.finalizedAt ? d.finalizedAt.toISOString() : null,
+    createdAt: d.createdAt.toISOString(),
+  };
 }

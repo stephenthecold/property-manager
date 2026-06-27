@@ -12,6 +12,11 @@ import {
   snapshotFromAccounting,
 } from "@/lib/services/accounting";
 import { listDocuments } from "@/lib/services/documents";
+import {
+  listDispositionsForLease,
+  serializeDisposition,
+  defaultDepositHeld,
+} from "@/lib/services/deposit-disposition";
 import { listInboundForTenant } from "@/lib/services/inbound-messages";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole, requireCapability } from "@/lib/auth/session";
@@ -46,6 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { WaiveChargeDialog } from "@/components/app/waive-charge-dialog";
 import { WriteOffBalanceDialog } from "@/components/app/write-off-balance-dialog";
+import { MoveOutDispositionDialog } from "@/components/app/move-out-disposition-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -181,6 +187,21 @@ export default async function TenantDetail({
         )
       : [],
   );
+
+  // Move-out deposit settlement: surface the open draft if one exists, else the
+  // most recent record (a finalized statement, read-only). The default held
+  // deposit mirrors the service (base security + refundable extras).
+  const dispositions = activeLease
+    ? await listDispositionsForLease(activeLease.id)
+    : [];
+  const currentDisposition =
+    dispositions.find((d) => d.status === "draft") ?? dispositions[0] ?? null;
+  const serializedDisposition = currentDisposition
+    ? serializeDisposition(currentDisposition)
+    : null;
+  const defaultDepositHeldCents = activeLease
+    ? defaultDepositHeld(activeLease)
+    : 0n;
 
   // Independent reads for this tenant — run them together instead of serially.
   const [ledger, payments, documents, reminders, inboundMessages, backRentSnaps] =
@@ -647,26 +668,60 @@ export default async function TenantDetail({
               </div>
 
               <div className="mt-4 border-t pt-4">
-                <p className="text-sm">
-                  <span className="font-medium">Deposits</span>{" "}
-                  <span className="text-muted-foreground">
-                    — security{" "}
-                    <span className="tabular-nums">
-                      {formatCurrency(activeLease.securityDepositCents, currency)}
-                    </span>
-                    {activeLease.deposits.map((d) => (
-                      <span key={d.id}>
-                        {" · "}
-                        {d.label}{" "}
-                        <span className="tabular-nums">
-                          {formatCurrency(d.amountCents, currency)}
-                        </span>
-                        {d.nonRefundableCents > 0n ? " (non-refundable)" : ""}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="text-sm">
+                    <span className="font-medium">Deposits</span>{" "}
+                    <span className="text-muted-foreground">
+                      — security{" "}
+                      <span className="tabular-nums">
+                        {formatCurrency(activeLease.securityDepositCents, currency)}
                       </span>
-                    ))}
-                    {" — manage in Edit lease"}
-                  </span>
-                </p>
+                      {activeLease.deposits.map((d) => (
+                        <span key={d.id}>
+                          {" · "}
+                          {d.label}{" "}
+                          <span className="tabular-nums">
+                            {formatCurrency(d.amountCents, currency)}
+                          </span>
+                          {d.nonRefundableCents > 0n ? " (non-refundable)" : ""}
+                        </span>
+                      ))}
+                      {" — manage in Edit lease"}
+                    </span>
+                  </p>
+                  {canRecordPayments && (
+                    <div className="flex items-center gap-2">
+                      {serializedDisposition?.status === "finalized" && (
+                        <span className="text-xs text-muted-foreground">
+                          Settled · refund{" "}
+                          <span className="tabular-nums">
+                            {formatCurrency(
+                              BigInt(serializedDisposition.refundDueCents ?? "0"),
+                              currency,
+                            )}
+                          </span>
+                        </span>
+                      )}
+                      {serializedDisposition?.status === "draft" && (
+                        <Badge variant="outline">Settlement draft</Badge>
+                      )}
+                      <MoveOutDispositionDialog
+                        leaseId={activeLease.id}
+                        currency={currency}
+                        currentBalanceCents={String(snap.netBalanceCents)}
+                        defaultDepositHeldCents={String(defaultDepositHeldCents)}
+                        disposition={serializedDisposition}
+                        trigger={
+                          serializedDisposition?.status === "finalized"
+                            ? "View statement"
+                            : serializedDisposition?.status === "draft"
+                              ? "Resume settlement"
+                              : "Move-out settlement"
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
