@@ -162,6 +162,7 @@ model User {
   phone                   String?
   notifyOverdueDigest     Boolean @default(true)
   notifyMaintenanceDigest Boolean @default(true)
+  notifyLeaseExpiration   Boolean @default(true)
   notifyCashPickup        Boolean @default(true)
   // Personal dashboard layout: { order: string[], collapsed: {id:true} }.
   // Per-user UI preference only — resolved/clamped to known sections in
@@ -288,6 +289,11 @@ model AppSettings {
   reminderSendHour        Int?
   dueSoonRemindersEnabled Boolean @default(true)
   overdueRemindersEnabled Boolean @default(true)
+  // Window (days) for the lease-expiration alert: the dashboard "Lease
+  // expirations" section and the weekly staff expiration digest both surface
+  // active leases ending within this many days. null -> the shipped default
+  // (UPCOMING_DAYS = 60); clamped to 1..365 (lib/leases/expiration.ts).
+  leaseExpirationAlertDays Int?
   // Per-type SMS template overrides: { "rent_overdue": "body...", ... }
   smsTemplates Json @default("{}")
   // Per-type EMAIL subject-line overrides (the email channel; bodies reuse the

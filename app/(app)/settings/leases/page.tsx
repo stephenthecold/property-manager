@@ -6,10 +6,16 @@ import {
   DEFAULT_LEASE_AGREEMENT_TEXT,
   LEASE_AGREEMENT_PLACEHOLDERS,
 } from "@/lib/config/lease-agreement";
+import {
+  MAX_ALERT_DAYS,
+  MIN_ALERT_DAYS,
+  UPCOMING_DAYS,
+} from "@/lib/leases/expiration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   LandlordSignatureForm,
   LeaseAgreementTextForm,
+  LeaseExpirationWindowForm,
   LeaseTemplateUploadForm,
 } from "./lease-settings-forms";
 
@@ -73,6 +79,25 @@ export default async function LeaseSettingsPage() {
             defaultText={DEFAULT_LEASE_AGREEMENT_TEXT}
             hasOverride={app.leaseAgreementText !== null}
             placeholders={LEASE_AGREEMENT_PLACEHOLDERS}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Lease-expiration alerts</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Sets how far ahead a lease nearing its end date is surfaced — both
+            in the dashboard &ldquo;Lease expirations&rdquo; section and in the
+            weekly digest emailed to staff every Monday.
+          </p>
+          <LeaseExpirationWindowForm
+            currentDays={app.leaseExpirationAlertDays}
+            defaultDays={UPCOMING_DAYS}
+            minDays={MIN_ALERT_DAYS}
+            maxDays={MAX_ALERT_DAYS}
           />
         </CardContent>
       </Card>

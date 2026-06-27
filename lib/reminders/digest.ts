@@ -1,5 +1,9 @@
 import { DateTime } from "luxon";
 import { formatCurrency, sumCents, type Cents } from "@/lib/money";
+import {
+  daysUntilLabel,
+  type ExpirationStateName,
+} from "@/lib/leases/expiration";
 
 /**
  * Pure formatting for the weekly staff overdue-rent email digest. DB-free and
@@ -207,4 +211,76 @@ export function formatMaintenanceDigest(
   sections.push(`Sent by ${businessName} property manager — weekly maintenance digest`);
 
   return { subject, text: sections.join("\n") };
+}
+
+// ---------------------------------------------------------------------------
+// Weekly lease-expiration digest (same Monday cron as the other staff digests)
+// ---------------------------------------------------------------------------
+
+/** One active lease ending inside the configured alert window (or already past). */
+export interface ExpirationDigestRow {
+  tenantName: string;
+  propertyName: string;
+  unitLabel: string;
+  /** "yyyy-MM-dd" lease end date in the property timezone. */
+  endISO: string;
+  /** Whole days from now to the end date (negative once past). */
+  daysUntilExpiry: number;
+  /** Pure classification from expirationState. In practice the loader only
+   *  emits eligible rows, so this is "expired" | "expiring_soon" | "upcoming"
+   *  (never "none") — only "expired" changes the rendering. */
+  state: ExpirationStateName;
+}
+
+export interface ExpirationDigestInput {
+  businessName: string;
+  now: Date;
+  /** The configured alert window (days), echoed into the subject/footer copy. */
+  windowDays: number;
+  rows: ExpirationDigestRow[];
+}
+
+/**
+ * Build the weekly lease-expiration digest email. Returns null when nothing is
+ * expiring (the caller must not send an empty digest). Rows are sorted soonest
+ * end first (ties broken by tenant name) so the output is deterministic, and
+ * each line carries its days-left chip plus an "(EXPIRED)" marker once past.
+ */
+export function formatExpirationDigest(
+  input: ExpirationDigestInput,
+): { subject: string; text: string } | null {
+  const { businessName, now, windowDays, rows } = input;
+  if (rows.length === 0) return null;
+
+  const sorted = [...rows].sort(
+    (a, b) =>
+      a.daysUntilExpiry - b.daysUntilExpiry ||
+      a.tenantName.localeCompare(b.tenantName),
+  );
+  const expiredCount = sorted.filter((r) => r.state === "expired").length;
+
+  const subject = `Lease${sorted.length === 1 ? "" : "s"} expiring: ${
+    sorted.length
+  } in the next ${windowDays} days${
+    expiredCount > 0 ? ` (${expiredCount} expired)` : ""
+  } — ${businessName}`;
+
+  const lines = sorted.map(
+    (r) =>
+      `${r.endISO} — ${r.tenantName} — ${r.propertyName} · ${r.unitLabel} — ${daysUntilLabel(
+        r.daysUntilExpiry,
+      )}${r.state === "expired" ? " (EXPIRED)" : ""}`,
+  );
+
+  const text = [
+    `Leases expiring within ${windowDays} days as of ${now
+      .toISOString()
+      .slice(0, 10)}:`,
+    "",
+    ...lines,
+    "",
+    `Sent by ${businessName} property manager — weekly lease-expiration digest`,
+  ].join("\n");
+
+  return { subject, text };
 }

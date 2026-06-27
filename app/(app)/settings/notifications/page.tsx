@@ -33,6 +33,7 @@ export default async function NotificationsSettingsPage() {
             phone: dbUser.phone ?? "",
             notifyOverdueDigest: dbUser.notifyOverdueDigest,
             notifyMaintenanceDigest: dbUser.notifyMaintenanceDigest,
+            notifyLeaseExpiration: dbUser.notifyLeaseExpiration,
             notifyCashPickup: dbUser.notifyCashPickup,
           }}
         />

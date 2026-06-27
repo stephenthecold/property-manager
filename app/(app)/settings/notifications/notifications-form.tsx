@@ -14,6 +14,7 @@ export interface NotificationsInitial {
   phone: string;
   notifyOverdueDigest: boolean;
   notifyMaintenanceDigest: boolean;
+  notifyLeaseExpiration: boolean;
   notifyCashPickup: boolean;
 }
 
@@ -28,6 +29,12 @@ const TOGGLES = [
     label: "Weekly maintenance digest (email)",
     description:
       "Monday summary of jobs and recurring tasks scheduled for the coming week (requires the Maintenance module).",
+  },
+  {
+    name: "notifyLeaseExpiration" as const,
+    label: "Weekly lease-expiration digest (email)",
+    description:
+      "Monday summary of leases ending within the alert window set at Settings → Leases (default 60 days).",
   },
   {
     name: "notifyCashPickup" as const,

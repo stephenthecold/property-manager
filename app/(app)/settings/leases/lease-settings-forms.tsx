@@ -11,6 +11,7 @@ import {
   clearLandlordSignatureAction,
   saveLandlordSignatureAction,
   saveLeaseAgreementTextAction,
+  saveLeaseExpirationWindowAction,
   uploadLeaseTemplateAction,
   type LeaseSettingsState,
 } from "./actions";
@@ -283,5 +284,71 @@ export function LandlordSignatureForm({
         </form>
       )}
     </div>
+  );
+}
+
+/**
+ * Lease-expiration alert window (days). Drives both the dashboard "Lease
+ * expirations" section and the weekly staff expiration digest. 1–365; blank
+ * reverts to the default (60).
+ */
+export function LeaseExpirationWindowForm({
+  currentDays,
+  defaultDays,
+  minDays,
+  maxDays,
+}: {
+  currentDays: number;
+  defaultDays: number;
+  minDays: number;
+  maxDays: number;
+}) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState<LeaseSettingsState, FormData>(
+    async (prev, fd) => {
+      const next = await saveLeaseExpirationWindowAction(prev, fd);
+      if (next.ok) router.refresh();
+      return next;
+    },
+    {},
+  );
+
+  return (
+    <form action={formAction} className="space-y-4">
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      )}
+      {state.ok && (
+        <Alert>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="leaseExpirationAlertDays">Alert window (days)</Label>
+        <Input
+          id="leaseExpirationAlertDays"
+          name="leaseExpirationAlertDays"
+          type="number"
+          inputMode="numeric"
+          min={minDays}
+          max={maxDays}
+          defaultValue={currentDays}
+          className="max-w-[12rem]"
+        />
+        <p className="text-xs text-muted-foreground">
+          Leases ending within this many days appear in the dashboard
+          &ldquo;Lease expirations&rdquo; section and the weekly Monday digest
+          emailed to staff. {minDays}–{maxDays}; leave blank to use the default
+          ({defaultDays}).
+        </p>
+      </div>
+
+      <Button type="submit" disabled={pending}>
+        {pending ? "Saving…" : "Save alert window"}
+      </Button>
+    </form>
   );
 }

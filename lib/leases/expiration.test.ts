@@ -4,6 +4,10 @@ import {
   expirationLabel,
   expirationBadgeClass,
   daysUntilLabel,
+  sanitizeAlertWindowDays,
+  MIN_ALERT_DAYS,
+  MAX_ALERT_DAYS,
+  UPCOMING_DAYS,
   type ExpirationInput,
   type LeaseStatusLike,
 } from "./expiration";
@@ -121,5 +125,31 @@ describe("display helpers", () => {
     expect(daysUntilLabel(0)).toBe("today");
     expect(daysUntilLabel(-1)).toBe("1 day ago");
     expect(daysUntilLabel(-5)).toBe("5 days ago");
+  });
+});
+
+describe("sanitizeAlertWindowDays", () => {
+  it("passes a valid in-range integer through", () => {
+    expect(sanitizeAlertWindowDays(90)).toBe(90);
+    expect(sanitizeAlertWindowDays(MIN_ALERT_DAYS)).toBe(MIN_ALERT_DAYS);
+    expect(sanitizeAlertWindowDays(MAX_ALERT_DAYS)).toBe(MAX_ALERT_DAYS);
+  });
+
+  it("falls back to the default for null/undefined/non-finite", () => {
+    expect(sanitizeAlertWindowDays(null)).toBe(UPCOMING_DAYS);
+    expect(sanitizeAlertWindowDays(undefined)).toBe(UPCOMING_DAYS);
+    expect(sanitizeAlertWindowDays(NaN)).toBe(UPCOMING_DAYS);
+    expect(sanitizeAlertWindowDays(Infinity)).toBe(UPCOMING_DAYS);
+  });
+
+  it("clamps out-of-range values to the bounds", () => {
+    expect(sanitizeAlertWindowDays(0)).toBe(MIN_ALERT_DAYS);
+    expect(sanitizeAlertWindowDays(-30)).toBe(MIN_ALERT_DAYS);
+    expect(sanitizeAlertWindowDays(10_000)).toBe(MAX_ALERT_DAYS);
+  });
+
+  it("truncates a fractional value before clamping", () => {
+    expect(sanitizeAlertWindowDays(45.9)).toBe(45);
+    expect(sanitizeAlertWindowDays(0.4)).toBe(MIN_ALERT_DAYS);
   });
 });
