@@ -11,6 +11,8 @@ import { resolveComplianceLinks } from "@/lib/config/compliance";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { onlinePaymentsConfigured } from "@/lib/services/gateway-checkout";
 import { countServedNoticesForTenant } from "@/lib/services/notices";
+import { listPendingRenewalsForTenant } from "@/lib/services/portal-renewals";
+import { formatDateInTz } from "@/lib/dates";
 import { startPortalCheckoutAction } from "./pay/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +89,7 @@ export default async function PortalHomePage({
         ? fromCents(snap.currentPeriodOutstandingCents)
         : "";
 
-  const [ledger, payments, receipts, documents, requests, noticeCount] = await Promise.all([
+  const [ledger, payments, receipts, documents, requests, noticeCount, pendingRenewals] = await Promise.all([
     activeLease
       ? prisma.ledgerEntry.findMany({
           where: { leaseId: activeLease.id },
@@ -126,6 +128,7 @@ export default async function PortalHomePage({
     settings.modules.notices
       ? countServedNoticesForTenant(tenant.id)
       : Promise.resolve(0),
+    listPendingRenewalsForTenant(tenant.id),
   ]);
 
   const fmtDate = (d: Date) =>
@@ -168,6 +171,49 @@ export default async function PortalHomePage({
           </CardContent>
         </Card>
       )}
+      {/* Pending lease-renewal offers (read-only). The tenant accepts via the
+          e-sign link in their email/SMS — no in-portal signing here. */}
+      {pendingRenewals.map((r) => (
+        <Card
+          key={r.offerId}
+          className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
+        >
+          <CardHeader>
+            <CardTitle className="text-base text-amber-900 dark:text-amber-200">
+              Your lease is up for renewal
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="text-amber-900 dark:text-amber-200">
+              {r.property.name} · Unit {r.property.unitNumber}
+            </div>
+            <div className="flex flex-wrap gap-x-8 gap-y-2">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Proposed rent
+                </div>
+                <div className="text-lg font-semibold tabular-nums text-foreground">
+                  {formatCurrency(BigInt(r.proposedRentAmountCents), r.property.currency)}
+                  <span className="text-sm font-normal text-muted-foreground">/month</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  New end date
+                </div>
+                <div className="text-lg font-semibold tabular-nums text-foreground">
+                  {formatDateInTz(r.proposedEndDate, r.property.timezone)}
+                </div>
+              </div>
+            </div>
+            <p className="text-amber-900 dark:text-amber-200">
+              Check your email and text messages for your secure signing link to
+              review and accept these terms.
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+
       {/* Lease + balance */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
