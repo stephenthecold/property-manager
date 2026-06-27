@@ -102,18 +102,15 @@ export async function finalizeDispositionAction(
   const deductions = toDeductions(input.deductions);
   if (deductions == null) return { ok: false, error: "Invalid deduction amount." };
 
-  // Persist the on-screen itemization first (validated there), then finalize
-  // against the CURRENT ledger balance. The finalize is the CAS-guarded post.
-  const upd = await updateDraftDisposition({
+  // Persist the on-screen itemization and post in ONE transaction (overrides),
+  // so the settlement reflects exactly the reviewed values with no separate
+  // read-modify-write window. Finalize is the CAS-guarded post and recomputes
+  // against the live ledger balance.
+  const fin = await finalizeDisposition({
     dispositionId: input.dispositionId,
-    depositHeldCents: held,
-    deductions,
-    notes: input.notes ?? null,
     actor,
+    overrides: { depositHeldCents: held, deductions, notes: input.notes ?? null },
   });
-  if (!upd.ok) return { ok: false, error: upd.error };
-
-  const fin = await finalizeDisposition({ dispositionId: input.dispositionId, actor });
   if (!fin.ok) return { ok: false, error: fin.error };
 
   const row = await getDisposition(input.dispositionId);

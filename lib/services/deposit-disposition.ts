@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
+import { planFifoAllocation } from "@/lib/accounting/allocation";
+import { loadOpenChargesTx } from "@/lib/services/payments";
 import {
   computeDisposition,
   validateDeductions,
@@ -71,6 +73,20 @@ export async function createDraftDisposition(i: {
     },
   });
   if (!lease) return { ok: false, error: "Lease not found." };
+
+  // One settlement per lease: once finalized, the postings stand and a second
+  // disposition would double-charge damages. Refuse a new one (the UI already
+  // shows the finalized statement read-only).
+  const finalized = await prisma.depositDisposition.findFirst({
+    where: { leaseId: i.leaseId, status: "finalized" },
+    select: { id: true },
+  });
+  if (finalized) {
+    return {
+      ok: false,
+      error: "This lease already has a finalized move-out settlement.",
+    };
+  }
 
   // One open draft per lease — reuse it rather than stacking drafts.
   const existing = await prisma.depositDisposition.findFirst({
@@ -158,6 +174,16 @@ export async function finalizeDisposition(i: {
   dispositionId: string;
   actor: AuditContext;
   now?: Date;
+  /**
+   * Final itemization from the editor. When present it is persisted INSIDE the
+   * finalize transaction (before the status CAS), so the post reflects exactly
+   * the on-screen values with no separate-transaction read-modify-write window.
+   */
+  overrides?: {
+    depositHeldCents: bigint;
+    deductions: DepositDeduction[];
+    notes?: string | null;
+  };
 }): Promise<Ok<{ result: DispositionResultDTO }> | Err> {
   const now = i.now ?? new Date();
   return prisma.$transaction(async (tx) => {
@@ -169,9 +195,32 @@ export async function finalizeDisposition(i: {
       return { ok: false, error: "This disposition is already finalized." };
     }
 
-    const deductions = parseDeductions(disp.deductions);
-    const valid = validateDeductions(deductions);
-    if (!valid.ok) return valid;
+    let depositHeldCents = disp.depositHeldCents;
+    let deductions = parseDeductions(disp.deductions);
+    if (i.overrides) {
+      if (i.overrides.depositHeldCents < 0n) {
+        return { ok: false, error: "Deposit held cannot be negative." };
+      }
+      const v = validateDeductions(i.overrides.deductions);
+      if (!v.ok) return v;
+      depositHeldCents = i.overrides.depositHeldCents;
+      deductions = i.overrides.deductions;
+      // Persist the final itemization in the SAME tx as the post.
+      await tx.depositDisposition.update({
+        where: { id: disp.id },
+        data: {
+          depositHeldCents,
+          deductions: deductions.map((d) => ({
+            label: d.label.trim(),
+            amountCents: d.amountCents.toString(),
+          })),
+          notes: i.overrides.notes?.trim() || null,
+        },
+      });
+    } else {
+      const v = validateDeductions(deductions);
+      if (!v.ok) return v;
+    }
 
     // Authoritative balance = SUM over all ledger entries (the owed invariant).
     const agg = await tx.ledgerEntry.aggregate({
@@ -181,7 +230,7 @@ export async function finalizeDisposition(i: {
     const balanceCents = agg._sum.amountCents ?? 0n;
     const r = computeDisposition({
       balanceCents,
-      depositHeldCents: disp.depositHeldCents,
+      depositHeldCents,
       deductions,
     });
 
@@ -195,6 +244,8 @@ export async function finalizeDisposition(i: {
       return { ok: false, error: "This disposition is already finalized." };
     }
 
+    // Post damages FIRST as a positive adjustment (an open, ageable charge), so
+    // the deposit allocation below can retire it alongside any prior balance.
     let damageEntryId: string | null = null;
     if (r.damagesTotalCents > 0n) {
       const e = await tx.ledgerEntry.create({
@@ -213,9 +264,15 @@ export async function finalizeDisposition(i: {
       damageEntryId = e.id;
     }
 
+    // Apply the deposit like a payment: a negative `credit` entry funds FIFO
+    // allocations against the open charges (the pre-existing balance + the
+    // damages just posted). Allocating — rather than a bare credit — keeps the
+    // open-charge/aging view consistent with the balance, so a settled lease
+    // shows no phantom past-due. depositApplied ≤ gross open charges, so the
+    // plan never leaves a leftover and the balance lands at balanceOwed (≥ 0).
     let depositCreditEntryId: string | null = null;
     if (r.depositAppliedCents > 0n) {
-      const e = await tx.ledgerEntry.create({
+      const credit = await tx.ledgerEntry.create({
         data: {
           leaseId: disp.leaseId,
           tenantId: disp.tenantId,
@@ -228,7 +285,19 @@ export async function finalizeDisposition(i: {
           createdBy: i.actor.actorId ?? null,
         },
       });
-      depositCreditEntryId = e.id;
+      depositCreditEntryId = credit.id;
+
+      const open = await loadOpenChargesTx(tx, disp.leaseId);
+      const plan = planFifoAllocation(r.depositAppliedCents, open);
+      for (const line of plan.allocations) {
+        await tx.chargeAllocation.create({
+          data: {
+            chargeEntryId: line.chargeEntryId,
+            paymentEntryId: credit.id,
+            amountCents: line.amountCents,
+          },
+        });
+      }
     }
 
     await tx.depositDisposition.update({
@@ -284,6 +353,12 @@ export async function discardDraftDisposition(i: {
   actor: AuditContext;
 }): Promise<Ok<Record<never, never>> | Err> {
   return prisma.$transaction(async (tx) => {
+    // Snapshot for the audit before the delete; the status='draft' predicate on
+    // deleteMany is still the atomic claim (a finalized row can't be deleted).
+    const row = await tx.depositDisposition.findUnique({
+      where: { id: i.dispositionId },
+      select: { leaseId: true, depositHeldCents: true, deductions: true },
+    });
     const claim = await tx.depositDisposition.deleteMany({
       where: { id: i.dispositionId, status: "draft" },
     });
@@ -295,6 +370,13 @@ export async function discardDraftDisposition(i: {
       action: "deposit.disposition_discarded",
       entityType: "DepositDisposition",
       entityId: i.dispositionId,
+      before: row
+        ? {
+            leaseId: row.leaseId,
+            depositHeldCents: row.depositHeldCents.toString(),
+            deductionLines: parseDeductions(row.deductions).length,
+          }
+        : undefined,
     });
     return { ok: true };
   });

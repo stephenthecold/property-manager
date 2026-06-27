@@ -70,7 +70,7 @@ export function MoveOutDispositionDialog({
   const [pending, startTransition] = useTransition();
   // Next id for appended/reseeded lines. Seeded past the initial rows so ids
   // never collide; only ever touched in event handlers, never during render.
-  const lineId = useRef(disposition?.deductions?.length ?? 0);
+  const lineId = useRef(disposition?.deductions.length ?? 0);
 
   const heldFor = (d: SerializedDisposition | null) =>
     fromCents(BigInt(d?.depositHeldCents ?? defaultDepositHeldCents));
@@ -302,7 +302,9 @@ export function MoveOutDispositionDialog({
             )}
             <p className="text-xs text-muted-foreground">
               Finalized{disp.finalizedAt ? ` ${new Date(disp.finalizedAt).toLocaleDateString()}` : ""}.
-              The refund is paid out separately; record it as a normal payout.
+              The refund is paid out separately — record it as a payout. Any
+              standing account credit included in the refund stays on the ledger
+              until that payout is recorded.
             </p>
           </div>
         )}
@@ -411,6 +413,10 @@ export function MoveOutDispositionDialog({
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Preview uses the balance at page load; finalizing recomputes
+              against the live ledger balance.
+            </p>
 
             {error && (
               <Alert variant="destructive">
