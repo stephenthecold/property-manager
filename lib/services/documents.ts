@@ -116,6 +116,20 @@ export async function getDocumentDownloadUrl(
   return { url, fileName: doc.fileName, fileType: doc.fileType };
 }
 
+/**
+ * Signed, short-lived download URL for an ALREADY-LOADED document row — signs
+ * `doc.fileUrl` directly, with NO database re-fetch. Use this on list pages that
+ * already hold the rows; getDocumentDownloadUrl(id) is only for when you have
+ * just an id. Returns null on a storage outage so the caller can hide the link.
+ */
+export async function getSignedUrlForDoc(doc: { fileUrl: string }): Promise<string | null> {
+  try {
+    return await (await getFileStorage()).getSignedUrl(doc.fileUrl);
+  } catch {
+    return null;
+  }
+}
+
 export async function listDocuments(
   filter: {
     tenantId?: string;

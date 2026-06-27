@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { getSignedUrlForDoc } from "@/lib/services/documents";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -67,20 +67,15 @@ export default async function RequestsPage({
       })
     : [];
   const photosByRequest = new Map<string, { id: string; url: string | null; fileName: string | null }[]>();
-  await Promise.all(
-    photoDocs.map(async (d) => {
-      if (!d.tenantRequestId) return;
-      let url: string | null = null;
-      try {
-        url = (await getDocumentDownloadUrl(d.id))?.url ?? null;
-      } catch {
-        url = null;
-      }
-      const list = photosByRequest.get(d.tenantRequestId) ?? [];
-      list.push({ id: d.id, url, fileName: d.fileName });
-      photosByRequest.set(d.tenantRequestId, list);
-    }),
-  );
+  // Sign already-loaded rows in parallel (no per-photo DB re-fetch), then group
+  // in the original createdAt-asc order.
+  const photoUrls = await Promise.all(photoDocs.map((d) => getSignedUrlForDoc(d)));
+  photoDocs.forEach((d, i) => {
+    if (!d.tenantRequestId) return;
+    const list = photosByRequest.get(d.tenantRequestId) ?? [];
+    list.push({ id: d.id, url: photoUrls[i], fileName: d.fileName });
+    photosByRequest.set(d.tenantRequestId, list);
+  });
 
   const statusBadge = (status: string) => (
     <Badge
