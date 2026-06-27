@@ -15,7 +15,7 @@ import { snapshotAgreementTemplate } from "@/lib/lease/agreement-format";
 import { parseDepositRows } from "@/lib/leases/deposits";
 import { DateTime } from "luxon";
 import type { LateFeeType, LeaseStatus } from "@/lib/generated/prisma/enums";
-import type { FormState } from "@/lib/forms";
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 /**
  * Validation failures are RETURNED, never thrown: a thrown error in a server
@@ -26,9 +26,6 @@ export interface CreateLeaseState {
   error?: string;
 }
 
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 function centsOrNull(v: string): bigint | null {
   if (!v) return null;
   try {

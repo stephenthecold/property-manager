@@ -2,21 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { auditActor, requireCapability } from "@/lib/auth/session";
-import { assertModuleEnabled } from "@/lib/services/app-settings";
+import { auditActor, requireModuleCapability } from "@/lib/auth/session";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { createAsset, setAssetActive, updateAsset } from "@/lib/services/assets";
 import type { AssetInput } from "@/lib/services/assets";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
-
-async function gate(): Promise<void> {
-  await requireCapability("maintenance.manage");
-  await assertModuleEnabled("maintenance");
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 /**
  * Resolve the two date-only inputs (installedOn / warrantyExpiresOn) in the
@@ -68,7 +58,7 @@ export async function createAssetAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const parsed = await readInput(fd);
   if ("error" in parsed) return { error: parsed.error };
   if (!parsed.data.name) return { error: "Name is required." };
@@ -82,7 +72,7 @@ export async function updateAssetAction(
   _prev: FormState,
   fd: FormData,
 ): Promise<FormState> {
-  await gate();
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "assetId");
   if (!id) return { error: "Missing asset id." };
   const parsed = await readInput(fd);
@@ -95,7 +85,7 @@ export async function updateAssetAction(
 }
 
 export async function setAssetActiveAction(fd: FormData): Promise<void> {
-  await gate();
+  await requireModuleCapability("maintenance.manage", "maintenance");
   const id = str(fd, "assetId");
   if (!id) throw new Error("Missing asset id.");
   const active = String(fd.get("active") ?? "") === "true";

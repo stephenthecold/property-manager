@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
+import { formatDateInTz } from "@/lib/dates";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import { writeAudit, type AuditContext } from "@/lib/audit/audit";
 import {
@@ -108,9 +108,7 @@ async function sendSignerLink(i: SendLinkInput): Promise<SignerSendStatus> {
   const app = await getAppSettings();
   const link = `${await publicBaseUrl()}/sign/${i.token}`;
   const kindLabel = signingKindLabel(i.kind);
-  const expires = DateTime.fromJSDate(i.expiresAt, { zone: i.timezone })
-    .setLocale("en-US")
-    .toLocaleString(DateTime.DATE_FULL);
+  const expires = formatDateInTz(i.expiresAt, i.timezone);
 
   let sms: SignerSendStatus["sms"] = "skipped";
   try {

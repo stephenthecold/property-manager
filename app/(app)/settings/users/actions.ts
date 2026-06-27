@@ -8,11 +8,8 @@ import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit, writeAudit } from "@/lib/audit/audit";
 import { isRole, roleAtLeast } from "@/lib/auth/rbac";
 import { VIEW_AS_COOKIE } from "@/lib/auth/view-as";
+import { getFormString as str } from "@/lib/forms";
 import type { Role } from "@/lib/generated/prisma/enums";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 
 /**
  * Guard failures land back on the users page as a banner instead of being

@@ -17,11 +17,7 @@ import type {
   ServiceStatus,
   UnitType,
 } from "@/lib/generated/prisma/enums";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 function numOrNull(
   fd: FormData,

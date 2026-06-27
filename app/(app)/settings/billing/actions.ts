@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/app-settings";
 import { normalizeCashtag } from "@/lib/payments/cash-app";
 import { toCents } from "@/lib/money";
+import { getFormString as str } from "@/lib/forms";
 import type { LateFeeType } from "@/lib/generated/prisma/enums";
 
 /**
@@ -22,10 +23,6 @@ export interface BillingState {
   ok?: boolean;
   error?: string;
   message?: string;
-}
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
 }
 
 function parseMoney(

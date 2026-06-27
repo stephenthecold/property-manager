@@ -10,11 +10,7 @@ import {
   savePublicSiteSettings,
 } from "@/lib/services/app-settings";
 import { createUploadedDocument } from "@/lib/services/documents";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;

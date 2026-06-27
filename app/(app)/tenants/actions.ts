@@ -17,11 +17,7 @@ import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { recordStaffConsentChange } from "@/lib/services/sms-consent";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { publicBaseUrl } from "@/lib/http/base-url";
-import type { FormState } from "@/lib/forms";
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 /** "" → null; anything else must be a PaymentMethod enum value. */
 function parsePreferredMethod(raw: string): PaymentMethod | null {

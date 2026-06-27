@@ -10,7 +10,7 @@ import {
   invitePayerPortalAccount,
   setPayerPortalAccountActive,
 } from "@/lib/services/payer-portal-auth";
-import type { FormState } from "@/lib/forms";
+import { getFormString as str, type FormState } from "@/lib/forms";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX = {
@@ -21,10 +21,6 @@ const MAX = {
   mailingAddress: 300,
   notes: 2000,
 } as const;
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
 
 interface PayerFields {
   name: string;
