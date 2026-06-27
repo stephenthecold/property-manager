@@ -19,6 +19,7 @@ import {
 import { formatCurrency, fromCents } from "@/lib/money";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -357,6 +358,7 @@ export default async function DashboardPage() {
             { key: "property", label: "Property", className: "hidden md:table-cell" },
             { key: "endDate", label: "End date" },
             { key: "daysLeft", label: "Days left", align: "right", numeric: true },
+            { key: "renew", label: "", align: "right", sortable: false },
           ]}
           rows={expirations.map((r) => ({
             key: r.leaseId,
@@ -366,6 +368,7 @@ export default async function DashboardPage() {
               r.propertyName,
               r.endDate.getTime(),
               r.daysUntilExpiry,
+              null,
             ],
             cells: [
               <Link
@@ -391,6 +394,15 @@ export default async function DashboardPage() {
                 <Badge variant="outline" className={expirationBadgeClass(r.state)}>
                   {daysUntilLabel(r.daysUntilExpiry)}
                 </Badge>
+              </span>,
+              <span key="renew" className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  render={<Link href={`/leases/${r.leaseId}/agreement`} />}
+                >
+                  Renew
+                </Button>
               </span>,
             ],
           }))}
