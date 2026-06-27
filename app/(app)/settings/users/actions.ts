@@ -161,6 +161,7 @@ export async function setUserNotifications(fd: FormData): Promise<void> {
     phone: phoneRaw === "" ? null : phoneRaw,
     notifyOverdueDigest: fd.get("notifyOverdueDigest") === "on",
     notifyMaintenanceDigest: fd.get("notifyMaintenanceDigest") === "on",
+    notifyLeaseExpiration: fd.get("notifyLeaseExpiration") === "on",
     notifyCashPickup: fd.get("notifyCashPickup") === "on",
   };
   await withAudit(
@@ -173,6 +174,7 @@ export async function setUserNotifications(fd: FormData): Promise<void> {
         phone: target.phone,
         notifyOverdueDigest: target.notifyOverdueDigest,
         notifyMaintenanceDigest: target.notifyMaintenanceDigest,
+        notifyLeaseExpiration: target.notifyLeaseExpiration,
         notifyCashPickup: target.notifyCashPickup,
       },
     },

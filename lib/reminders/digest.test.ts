@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatExpirationDigest,
   formatMaintenanceDigest,
   formatOverdueDigest,
   isoWeekKey,
+  type ExpirationDigestRow,
   type OverdueDigestRow,
 } from "@/lib/reminders/digest";
 
@@ -236,5 +238,103 @@ describe("formatMaintenanceDigest", () => {
     });
     expect(digest!.subject).toBe("Maintenance this week: 1 item — Acme");
     expect(digest!.text).not.toContain("Jobs:");
+  });
+});
+
+describe("formatExpirationDigest", () => {
+  const now = new Date("2026-06-12T09:00:00Z");
+
+  function expRow(
+    overrides: Partial<ExpirationDigestRow> = {},
+  ): ExpirationDigestRow {
+    return {
+      tenantName: "Dana Smith",
+      propertyName: "Maple St",
+      unitLabel: "2B",
+      endISO: "2026-07-30",
+      daysUntilExpiry: 48,
+      state: "upcoming",
+      ...overrides,
+    };
+  }
+
+  it("returns null when nothing is expiring", () => {
+    expect(
+      formatExpirationDigest({
+        businessName: "Acme",
+        now,
+        windowDays: 60,
+        rows: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("counts leases, echoes the window, and flags expired ones in the subject", () => {
+    const digest = formatExpirationDigest({
+      businessName: "Acme",
+      now,
+      windowDays: 90,
+      rows: [
+        expRow({ daysUntilExpiry: 10, state: "expiring_soon" }),
+        expRow({ tenantName: "Lee Park", daysUntilExpiry: -3, state: "expired" }),
+      ],
+    });
+    expect(digest!.subject).toBe(
+      "Leases expiring: 2 in the next 90 days (1 expired) — Acme",
+    );
+  });
+
+  it("uses the singular and omits the expired suffix when none are past", () => {
+    const digest = formatExpirationDigest({
+      businessName: "Acme",
+      now,
+      windowDays: 60,
+      rows: [expRow()],
+    });
+    expect(digest!.subject).toBe("Lease expiring: 1 in the next 60 days — Acme");
+  });
+
+  it("sorts soonest-first and marks expired rows in the body", () => {
+    const digest = formatExpirationDigest({
+      businessName: "Acme",
+      now,
+      windowDays: 60,
+      rows: [
+        expRow({ tenantName: "Later", endISO: "2026-07-30", daysUntilExpiry: 48 }),
+        expRow({
+          tenantName: "Past",
+          endISO: "2026-06-09",
+          daysUntilExpiry: -3,
+          state: "expired",
+        }),
+        expRow({ tenantName: "Soon", endISO: "2026-06-20", daysUntilExpiry: 8, state: "expiring_soon" }),
+      ],
+    });
+    const lines = digest!.text.split("\n");
+    const order = ["Past", "Soon", "Later"].map((n) =>
+      lines.findIndex((l) => l.includes(n)),
+    );
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(order[1]).toBeLessThan(order[2]);
+    expect(digest!.text).toContain(
+      "2026-06-09 — Past — Maple St · 2B — 3 days ago (EXPIRED)",
+    );
+    expect(digest!.text).toContain(
+      "2026-06-20 — Soon — Maple St · 2B — in 8 days",
+    );
+  });
+
+  it("ends with a link-free footer naming the business", () => {
+    const digest = formatExpirationDigest({
+      businessName: "Sunrise Rentals",
+      now,
+      windowDays: 60,
+      rows: [expRow()],
+    });
+    const lines = digest!.text.split("\n");
+    expect(lines[lines.length - 1]).toBe(
+      "Sent by Sunrise Rentals property manager — weekly lease-expiration digest",
+    );
+    expect(digest!.text).not.toMatch(/https?:\/\//);
   });
 });

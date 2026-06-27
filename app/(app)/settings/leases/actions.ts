@@ -5,7 +5,9 @@ import { auditActor, requireCapability } from "@/lib/auth/session";
 import {
   saveLandlordSignature,
   saveLeaseAgreementText,
+  saveLeaseExpirationWindow,
 } from "@/lib/services/app-settings";
+import { MAX_ALERT_DAYS, MIN_ALERT_DAYS } from "@/lib/leases/expiration";
 import { createUploadedDocument } from "@/lib/services/documents";
 import { getFileStorage } from "@/lib/providers/storage";
 import { looksLikePng } from "@/lib/esign/artifact";
@@ -53,6 +55,51 @@ export async function saveLeaseAgreementTextAction(
     message: value
       ? "Lease agreement text saved."
       : "Reverted to the built-in default text.",
+  };
+}
+
+/**
+ * Save the lease-expiration alert window (days ahead) used by the dashboard
+ * section and the weekly staff digest. Blank reverts to the shipped default;
+ * an out-of-range value is rejected (the resolver also clamps on read).
+ */
+export async function saveLeaseExpirationWindowAction(
+  _prev: LeaseSettingsState,
+  fd: FormData,
+): Promise<LeaseSettingsState> {
+  await requireCapability("organization.settings");
+  const actor = await auditActor();
+
+  const raw = String(fd.get("leaseExpirationAlertDays") ?? "").trim();
+  let days: number | null;
+  if (raw === "") {
+    days = null; // -> shipped default
+  } else {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < MIN_ALERT_DAYS || n > MAX_ALERT_DAYS) {
+      return {
+        error: `Enter a whole number of days between ${MIN_ALERT_DAYS} and ${MAX_ALERT_DAYS}, or leave it blank for the default.`,
+      };
+    }
+    days = n;
+  }
+
+  try {
+    await saveLeaseExpirationWindow(days, actor);
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Failed to save the alert window.",
+    };
+  }
+
+  revalidatePath("/settings/leases");
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    message:
+      days === null
+        ? "Reverted to the default alert window."
+        : `Alert window set to ${days} days.`,
   };
 }
 

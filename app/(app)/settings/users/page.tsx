@@ -134,6 +134,7 @@ export default async function UsersSettingsPage({
                         [
                           ["notifyOverdueDigest", "Weekly overdue-rent digest", u.notifyOverdueDigest],
                           ["notifyMaintenanceDigest", "Weekly maintenance digest", u.notifyMaintenanceDigest],
+                          ["notifyLeaseExpiration", "Weekly lease-expiration digest", u.notifyLeaseExpiration],
                           ["notifyCashPickup", "Cash-pickup alerts (email + text)", u.notifyCashPickup],
                         ] as const
                       ).map(([name, label, checked]) => (

@@ -106,7 +106,7 @@ export default async function DashboardPage() {
     getDashboard(now),
     showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
     getVacancyOutlook(now),
-    expiringLeases({ now }),
+    expiringLeases({ now, withinDays: settings.leaseExpirationAlertDays }),
   ]);
   // Fixed monthly costs = mortgage + insurance + taxes (yearly figures /12).
   const fixedCostsMonthlyCents = profit
@@ -351,7 +351,7 @@ export default async function DashboardPage() {
       ),
       content: (
         <DataTable
-          emptyMessage="No leases expiring in the next 60 days."
+          emptyMessage={`No leases expiring in the next ${settings.leaseExpirationAlertDays} days.`}
           columns={[
             { key: "tenant", label: "Tenant" },
             { key: "unit", label: "Unit" },

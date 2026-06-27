@@ -9,6 +9,7 @@ import { runScheduledReminders } from "@/lib/services/reminders";
 import { runInboxPollOnce } from "@/lib/services/inbox-poll";
 import { INBOX_POLL_CHANNEL } from "@/lib/services/inbox-poll-signal";
 import {
+  runWeeklyLeaseExpirationDigest,
   runWeeklyMaintenanceDigest,
   runWeeklyStaffDigest,
 } from "@/lib/services/staff-digest";
@@ -169,6 +170,16 @@ async function runStaffDigestOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] maintenance digest failed:", e);
+  }
+  // The lease-expiration digest shares the same Monday cadence and per-week
+  // idempotency; isolated so a failure never blocks the other digests.
+  try {
+    const res = await runWeeklyLeaseExpirationDigest(new Date());
+    console.log(
+      `[worker] lease-expiration digest: sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+    );
+  } catch (e) {
+    console.error("[worker] lease-expiration digest failed:", e);
   }
 }
 

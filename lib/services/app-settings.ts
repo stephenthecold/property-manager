@@ -12,6 +12,7 @@ import { SmtpEmailProvider, type SmtpAuth } from "@/lib/providers/email/smtp";
 import type { EmailProvider } from "@/lib/providers/email/types";
 import { DEFAULT_EMAIL_SUBJECTS, DEFAULT_TEMPLATES } from "@/lib/reminders/templates";
 import { sanitizeReminderSendHour } from "@/lib/reminders/schedule";
+import { sanitizeAlertWindowDays } from "@/lib/leases/expiration";
 import { sanitizeTablePageSize } from "@/lib/config/table";
 import type { PermissionMatrix } from "@/lib/auth/permissions";
 import {
@@ -163,6 +164,9 @@ export interface ResolvedAppSettings {
   reminderSendHour: number | null;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
+  /** Days-ahead window for the lease-expiration dashboard section + weekly
+   *  digest; clamped to 1..365, default 60. */
+  leaseExpirationAlertDays: number;
   /** Master switch for ALL email sends. Config is DB-only (no env fallback). */
   emailEnabled: boolean;
   /** null = not configured; "stub" logs only; "smtp" sends. */
@@ -336,6 +340,9 @@ async function resolve(): Promise<ResolvedAppSettings> {
     reminderSendHour: sanitizeReminderSendHour(row?.reminderSendHour ?? null),
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+    leaseExpirationAlertDays: sanitizeAlertWindowDays(
+      row?.leaseExpirationAlertDays ?? null,
+    ),
     emailEnabled: row?.emailEnabled ?? false,
     emailProvider:
       row?.emailProvider === "stub" || row?.emailProvider === "smtp"
@@ -640,6 +647,37 @@ export async function saveBillingDefaults(
           }
         : undefined,
       after: { ...data, updatedBy: undefined },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/**
+ * Persist the lease-expiration alert window (days ahead). `null` reverts to the
+ * shipped default (60). The value is clamped on read by sanitizeAlertWindowDays,
+ * so callers may pass any non-negative integer.
+ */
+export async function saveLeaseExpirationWindow(
+  days: number | null,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { leaseExpirationAlertDays: days, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.lease_expiration_window.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? { leaseExpirationAlertDays: before.leaseExpirationAlertDays }
+        : undefined,
+      after: { leaseExpirationAlertDays: days },
     });
   });
   invalidateAppSettingsCache();

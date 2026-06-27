@@ -47,6 +47,26 @@ export interface ExpirationState {
 export const EXPIRING_SOON_DAYS = 30;
 export const UPCOMING_DAYS = 60;
 
+/** Bounds for the operator-configurable alert window (AppSettings.leaseExpirationAlertDays). */
+export const MIN_ALERT_DAYS = 1;
+export const MAX_ALERT_DAYS = 365;
+
+/**
+ * Clamp the stored alert window to a sane range; null/blank/out-of-range falls
+ * back to the shipped default (UPCOMING_DAYS = 60). Pure so the AppSettings
+ * resolver and every caller (dashboard section + weekly digest) agree on
+ * exactly one effective window.
+ */
+export function sanitizeAlertWindowDays(
+  value: number | null | undefined,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return UPCOMING_DAYS;
+  const whole = Math.trunc(value);
+  if (whole < MIN_ALERT_DAYS) return MIN_ALERT_DAYS;
+  if (whole > MAX_ALERT_DAYS) return MAX_ALERT_DAYS;
+  return whole;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Whole days between two instants (ceil so a partial day still counts as a day left). */
