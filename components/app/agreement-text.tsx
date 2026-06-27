@@ -1,14 +1,13 @@
 import type { ReactNode } from "react";
-import {
-  initialsFromName,
-  splitOnMarkers,
-  type SignatureMarker,
-} from "@/lib/esign/markers";
+import { initialsFromName, type SignatureMarker } from "@/lib/esign/markers";
+import { parseAgreementBlocks } from "@/lib/lease/agreement-format";
 
 /**
  * Marker-aware agreement renderer (server component, themable). The frozen or
- * live agreement text renders pre-wrap; inline signature/initial markers
- * become:
+ * live agreement text is split into structured blocks (numbered clauses get a
+ * bolded run-in heading, paragraphs are spaced) by parseAgreementBlocks, which
+ * falls back to a single continuous block for unstructured custom templates.
+ * Inline signature/initial markers become:
  *  - mode="wet"    → ruled signature/initial lines for printing & pen signing
  *  - mode="pending"→ dashed "will appear here" placeholders on the /sign page
  * When the org has a saved landlord signature, the {{landlord_signature}} /
@@ -191,14 +190,21 @@ export function AgreementText({
   };
 
   return (
-    <div className="whitespace-pre-wrap text-sm leading-6">
-      {splitOnMarkers(text).map((part, idx) =>
-        part.type === "text" ? (
-          <span key={idx}>{part.value}</span>
-        ) : (
-          renderMarker(part.marker, idx)
-        ),
-      )}
+    <div className="space-y-3 text-sm leading-6">
+      {parseAgreementBlocks(text).map((block, bi) => (
+        <div key={bi} className="whitespace-pre-line">
+          {block.heading && (
+            <span className="font-semibold">{block.heading} </span>
+          )}
+          {block.parts.map((part, idx) =>
+            part.type === "text" ? (
+              <span key={idx}>{part.value}</span>
+            ) : (
+              renderMarker(part.marker, idx)
+            ),
+          )}
+        </div>
+      ))}
     </div>
   );
 }

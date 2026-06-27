@@ -58,7 +58,15 @@ export default async function LeaseSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Printable agreement text</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Changes here apply to{" "}
+            <span className="font-medium text-foreground">new leases only</span>.
+            Each lease freezes its wording when it&apos;s created, so editing
+            this text never alters agreements that already exist. When you send a
+            renewal for e-signature it adopts the current wording and shows the
+            tenant what changed.
+          </p>
           <LeaseAgreementTextForm
             initialText={app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT}
             defaultText={DEFAULT_LEASE_AGREEMENT_TEXT}

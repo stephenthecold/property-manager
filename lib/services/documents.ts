@@ -119,6 +119,7 @@ export async function getDocumentDownloadUrl(
 export async function listDocuments(
   filter: {
     tenantId?: string;
+    leaseId?: string;
     paymentId?: string;
     receiptId?: string;
     maintenanceJobId?: string;
@@ -130,6 +131,7 @@ export async function listDocuments(
   return prisma.uploadedDocument.findMany({
     where: {
       ...(filter.tenantId ? { tenantId: filter.tenantId } : {}),
+      ...(filter.leaseId ? { leaseId: filter.leaseId } : {}),
       ...(filter.paymentId ? { paymentId: filter.paymentId } : {}),
       ...(filter.receiptId ? { receiptId: filter.receiptId } : {}),
       ...(filter.maintenanceJobId ? { maintenanceJobId: filter.maintenanceJobId } : {}),

@@ -19,7 +19,13 @@ import {
 } from "@/lib/esign/markers";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
 import { renderTemplate } from "@/lib/reminders/templates";
-import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
+import {
+  diffAgreementText,
+  leaseAgreementTemplate,
+  orgAgreementTemplate,
+  snapshotAgreementTemplate,
+  type AgreementChangeSummary,
+} from "@/lib/lease/agreement-format";
 import {
   getAppSettings,
   resolveEmailProvider,
@@ -45,6 +51,10 @@ const KIND_LABEL: Record<SigningKind, string> = {
   lease: "lease agreement",
   renewal: "lease renewal agreement",
 };
+
+/** notes stamped on the completed e-signed artifact document; the lease's
+ *  documents list keys its "Signed" badge off this exact value. */
+export const SIGNED_AGREEMENT_NOTE = "E-signed agreement";
 
 export function signingKindLabel(kind: string): string {
   return KIND_LABEL[(kind === "renewal" ? "renewal" : "lease") as SigningKind];
@@ -190,10 +200,18 @@ export async function createSigningRequest(i: {
     };
   }
 
-  // Freeze the agreement exactly as the printable page renders it today.
-  // Signature/initial markers survive substitution (passthrough vars) so the
-  // signing page and final artifact can stamp marks at every occurrence.
-  const documentText = renderTemplate(app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT, {
+  // Freeze the agreement text at send time. An initial LEASE uses this lease's
+  // frozen wording snapshot (lease.agreementText, captured at creation) so the
+  // signing page matches the printable page; a RENEWAL adopts the CURRENT
+  // org-wide template, so renewed wording can differ from the prior lease (the
+  // signing page diffs the two for the tenant). Signature/initial markers
+  // survive substitution (passthrough vars) so the signing page and final
+  // artifact can stamp marks at every occurrence.
+  const sourceTemplate =
+    i.kind === "renewal"
+      ? orgAgreementTemplate(app)
+      : leaseAgreementTemplate(lease);
+  const documentText = renderTemplate(sourceTemplate, {
     ...markerPassthroughVars(),
     ...vars,
   });
@@ -415,10 +433,12 @@ export async function completeIfAllSigned(
     include: { tenant: true, unit: { include: { property: true } } },
   });
 
+  // Fetched once: the artifact business name AND a completed renewal's wording
+  // adoption (below) both need it.
+  const app = await getAppSettings();
   let signedDocumentId: string | null = null;
   if (lease) {
     try {
-      const app = await getAppSettings();
       const signers: ArtifactSigner[] = [];
       for (const s of request.signers) {
         signers.push({
@@ -464,7 +484,7 @@ export async function completeIfAllSigned(
         uploadType: "lease",
         leaseId: lease.id,
         tenantId: lease.tenantId,
-        notes: "E-signed agreement",
+        notes: SIGNED_AGREEMENT_NOTE,
         actor: { actorType: "system" },
       }));
     } catch (e) {
@@ -484,6 +504,15 @@ export async function completeIfAllSigned(
       data: { status: "completed", completedAt: now, signedDocumentId },
     });
     if (res.count === 0) return { completed: false };
+    // A completed RENEWAL adopts the current org template as this lease's
+    // operative wording, so the printable agreement matches what was just
+    // signed. Initial leases keep their creation-time snapshot.
+    if (lease && request.kind === "renewal") {
+      await tx.lease.update({
+        where: { id: lease.id },
+        data: { agreementText: snapshotAgreementTemplate(app) },
+      });
+    }
     await writeAudit(tx, {
       actorType: "system",
       action: "esign.completed",
@@ -705,6 +734,9 @@ export type SigningPageData =
       signer: { id: string; name: string; signedAtISO: string | null };
       /** The OTHER signers — names + signed/pending only, nothing else. */
       others: { name: string; signed: boolean }[];
+      /** Renewal only: what changed vs the prior signed agreement on this lease
+       *  (clause headings only). Null for initial leases or when unchanged. */
+      changes: AgreementChangeSummary | null;
     };
 
 /**
@@ -738,10 +770,32 @@ export async function getSigningPageData(
             ? "expired"
             : "open";
 
-  const { businessName } = await getAppSettings();
+  const app = await getAppSettings();
+
+  // For a RENEWAL, summarize what WORDING changed versus the lease's current
+  // (pre-renewal) agreement: diff the UNRENDERED templates — this lease's
+  // frozen snapshot vs the org template the renewal adopts — so the routine
+  // date/term roll never reads as a change, only genuine wording edits do.
+  // The token already scopes to the request -> lease (no cross-lease reach),
+  // and only clause HEADINGS leave this function (no body text).
+  let changes: AgreementChangeSummary | null = null;
+  if (request.kind === "renewal") {
+    const lease = await prisma.lease.findUnique({
+      where: { id: request.leaseId },
+      select: { agreementText: true },
+    });
+    if (lease) {
+      const summary = diffAgreementText(
+        leaseAgreementTemplate(lease),
+        orgAgreementTemplate(app),
+      );
+      if (summary.hasChanges) changes = summary;
+    }
+  }
+
   return {
     state,
-    businessName,
+    businessName: app.businessName,
     kind: request.kind === "renewal" ? "renewal" : "lease",
     documentText: request.documentText,
     needsInitials: documentNeedsInitials(request.documentText),
@@ -756,6 +810,7 @@ export async function getSigningPageData(
     others: request.signers
       .filter((s) => s.id !== signer.id)
       .map((s) => ({ name: s.name, signed: !!s.signedAt })),
+    changes,
   };
 }
 

@@ -11,6 +11,7 @@ import { generateChargesForLease } from "@/lib/services/billing";
 import { daysBetween, parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { sanitizeUtilities } from "@/lib/config/lease";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { snapshotAgreementTemplate } from "@/lib/lease/agreement-format";
 import { parseDepositRows } from "@/lib/leases/deposits";
 import { DateTime } from "luxon";
 import type { LateFeeType, LeaseStatus } from "@/lib/generated/prisma/enums";
@@ -260,6 +261,11 @@ export async function createLease(
     return { error: "One or more selected co-tenants are already on an active lease." };
   }
 
+  // Freeze this lease's agreement wording at creation: the org's custom
+  // template when set, else NULL (= built-in default, pinned). Editing the org
+  // template later never changes an already-created lease's agreement.
+  const agreementText = snapshotAgreementTemplate(await getAppSettings());
+
   let lease;
   try {
     lease = await prisma.$transaction(async (tx) => {
@@ -285,6 +291,7 @@ export async function createLease(
           prorateFirstPeriod,
           status,
           notes: str(fd, "notes") || null,
+          agreementText,
         },
       });
       if (coTenantIds.length > 0) {
