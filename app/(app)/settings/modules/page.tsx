@@ -67,6 +67,12 @@ const MODULE_INFO = [
     description:
       "Polls a configured mailbox (IMAP) into a staff Email inbox at /inbox, where emailed invoices/receipts can be reviewed and posted to Financials as expenses (the file is attached and amount/date are OCR-prefilled). Configure the mailbox at Settings → Email inbox (supports Microsoft 365 OAuth2, Gmail app passwords, and self-hosted IMAP). Capture is read-only and de-duplicated; nothing financial is created without staff review. Turning it off stops polling and hides the inbox; captured mail is kept.",
   },
+  {
+    key: "tenantLedgerExport" as const,
+    label: "Tenant ledger export & filters",
+    description:
+      "Adds an Account ledger page in the resident portal (/portal/ledger) where a signed-in tenant can filter their OWN charge/payment history by date range and entry type and download it as a CSV. Strictly scoped to the logged-in tenant — they only ever see and export their own ledger. Requires the Tenant portal module to be on. Turning it off removes the ledger page, the filters, and the CSV download (the export endpoint also stops responding); nothing is deleted.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {
