@@ -26,6 +26,7 @@ export interface CreateDocumentInput {
   tenantRequestId?: string | null;
   inboundEmailId?: string | null;
   unitConditionLogId?: string | null;
+  inspectionChecklistItemId?: string | null;
   notes?: string | null;
   actor: AuditContext;
 }
@@ -72,6 +73,7 @@ export async function createUploadedDocument(
           tenantRequestId: input.tenantRequestId ?? null,
           inboundEmailId: input.inboundEmailId ?? null,
           unitConditionLogId: input.unitConditionLogId ?? null,
+          inspectionChecklistItemId: input.inspectionChecklistItemId ?? null,
           notes: input.notes ?? null,
           createdBy: input.actor.actorId ?? null,
         },

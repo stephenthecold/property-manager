@@ -42,6 +42,7 @@ export async function saveMaintenancePhotos(i: {
   tenantRequestId?: string;
   maintenanceJobId?: string;
   unitConditionLogId?: string;
+  inspectionChecklistItemId?: string;
   tenantId?: string | null;
   /** Per-file note, e.g. "Tenant photo", "Before", "After". */
   note: string;
@@ -75,6 +76,7 @@ export async function saveMaintenancePhotos(i: {
         tenantRequestId: i.tenantRequestId ?? null,
         maintenanceJobId: i.maintenanceJobId ?? null,
         unitConditionLogId: i.unitConditionLogId ?? null,
+        inspectionChecklistItemId: i.inspectionChecklistItemId ?? null,
         notes: i.note,
         actor: i.actor,
       });

@@ -6,12 +6,18 @@ import { auditActor, requireModuleCapability } from "@/lib/auth/session";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import { toCents } from "@/lib/money";
 import { parseInspectionType } from "@/lib/inspections/disposition";
+import { parseChecklistStatus } from "@/lib/inspections/checklist";
 import {
+  addChecklistItem,
+  addChecklistItemPhotos,
   addDeduction,
   cancelInspection,
   completeInspection,
   createInspection,
+  deleteChecklistItemPhoto,
+  removeChecklistItem,
   removeDeduction,
+  updateChecklistItem,
 } from "@/lib/services/inspections";
 import { getFormString as str, type FormState } from "@/lib/forms";
 
@@ -41,6 +47,7 @@ export async function createInspectionAction(
     type,
     scheduledFor,
     inspector: str(fd, "inspector") || null,
+    templateId: str(fd, "templateId") || null,
     actor: await auditActor(),
   });
   if ("error" in res) return { error: res.error };
@@ -112,4 +119,90 @@ export async function removeDeductionAction(fd: FormData): Promise<void> {
   if (!itemId) throw new Error("Missing item id.");
   await removeDeduction({ itemId, actor: await auditActor() });
   if (inspectionId) revalidatePath(`/inspections/${inspectionId}`);
+}
+
+// --- Condition CHECKLIST items + photos -----------------------------------
+
+export async function addChecklistItemAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireModuleCapability("inspections.manage", "inspections");
+  const inspectionId = str(fd, "inspectionId");
+  if (!inspectionId) return { error: "Missing inspection id." };
+  const label = str(fd, "label");
+  if (!label) return { error: "Describe what to check." };
+
+  const res = await addChecklistItem({
+    inspectionId,
+    label,
+    area: str(fd, "area") || null,
+    category: str(fd, "category") || null,
+    actor: await auditActor(),
+  });
+  if (!res.ok) return { error: res.error ?? "Could not add item." };
+  revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
+}
+
+export async function updateChecklistItemAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireModuleCapability("inspections.manage", "inspections");
+  const itemId = str(fd, "itemId");
+  const inspectionId = str(fd, "inspectionId");
+  if (!itemId) return { error: "Missing item id." };
+
+  const res = await updateChecklistItem({
+    itemId,
+    status: parseChecklistStatus(str(fd, "status")),
+    note: str(fd, "note") || null,
+    actor: await auditActor(),
+  });
+  if (!res.ok) return { error: res.error ?? "Could not update item." };
+  if (inspectionId) revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
+}
+
+export async function removeChecklistItemAction(fd: FormData): Promise<void> {
+  await requireModuleCapability("inspections.manage", "inspections");
+  const itemId = String(fd.get("itemId") ?? "").trim();
+  const inspectionId = String(fd.get("inspectionId") ?? "").trim();
+  if (!itemId) throw new Error("Missing item id.");
+  await removeChecklistItem({ itemId, actor: await auditActor() });
+  if (inspectionId) revalidatePath(`/inspections/${inspectionId}`);
+}
+
+export async function addChecklistPhotosAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireModuleCapability("inspections.manage", "inspections");
+  const itemId = str(fd, "itemId");
+  const inspectionId = str(fd, "inspectionId");
+  if (!itemId || !inspectionId) return { error: "Missing item id." };
+
+  const files = fd
+    .getAll("photos")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  const res = await addChecklistItemPhotos({
+    itemId,
+    inspectionId,
+    files,
+    actor: await auditActor(),
+  });
+  if (!res.ok) return { error: res.error ?? "Could not save photos." };
+  revalidatePath(`/inspections/${inspectionId}`);
+  return { ok: true };
+}
+
+export async function deleteChecklistPhotoAction(fd: FormData): Promise<void> {
+  await requireModuleCapability("inspections.manage", "inspections");
+  const photoId = String(fd.get("photoId") ?? "").trim();
+  const inspectionId = String(fd.get("inspectionId") ?? "").trim();
+  if (!photoId || !inspectionId) throw new Error("Missing photo id.");
+  await deleteChecklistItemPhoto({ photoId, inspectionId, actor: await auditActor() });
+  revalidatePath(`/inspections/${inspectionId}`);
 }

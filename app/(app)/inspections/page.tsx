@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listInspections } from "@/lib/services/inspections";
+import { listActiveTemplatesWithItems } from "@/lib/services/inspection-templates";
 import {
   INSPECTION_TYPES,
   inspectionStatusLabel,
@@ -31,7 +32,7 @@ export default async function InspectionsPage() {
   const settings = await getAppSettings();
   if (!settings.modules.inspections) redirect("/dashboard");
 
-  const [inspections, activeLeases] = await Promise.all([
+  const [inspections, activeLeases, templates] = await Promise.all([
     listInspections(),
     prisma.lease.findMany({
       where: { status: { in: ["active", "month_to_month", "ended", "eviction"] } },
@@ -45,6 +46,7 @@ export default async function InspectionsPage() {
         unit: { select: { unitNumber: true, property: { select: { name: true } } } },
       },
     }),
+    listActiveTemplatesWithItems(),
   ]);
 
   return (
@@ -88,6 +90,28 @@ export default async function InspectionsPage() {
               ))}
             </select>
           </div>
+          {templates.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="iTemplate">Checklist template (optional)</Label>
+              <select
+                id="iTemplate"
+                name="templateId"
+                defaultValue=""
+                className="h-9 w-full rounded-md border px-3 text-sm"
+              >
+                <option value="">— no checklist —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.items.length} item{t.items.length === 1 ? "" : "s"})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Pre-populates the inspection&apos;s condition checklist. Manage
+                templates in Settings → Inspection templates.
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="iDate">Scheduled date (optional)</Label>
             <Input id="iDate" name="scheduledFor" type="date" />
