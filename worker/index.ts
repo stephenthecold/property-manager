@@ -31,8 +31,13 @@ async function runOnce(): Promise<void> {
   try {
     const res = await runBilling(new Date());
     console.log(
-      `[worker] billing run: leases=${res.leasesProcessed} charges=${res.chargesCreated} lateFees=${res.lateFeesCreated} rentIncreases=${res.rentIncreasesApplied}`,
+      `[worker] billing run: leases=${res.leasesProcessed} charges=${res.chargesCreated} lateFees=${res.lateFeesCreated} failed=${res.failed} rentIncreases=${res.rentIncreasesApplied}`,
     );
+    if (res.failed > 0) {
+      console.error(
+        `[worker] billing run: ${res.failed} lease(s) failed and were skipped — investigate (they will retry next run).`,
+      );
+    }
   } catch (e) {
     console.error("[worker] billing run failed:", e);
   }

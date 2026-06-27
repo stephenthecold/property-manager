@@ -26,6 +26,29 @@ function numOrNull(fd: FormData, key: string): number | null | "invalid" {
   return Number.isFinite(n) ? n : "invalid";
 }
 
+/**
+ * Validate a property's IANA timezone + ISO-4217 currency the same way for
+ * create and update. A bad timezone makes Luxon emit "Invalid DateTime" (which
+ * poisons period/billing math); a bad currency makes formatCurrency throw on
+ * every money render. Returns an error message, or null when both are valid.
+ */
+function validatePropertyLocale(timezone: string, currency: string): string | null {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+  } catch {
+    return `Unknown IANA timezone: ${timezone}`;
+  }
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return `Currency must be a 3-letter ISO 4217 code, got: ${currency}`;
+  }
+  try {
+    new Intl.NumberFormat("en-US", { style: "currency", currency });
+  } catch {
+    return `Unknown ISO 4217 currency code: ${currency}`;
+  }
+  return null;
+}
+
 export async function createProperty(
   _prev: FormState,
   fd: FormData,
@@ -35,6 +58,12 @@ export async function createProperty(
   const app = await getAppSettings();
   const name = str(fd, "name");
   if (!name) return { error: "Property name is required." };
+  // Validate timezone/currency BEFORE persisting — updateProperty already does,
+  // and an invalid value here silently poisons this property's billing math.
+  const timezone = str(fd, "timezone") || app.defaultTimezone;
+  const currency = (str(fd, "currency") || app.defaultCurrency).toUpperCase();
+  const localeError = validatePropertyLocale(timezone, currency);
+  if (localeError) return { error: localeError };
   const property = await prisma.property.create({
     data: {
       name,
@@ -43,8 +72,8 @@ export async function createProperty(
       state: str(fd, "state") || null,
       zip: str(fd, "zip") || null,
       notes: str(fd, "notes") || null,
-      timezone: str(fd, "timezone") || app.defaultTimezone,
-      currency: str(fd, "currency") || app.defaultCurrency,
+      timezone,
+      currency,
     },
   });
   await writeAudit(prisma, {
@@ -206,22 +235,9 @@ export async function updateProperty(
   if (!property) return { error: "Property not found." };
 
   const timezone = str(fd, "timezone") || property.timezone;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone });
-  } catch {
-    return { error: `Unknown IANA timezone: ${timezone}` };
-  }
-  // An invalid ISO-4217 code would make formatCurrency throw on every page
-  // that renders money for this property — validate like the timezone.
   const currency = (str(fd, "currency") || property.currency).toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) {
-    return { error: `Currency must be a 3-letter ISO 4217 code, got: ${currency}` };
-  }
-  try {
-    new Intl.NumberFormat("en-US", { style: "currency", currency });
-  } catch {
-    return { error: `Unknown ISO 4217 currency code: ${currency}` };
-  }
+  const localeError = validatePropertyLocale(timezone, currency);
+  if (localeError) return { error: localeError };
 
   // Financing (Financials module): monthly mortgage payment + maturity date.
   const mortgageRaw = str(fd, "monthlyMortgage");

@@ -14,7 +14,7 @@ import {
 import { listDocuments } from "@/lib/services/documents";
 import { listInboundForTenant } from "@/lib/services/inbound-messages";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getDisplayRole } from "@/lib/auth/session";
+import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { PortalAccessCard } from "./portal-access-card";
 import {
@@ -109,6 +109,7 @@ export default async function TenantDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireCapability("tenants.manage");
   const { id } = await params;
   const now = new Date();
   const leaseInclude = {

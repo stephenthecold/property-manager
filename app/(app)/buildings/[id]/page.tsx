@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
 import { updateBuilding } from "../../properties/actions";
 import { ActionForm } from "@/components/app/action-form";
@@ -31,6 +32,7 @@ export default async function BuildingDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireCapability("properties.manage");
   const { id } = await params;
   const building = await prisma.building.findUnique({
     where: { id },
