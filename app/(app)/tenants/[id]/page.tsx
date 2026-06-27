@@ -1408,9 +1408,9 @@ export default async function TenantDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Reminders</CardTitle>
-          <Link href="/reminders" className="text-sm font-medium hover:underline">
+          <Button variant="outline" size="sm" render={<Link href="/reminders" />}>
             View all
-          </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -1449,9 +1449,9 @@ export default async function TenantDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Messages</CardTitle>
-          <Link href="/messages" className="text-sm font-medium hover:underline">
+          <Button variant="outline" size="sm" render={<Link href="/messages" />}>
             Open inbox
-          </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           <DataTable
