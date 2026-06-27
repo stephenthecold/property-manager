@@ -15,7 +15,7 @@ export default async function AuthSettingsPage() {
   ]);
 
   return (
-    <div className="w-full max-w-2xl space-y-4">
+    <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Authentication</h2>
         <p className="text-sm text-muted-foreground">

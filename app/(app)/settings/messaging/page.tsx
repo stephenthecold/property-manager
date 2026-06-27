@@ -28,7 +28,7 @@ export default async function MessagingSettingsPage() {
     (row?.emailSubjects as Partial<Record<ReminderType, string>>) ?? {};
 
   return (
-    <div className="w-full max-w-2xl space-y-4">
+    <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Messaging</h2>
         <p className="text-sm text-muted-foreground">

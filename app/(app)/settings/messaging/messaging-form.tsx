@@ -69,7 +69,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
           Enable SMS sending (master switch for manual, bulk, and scheduled)
         </label>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="smsProvider">Provider</Label>
             <select
@@ -100,7 +100,7 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
         </div>
 
         {provider === "twilio" && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="smsAccountSid">Twilio Account SID</Label>
               <Input
@@ -154,23 +154,25 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
 
         <div className="space-y-3 rounded-md border p-3">
           <p className="text-sm font-medium">Scheduled reminders (worker)</p>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="dueSoonRemindersEnabled"
-              defaultChecked={initial.dueSoonRemindersEnabled}
-            />
-            Send “rent due soon” reminders
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="overdueRemindersEnabled"
-              defaultChecked={initial.overdueRemindersEnabled}
-            />
-            Send overdue reminders (after the grace period)
-          </label>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="dueSoonRemindersEnabled"
+                defaultChecked={initial.dueSoonRemindersEnabled}
+              />
+              Send “rent due soon” reminders
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="overdueRemindersEnabled"
+                defaultChecked={initial.overdueRemindersEnabled}
+              />
+              Send overdue reminders (after the grace period)
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="reminderDueSoonDays">
                 Days before the due date to send “due soon”

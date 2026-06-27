@@ -116,14 +116,27 @@ export function CustomQuestionsBuilder({
       {sections.map((section, si) => (
         <div key={section.id} className="space-y-3 rounded-md border p-3">
           <div className="flex items-start gap-2">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor={`sec-title-${section.id}`}>Section title</Label>
-              <Input
-                id={`sec-title-${section.id}`}
-                value={section.title}
-                placeholder="e.g. Pets"
-                onChange={(e) => patchSection(si, { title: e.target.value })}
-              />
+            <div className="grid flex-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`sec-title-${section.id}`}>Section title</Label>
+                <Input
+                  id={`sec-title-${section.id}`}
+                  value={section.title}
+                  placeholder="e.g. Pets"
+                  onChange={(e) => patchSection(si, { title: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`sec-desc-${section.id}`}>
+                  Section description (optional)
+                </Label>
+                <Input
+                  id={`sec-desc-${section.id}`}
+                  value={section.description}
+                  placeholder="Shown under the section heading"
+                  onChange={(e) => patchSection(si, { description: e.target.value })}
+                />
+              </div>
             </div>
             <Button
               type="button"
@@ -134,18 +147,6 @@ export function CustomQuestionsBuilder({
             >
               Remove section
             </Button>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor={`sec-desc-${section.id}`}>
-              Section description (optional)
-            </Label>
-            <Input
-              id={`sec-desc-${section.id}`}
-              value={section.description}
-              placeholder="Shown under the section heading"
-              onChange={(e) => patchSection(si, { description: e.target.value })}
-            />
           </div>
 
           <div className="space-y-3">

@@ -60,7 +60,7 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
         Enable mailbox polling (master switch)
       </label>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="inboxProvider">Provider</Label>
           <select
@@ -90,8 +90,8 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
 
       {provider === "imap" && (
         <>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="space-y-2 md:col-span-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="inboxImapHost">IMAP host</Label>
               <Input
                 id="inboxImapHost"
@@ -114,7 +114,7 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -176,7 +176,7 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
                 Provide a refresh token to use a delegated grant instead.{" "}
                 {SECRET_HINT}
               </p>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="inboxOauthClientId">Client ID</Label>
                   <Input
@@ -220,7 +220,7 @@ export function InboxForm({ initial }: { initial: InboxInitial }) {
                     placeholder="https://outlook.office365.com/.default"
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="inboxOauthRefreshToken">
                     Refresh token (optional — delegated grant)
                   </Label>

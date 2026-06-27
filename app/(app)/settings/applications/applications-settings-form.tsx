@@ -47,9 +47,9 @@ export function ApplicationsSettingsForm({
         least one of email or phone is always collected.
       </p>
 
-      <div className="divide-y rounded-md border">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {APPLICATION_FIELDS.map((f) => (
-          <div key={f.key} className="flex items-center justify-between gap-3 px-3 py-2.5">
+          <div key={f.key} className="space-y-1.5 rounded-md border px-3 py-2.5">
             <Label htmlFor={`field_${f.key}`} className="text-sm font-medium">
               {f.label}
             </Label>

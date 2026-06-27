@@ -95,14 +95,26 @@ export function AuthSettingsForm({
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="clientId">Client ID</Label>
-          <Input
-            id="clientId"
-            name="clientId"
-            defaultValue={initial.clientId}
-            disabled={disabled}
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="clientId">Client ID</Label>
+            <Input
+              id="clientId"
+              name="clientId"
+              defaultValue={initial.clientId}
+              disabled={disabled}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="scopes">Scopes</Label>
+            <Input
+              id="scopes"
+              name="scopes"
+              defaultValue={initial.scopes}
+              disabled={disabled}
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -121,16 +133,6 @@ export function AuthSettingsForm({
             Stored encrypted (AES-256-GCM). Never displayed back; leave blank to
             keep the current value.
           </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="scopes">Scopes</Label>
-          <Input
-            id="scopes"
-            name="scopes"
-            defaultValue={initial.scopes}
-            disabled={disabled}
-          />
         </div>
 
         <div className="space-y-2">

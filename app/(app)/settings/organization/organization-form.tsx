@@ -152,40 +152,58 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="brandColor">Brand colour</Label>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            aria-label="Brand colour picker"
-            value={brandSwatch}
-            onChange={(e) => setBrandColor(e.target.value)}
-            className="h-9 w-12 cursor-pointer rounded border p-1"
-          />
-          <Input
-            id="brandColor"
-            name="brandColor"
-            value={brandColor}
-            onChange={(e) => setBrandColor(e.target.value)}
-            placeholder="#2563eb"
-            className="w-40"
-          />
-          {brandColor.trim() !== "" && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setBrandColor("")}
-            >
-              Reset
-            </Button>
-          )}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="brandColor">Brand colour</Label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              aria-label="Brand colour picker"
+              value={brandSwatch}
+              onChange={(e) => setBrandColor(e.target.value)}
+              className="h-9 w-12 cursor-pointer rounded border p-1"
+            />
+            <Input
+              id="brandColor"
+              name="brandColor"
+              value={brandColor}
+              onChange={(e) => setBrandColor(e.target.value)}
+              placeholder="#2563eb"
+              className="flex-1"
+            />
+            {brandColor.trim() !== "" && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setBrandColor("")}
+              >
+                Reset
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Recolours buttons, links, and highlights — the colour&rsquo;s hue is
+            applied to both light and dark themes (contrast is preserved). Blank
+            uses the default theme.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Recolours buttons, links, and highlights — the colour&rsquo;s hue is
-          applied to both light and dark themes (contrast is preserved). Blank
-          uses the default theme.
-        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="receiptPrefix">Receipt number prefix</Label>
+          <Input
+            id="receiptPrefix"
+            name="receiptPrefix"
+            defaultValue={initial.receiptPrefix}
+            placeholder="RCT"
+            maxLength={8}
+          />
+          <p className="text-xs text-muted-foreground">
+            Letters/digits only (max 8). Receipts are numbered{" "}
+            <code>{initial.receiptPrefix || "RCT"}-YYYYMMDD-0001</code>. Blank uses{" "}
+            <code>RCT</code>. Existing receipt numbers are never changed.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -200,80 +218,66 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="receiptPrefix">Receipt number prefix</Label>
-        <Input
-          id="receiptPrefix"
-          name="receiptPrefix"
-          defaultValue={initial.receiptPrefix}
-          placeholder="RCT"
-          maxLength={8}
-        />
-        <p className="text-xs text-muted-foreground">
-          Letters/digits only (max 8). Receipts are numbered{" "}
-          <code>{initial.receiptPrefix || "RCT"}-YYYYMMDD-0001</code>. Blank uses{" "}
-          <code>RCT</code>. Existing receipt numbers are never changed.
-        </p>
-      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="portalWelcomeText">Tenant portal welcome text</Label>
+          <textarea
+            id="portalWelcomeText"
+            name="portalWelcomeText"
+            defaultValue={initial.portalWelcomeText}
+            rows={2}
+            className="w-full rounded-md border p-2 text-sm"
+            placeholder="Welcome to your tenant portal. View your balance and pay rent here."
+          />
+          <p className="text-xs text-muted-foreground">
+            Shown on the tenant portal home. Blank uses the default copy.
+          </p>
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="portalWelcomeText">Tenant portal welcome text</Label>
-        <textarea
-          id="portalWelcomeText"
-          name="portalWelcomeText"
-          defaultValue={initial.portalWelcomeText}
-          rows={2}
-          className="w-full rounded-md border p-2 text-sm"
-          placeholder="Welcome to your tenant portal. View your balance and pay rent here."
-        />
-        <p className="text-xs text-muted-foreground">
-          Shown on the tenant portal home. Blank uses the default copy.
-        </p>
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="applyIntroText">Rental application intro text</Label>
+          <textarea
+            id="applyIntroText"
+            name="applyIntroText"
+            defaultValue={initial.applyIntroText}
+            rows={2}
+            className="w-full rounded-md border p-2 text-sm"
+            placeholder="Tell us about yourself and we'll be in touch."
+          />
+          <p className="text-xs text-muted-foreground">
+            Shown atop the public application form. Blank uses the default copy.
+          </p>
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="applyIntroText">Rental application intro text</Label>
-        <textarea
-          id="applyIntroText"
-          name="applyIntroText"
-          defaultValue={initial.applyIntroText}
-          rows={2}
-          className="w-full rounded-md border p-2 text-sm"
-          placeholder="Tell us about yourself and we'll be in touch."
-        />
-        <p className="text-xs text-muted-foreground">
-          Shown atop the public application form. Blank uses the default copy.
-        </p>
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="applyConfirmationText">Application confirmation text</Label>
+          <textarea
+            id="applyConfirmationText"
+            name="applyConfirmationText"
+            defaultValue={initial.applyConfirmationText}
+            rows={2}
+            className="w-full rounded-md border p-2 text-sm"
+            placeholder="Thanks! Your application has been submitted. We'll be in touch."
+          />
+          <p className="text-xs text-muted-foreground">
+            Shown after an applicant submits the public form. Blank uses the default copy.
+          </p>
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="applyConfirmationText">Application confirmation text</Label>
-        <textarea
-          id="applyConfirmationText"
-          name="applyConfirmationText"
-          defaultValue={initial.applyConfirmationText}
-          rows={2}
-          className="w-full rounded-md border p-2 text-sm"
-          placeholder="Thanks! Your application has been submitted. We'll be in touch."
-        />
-        <p className="text-xs text-muted-foreground">
-          Shown after an applicant submits the public form. Blank uses the default copy.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="portalPaymentHelpText">Tenant portal &ldquo;how to pay&rdquo; text</Label>
-        <textarea
-          id="portalPaymentHelpText"
-          name="portalPaymentHelpText"
-          defaultValue={initial.portalPaymentHelpText}
-          rows={2}
-          className="w-full rounded-md border p-2 text-sm"
-          placeholder="Pay rent by bank transfer to… or in person at…"
-        />
-        <p className="text-xs text-muted-foreground">
-          Shown on the tenant portal home. Blank hides the panel.
-        </p>
+        <div className="space-y-2">
+          <Label htmlFor="portalPaymentHelpText">Tenant portal &ldquo;how to pay&rdquo; text</Label>
+          <textarea
+            id="portalPaymentHelpText"
+            name="portalPaymentHelpText"
+            defaultValue={initial.portalPaymentHelpText}
+            rows={2}
+            className="w-full rounded-md border p-2 text-sm"
+            placeholder="Pay rent by bank transfer to… or in person at…"
+          />
+          <p className="text-xs text-muted-foreground">
+            Shown on the tenant portal home. Blank hides the panel.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -291,27 +295,27 @@ export function OrganizationForm({ initial }: { initial: OrganizationInitial }) 
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="defaultTablePageSize">Default rows per page</Label>
-        <select
-          id="defaultTablePageSize"
-          name="defaultTablePageSize"
-          defaultValue={String(initial.defaultTablePageSize)}
-          className="h-9 w-full rounded-md border px-2 text-sm md:w-40"
-        >
-          {[10, 20, 50].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">
-          Initial page size for tables across the app. Each table&rsquo;s own
-          selector still overrides it per view.
-        </p>
-      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor="defaultTablePageSize">Default rows per page</Label>
+          <select
+            id="defaultTablePageSize"
+            name="defaultTablePageSize"
+            defaultValue={String(initial.defaultTablePageSize)}
+            className="h-9 w-full rounded-md border px-2 text-sm"
+          >
+            {[10, 20, 50].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Initial page size for tables across the app. Each table&rsquo;s own
+            selector still overrides it per view.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="defaultTimezone">Default timezone (new properties)</Label>
           <Input
