@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getInspection, dispositionForInspection } from "@/lib/services/inspections";
+import {
+  getInspection,
+  dispositionForInspection,
+  getInspectionChecklist,
+} from "@/lib/services/inspections";
 import { inspectionStatusLabel, inspectionTypeLabel } from "@/lib/inspections/disposition";
 import {
   conditionPhaseLabel,
@@ -14,6 +18,7 @@ import {
   completeInspectionAction,
   removeDeductionAction,
 } from "../actions";
+import { InspectionChecklistCard } from "@/components/app/inspection-checklist-card";
 import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,25 +48,34 @@ export default async function InspectionDetailPage({
     : null;
 
   const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString("en-US") : "—");
-  const conditionLogs = await listConditionLogsForLease(inspection.lease.id);
+  const [conditionLogs, checklist] = await Promise.all([
+    listConditionLogsForLease(inspection.lease.id),
+    getInspectionChecklist(inspection.id),
+  ]);
   const unitId = inspection.lease.unit.id;
+  const checklistEditable = inspection.status !== "canceled";
 
   return (
     <div className="space-y-6">
-      <div>
-        <BackLink href="/inspections" label="All inspections" />
-        <h1 className="mt-1 text-2xl font-semibold">
-          {inspectionTypeLabel(inspection.type)} inspection
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          <Link href={`/tenants/${inspection.lease.tenantId}`} className="hover:underline">
-            {inspection.lease.tenant.firstName} {inspection.lease.tenant.lastName}
-          </Link>{" "}
-          ·{" "}
-          <Link href={`/units/${unitId}`} className="hover:underline">
-            {inspection.lease.unit.property.name} · {inspection.lease.unit.unitNumber}
-          </Link>
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <BackLink href="/inspections" label="All inspections" />
+          <h1 className="mt-1 text-2xl font-semibold">
+            {inspectionTypeLabel(inspection.type)} inspection
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            <Link href={`/tenants/${inspection.lease.tenantId}`} className="hover:underline">
+              {inspection.lease.tenant.firstName} {inspection.lease.tenant.lastName}
+            </Link>{" "}
+            ·{" "}
+            <Link href={`/units/${unitId}`} className="hover:underline">
+              {inspection.lease.unit.property.name} · {inspection.lease.unit.unitNumber}
+            </Link>
+          </p>
+        </div>
+        <Button variant="outline" render={<Link href={`/inspections/${inspection.id}/report`} />}>
+          Printable report
+        </Button>
       </div>
 
       <Card>
@@ -188,6 +202,12 @@ export default async function InspectionDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <InspectionChecklistCard
+        inspectionId={inspection.id}
+        items={checklist}
+        editable={checklistEditable}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">

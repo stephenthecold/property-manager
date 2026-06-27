@@ -117,6 +117,7 @@ enum UploadType {
   email_attachment // file pulled off an inbound email (module "mailbox")
   public_site // marketing photo shown on the public site (module "publicSite")
   condition_photo // dated unit move-in/move-out/turnover condition photo (module "inspections")
+  inspection_photo // photo attached to a single inspection checklist item (module "inspections")
 }
 
 enum ReminderType {
@@ -1086,9 +1087,15 @@ model Inspection {
 
   lease Lease            @relation(fields: [leaseId], references: [id], onDelete: Cascade)
   items InspectionItem[]
+  /// Optional template the checklist was pre-populated from (kept for reference;
+  /// SetNull so deleting a template never deletes inspections).
+  templateId String?
+  template   InspectionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  checklistItems InspectionChecklistItem[]
 
   @@index([leaseId])
   @@index([status])
+  @@index([templateId])
 }
 
 /// Itemized deposit-disposition deduction on a (move-out) inspection.
@@ -1098,6 +1105,71 @@ model InspectionItem {
   label        String
   amountCents  BigInt   @default(0) // deduction against the refundable deposit
   createdAt    DateTime @default(now())
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+/// Pass/fail/na/pending state of a single inspection CHECKLIST item (condition
+/// observation). Distinct from InspectionItem, which is a money DEDUCTION.
+enum InspectionChecklistStatus {
+  pending // not yet assessed
+  pass // acceptable condition
+  fail // issue noted
+  na // not applicable
+}
+
+/// Reusable inspection CHECKLIST template (e.g. "Move-in", "Move-out",
+/// "Routine"): an ordered list of condition items staff can pre-populate a new
+/// inspection from. Managed at Settings → Inspection templates. An operating
+/// configuration record — never touches the ledger.
+model InspectionTemplate {
+  id          String                   @id @default(cuid())
+  name        String
+  type        InspectionType? // optional default inspection type this template suits
+  description String?
+  isActive    Boolean                  @default(true)
+  createdBy   String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  items       InspectionTemplateItem[]
+  inspections Inspection[]
+
+  @@index([isActive])
+}
+
+/// One ordered line of an InspectionTemplate (e.g. "Walls & ceilings" in area
+/// "Living room"). Pre-populates InspectionChecklistItem rows.
+model InspectionTemplateItem {
+  id         String   @id @default(cuid())
+  templateId String
+  label      String
+  area       String? // optional room/zone, e.g. "Kitchen"
+  category   String? // optional grouping, e.g. "Safety"
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  template InspectionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+/// A single condition CHECKLIST item on one inspection (label + optional
+/// area/category, a pass/fail/na status, an optional note, and attached photos
+/// via UploadedDocument.inspectionChecklistItemId). Distinct from InspectionItem
+/// (a deposit DEDUCTION); checklist items never carry money or touch balances.
+model InspectionChecklistItem {
+  id           String                    @id @default(cuid())
+  inspectionId String
+  label        String
+  area         String?
+  category     String?
+  status       InspectionChecklistStatus @default(pending)
+  note         String?
+  sortOrder    Int                       @default(0)
+  createdAt    DateTime                  @default(now())
 
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
@@ -1218,6 +1290,7 @@ model UploadedDocument {
   inboundEmailId  String? // loose ref: file pulled off an inbound email (module "mailbox")
   propertyExpenseId String? // loose ref: set when an emailed invoice is posted as an expense
   unitConditionLogId String? // loose ref: photo in a unit condition batch (module "inspections")
+  inspectionChecklistItemId String? // loose ref: photo on a single inspection checklist item (module "inspections")
   fileUrl       String
   fileName      String?
   fileType      String?
@@ -1238,6 +1311,7 @@ model UploadedDocument {
   @@index([inboundEmailId])
   @@index([propertyExpenseId])
   @@index([unitConditionLogId])
+  @@index([inspectionChecklistItemId])
 }
 
 /// Phase 3: SMS reminder log. The Phase-1 SMS stub records would-send rows here.

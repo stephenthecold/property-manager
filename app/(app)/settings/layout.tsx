@@ -13,7 +13,7 @@ type SettingsLink = {
   href: string;
   label: string;
   cap: Capability | null;
-  module?: "tenantPortal" | "applications";
+  module?: "tenantPortal" | "applications" | "inspections";
 };
 
 const SETTINGS_GROUPS: { label: string; links: SettingsLink[] }[] = [
@@ -34,6 +34,12 @@ const SETTINGS_GROUPS: { label: string; links: SettingsLink[] }[] = [
         label: "Applications",
         cap: "applications.manage",
         module: "applications",
+      },
+      {
+        href: "/settings/inspection-templates",
+        label: "Inspection templates",
+        cap: "inspections.manage",
+        module: "inspections",
       },
     ],
   },
