@@ -193,9 +193,11 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
   jurisdiction before serving.
 - **Inspections & deposit disposition** (module `inspections`, off by default) — schedule/record
   property-condition inspections (move-in / move-out / routine). A move-out inspection drives a
-  **deposit disposition**: itemize deductions (`InspectionItem`) against the lease's *refundable*
-  deposit (total deposit − the non-refundable portion) and the refund (or balance owed) is computed
-  by a pure, unit-tested `lib/inspections/disposition.ts`. Inspections are operating records — they
+  **deposit disposition**: per-item deductions on the condition checklist
+  (`InspectionChecklistItem.amountCents` — condition + photos + an optional deduction in one item)
+  against the lease's *refundable* deposit (total deposit − the non-refundable portion); the refund
+  (or balance owed) is computed by a pure, unit-tested `lib/inspections/disposition.ts`. Inspections
+  are operating records — they
   never touch the ledger. Gated by `inspections.manage`.
 - **Vendors** (module `vendors`, off by default) — a directory of contractors / service providers
   (trade, contact, notes) at `/vendors`, mirroring the Payers directory pattern (add/edit,
