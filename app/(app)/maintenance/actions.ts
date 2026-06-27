@@ -73,6 +73,34 @@ function revalidate(unitId?: string | null): void {
   if (unitId) revalidatePath(`/units/${unitId}`);
 }
 
+/**
+ * Validate an optional asset link for a job: the asset must exist and belong to
+ * the job's property (and, when the job is scoped to a unit, to that unit OR be
+ * a property-wide asset). The picker only offers in-scope assets, but never
+ * trust it for a write. Returns the validated id (or null), or an error string.
+ */
+async function validateJobAsset(
+  assetId: string | null,
+  propertyId: string,
+  unitId: string | null,
+): Promise<{ assetId: string | null } | { error: string }> {
+  if (!assetId) return { assetId: null };
+  const asset = await prisma.asset.findUnique({
+    where: { id: assetId },
+    select: { propertyId: true, unitId: true },
+  });
+  if (!asset) return { error: "Selected asset not found." };
+  if (asset.propertyId !== propertyId) {
+    return { error: "That asset is not in the job's property." };
+  }
+  // A unit-scoped asset can only attach to a job for that same unit; a
+  // property-wide asset (asset.unitId === null) is allowed on any job here.
+  if (asset.unitId && asset.unitId !== unitId) {
+    return { error: "That asset belongs to a different unit." };
+  }
+  return { assetId };
+}
+
 export async function createJobAction(fd: FormData): Promise<void> {
   const { dbUser } = await requireModuleCapability("maintenance.manage", "maintenance");
 
@@ -115,6 +143,11 @@ export async function createJobAction(fd: FormData): Promise<void> {
     fail("Selected vendor not found.");
   }
 
+  // Optional asset link — must be in the job's property/unit scope.
+  const assetCheck = await validateJobAsset(str(fd, "assetId") || null, propertyId!, unitId);
+  if ("error" in assetCheck) fail(assetCheck.error);
+  const assetId = assetCheck.assetId;
+
   await withAudit(
     {
       ...(await auditActor()),
@@ -133,6 +166,7 @@ export async function createJobAction(fd: FormData): Promise<void> {
           notifyTenants,
           notifyDaysBefore,
           vendorId,
+          assetId,
           createdBy: dbUser.id,
         },
       });
@@ -146,11 +180,14 @@ export async function createJobAction(fd: FormData): Promise<void> {
           dueDate,
           notifyTenants,
           notifyDaysBefore,
+          assetId,
         },
       };
     },
   );
   revalidate(unitId);
+  // A job linked to an asset at creation shows up in the asset's job list.
+  if (assetId) revalidatePath("/assets");
 }
 
 export async function completeJobAction(
@@ -282,6 +319,8 @@ export async function deleteJobAction(fd: FormData): Promise<void> {
     },
   );
   revalidate(job.unitId);
+  // If the job was linked to an asset, refresh the asset registry's job list.
+  if (job.assetId) revalidatePath("/assets");
 }
 
 /** Post a threaded progress note on a job (the ticket timeline). Append-only. */
@@ -448,6 +487,50 @@ export async function assignJobAction(
     },
   );
   revalidate(job.unitId);
+  return { ok: true };
+}
+
+/**
+ * Link (or clear) the registered Asset a job is about. Validated against the
+ * job's own property/unit so a job can only point at an in-scope asset. Audited;
+ * no-op when unchanged.
+ */
+export async function setJobAssetAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireModuleCapability("maintenance.manage", "maintenance");
+  const jobId = str(fd, "jobId");
+  const job = await prisma.maintenanceJob.findUnique({ where: { id: jobId } });
+  if (!job) return { error: "Job not found." };
+
+  const check = await validateJobAsset(
+    str(fd, "assetId") || null,
+    job.propertyId,
+    job.unitId,
+  );
+  if ("error" in check) return { error: check.error };
+  const assetId = check.assetId;
+  if (assetId === job.assetId) return { ok: true }; // no-op resubmit
+
+  await withAudit(
+    {
+      ...(await auditActor()),
+      action: "maintenance.asset_changed",
+      entityType: "MaintenanceJob",
+      entityId: job.id,
+      before: { assetId: job.assetId },
+    },
+    async (tx) => {
+      const updated = await tx.maintenanceJob.update({
+        where: { id: job.id },
+        data: { assetId },
+      });
+      return { result: updated, after: { assetId } };
+    },
+  );
+  revalidate(job.unitId);
+  revalidatePath("/assets");
   return { ok: true };
 }
 

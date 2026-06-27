@@ -26,6 +26,7 @@ import {
 } from "@/lib/services/unit-condition";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { TurnoverSection } from "./turnover-section";
 import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/table";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const UNIT_TYPES = ["apartment", "house", "duplex", "storage", "commercial", "other"];
 const SERVICE = ["in_service", "maintenance", "unavailable"];
@@ -551,6 +553,10 @@ export default async function UnitDetail({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {modules.maintenance && (
+        <TurnoverSection unitId={unit.id} tz={unit.property.timezone} />
       )}
 
       {canCondition && (

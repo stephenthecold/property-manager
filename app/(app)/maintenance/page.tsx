@@ -18,6 +18,7 @@ import {
   markTaskDoneAction,
   removeTaskAction,
   reopenJobAction,
+  setJobAssetAction,
   setJobPriorityAction,
   setJobStatusAction,
   uncancelJobAction,
@@ -134,7 +135,7 @@ export default async function MaintenancePage({
     jobWhere.status = filterStatus as Prisma.MaintenanceJobWhereInput["status"];
   }
 
-  const [jobs, tasks, properties, units, vendors, staff] = await Promise.all([
+  const [jobs, tasks, properties, units, vendors, staff, assets] = await Promise.all([
     prisma.maintenanceJob.findMany({
       where: jobWhere,
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
@@ -143,6 +144,7 @@ export default async function MaintenancePage({
         property: { select: { name: true, timezone: true, currency: true } },
         unit: { select: { unitNumber: true } },
         vendor: { select: { name: true } },
+        asset: { select: { id: true, name: true } },
         updates: { orderBy: { createdAt: "desc" } },
       },
     }),
@@ -163,10 +165,29 @@ export default async function MaintenancePage({
       orderBy: [{ name: "asc" }, { email: "asc" }],
       select: { id: true, name: true, email: true },
     }),
+    // Active assets for the optional job<->asset picker; scoped per row below.
+    prisma.asset.findMany({
+      where: { active: true },
+      orderBy: [{ property: { name: "asc" } }, { name: "asc" }],
+      select: { id: true, name: true, propertyId: true, unitId: true },
+    }),
   ]);
 
   // Resolve an assignee's display label by id (covers historical/inactive ids).
   const staffById = new Map(staff.map((u) => [u.id, u.name?.trim() || u.email]));
+  // Lookup maps for labeling an asset's property/unit context in the pickers.
+  const propertiesById = new Map(properties.map((p) => [p.id, p.name]));
+  const unitsById = new Map(units.map((u) => [u.id, u]));
+
+  /**
+   * Assets a job may link to: same property, and either property-wide
+   * (asset.unitId == null) or the job's exact unit. Mirrors the server-side
+   * validateJobAsset check so the picker only offers writable options.
+   */
+  const assetsForJob = (propertyId: string, unitId: string | null) =>
+    assets.filter(
+      (a) => a.propertyId === propertyId && (a.unitId == null || a.unitId === unitId),
+    );
 
   // Attachments (loose ref) for the visible jobs, with signed download URLs.
   const jobIds = jobs.map((j) => j.id);
@@ -297,6 +318,34 @@ export default async function MaintenancePage({
                 </select>
               </div>
             )}
+            {assets.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="mjAsset">Asset (optional)</Label>
+                <select
+                  id="mjAsset"
+                  name="assetId"
+                  className="h-9 w-full rounded-md border px-3 text-sm"
+                >
+                  <option value="">— none —</option>
+                  {assets.map((a) => {
+                    const where = unitsById.get(a.unitId ?? "");
+                    const ctx = where
+                      ? `${where.property.name} · ${where.unitNumber}`
+                      : propertiesById.get(a.propertyId) ?? "";
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                        {ctx ? ` — ${ctx}` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Must match the job&apos;s property/unit; pick the equipment this
+                  job is about.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="mjDue">Due date (optional)</Label>
               <Input id="mjDue" name="dueDate" type="date" />
@@ -407,6 +456,7 @@ export default async function MaintenancePage({
               { key: "title", label: "Job" },
               { key: "priority", label: "Priority" },
               { key: "assignee", label: "Assignee", className: "hidden md:table-cell" },
+              { key: "asset", label: "Asset", className: "hidden lg:table-cell" },
               { key: "due", label: "Due" },
               { key: "status", label: "Status" },
               { key: "notes", label: "Notes", align: "right", sortable: false, className: "hidden sm:table-cell" },
@@ -429,6 +479,7 @@ export default async function MaintenancePage({
                   j.title,
                   j.priority,
                   assigneeName,
+                  j.asset?.name ?? null,
                   j.dueDate?.toISOString() ?? null,
                   j.status,
                   j.updates.length,
@@ -515,6 +566,74 @@ export default async function MaintenancePage({
                       </FormDialog>
                     )}
                   </span>,
+                  (() => {
+                    // In-scope active assets, plus the job's CURRENTLY-linked
+                    // asset even if it has since been deactivated — otherwise the
+                    // select would default to "— none —" and saving would
+                    // silently clear the link.
+                    const scoped = assetsForJob(j.propertyId, j.unitId);
+                    const options =
+                      j.asset && !scoped.some((a) => a.id === j.asset!.id)
+                        ? [
+                            {
+                              id: j.asset.id,
+                              name: j.asset.name,
+                              propertyId: j.propertyId,
+                              unitId: j.unitId,
+                            },
+                            ...scoped,
+                          ]
+                        : scoped;
+                    return (
+                      <span key="asset" className="inline-flex items-center gap-1">
+                        {j.asset ? (
+                          <Link
+                            href="/assets"
+                            className="text-sm hover:underline"
+                            title="View in the asset registry"
+                          >
+                            {j.asset.name}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                        {isOpenStatus(j.status) && (options.length > 0 || j.asset) && (
+                          <FormDialog
+                            trigger={j.asset ? "Change" : "Link"}
+                            triggerVariant="outline"
+                            triggerSize="xs"
+                            title="Link an asset"
+                            description={j.title}
+                            action={setJobAssetAction}
+                            submitLabel="Save asset"
+                          >
+                            <input type="hidden" name="jobId" value={j.id} />
+                            <div className="space-y-2">
+                              <Label htmlFor={`asset-${j.id}`}>Asset</Label>
+                              <select
+                                id={`asset-${j.id}`}
+                                name="assetId"
+                                defaultValue={j.assetId ?? ""}
+                                className="h-9 w-full rounded-md border px-3 text-sm"
+                              >
+                                <option value="">— none —</option>
+                                {options.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                    {a.unitId == null ? " (property-wide)" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="text-xs text-muted-foreground">
+                                Only assets in this job&apos;s property/unit are
+                                shown.
+                              </p>
+                            </div>
+                          </FormDialog>
+                        )}
+                      </span>
+                    );
+                  })(),
                   j.dueDate ? (
                     <span key="due" className="inline-flex items-center gap-1">
                       <span
