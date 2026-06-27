@@ -319,6 +319,8 @@ export interface BillingRunResult {
   leasesProcessed: number;
   chargesCreated: number;
   lateFeesCreated: number;
+  /** Leases that threw and were skipped this run (isolated, not fatal). */
+  failed: number;
   rentIncreasesApplied: number;
 }
 
@@ -331,10 +333,19 @@ export async function runBilling(now = new Date()): Promise<BillingRunResult> {
 
   let chargesCreated = 0;
   let lateFeesCreated = 0;
+  let failed = 0;
   for (const lease of leases) {
     const tz = lease.unit.property.timezone;
-    chargesCreated += await generateChargesForLease(lease, tz, now);
-    lateFeesCreated += await assessLateFeesForLease(lease, tz, now);
+    try {
+      chargesCreated += await generateChargesForLease(lease, tz, now);
+      lateFeesCreated += await assessLateFeesForLease(lease, tz, now);
+    } catch (e) {
+      // Isolate per lease: one bad lease (e.g. an invalid property timezone →
+      // Luxon "Invalid DateTime") must not abort billing for the rest of the
+      // portfolio. Idempotency means a fixed lease back-fills on the next run.
+      failed++;
+      console.error(`[billing] lease ${lease.id} failed:`, e);
+    }
   }
   // After charging, so back-filled periods keep their historical pricing.
   const rentIncreasesApplied = await applyScheduledRentIncreases(now);
@@ -342,6 +353,7 @@ export async function runBilling(now = new Date()): Promise<BillingRunResult> {
     leasesProcessed: leases.length,
     chargesCreated,
     lateFeesCreated,
+    failed,
     rentIncreasesApplied,
   };
 }

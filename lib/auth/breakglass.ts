@@ -118,43 +118,52 @@ export async function issueBreakGlass(
   const passwordHash = await hashPassword(passphrase);
   const expiresAt = new Date(Date.now() + ttlHours * 3_600_000);
 
-  await prisma.breakGlassCredential.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", passwordHash, failedAttempts: 0, rotatedAt: new Date() },
-    update: { passwordHash, failedAttempts: 0, lockedUntil: null, rotatedAt: new Date() },
-  });
-  await prisma.authSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", breakGlassEnabled: true, breakGlassExpiresAt: expiresAt },
-    update: { breakGlassEnabled: true, breakGlassExpiresAt: expiresAt },
+  // Credential + enable-flag + audit commit together: a crash mid-write must not
+  // leave a stored hash with no expiry, or enabled in one table but not the other.
+  await prisma.$transaction(async (tx) => {
+    await tx.breakGlassCredential.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", passwordHash, failedAttempts: 0, rotatedAt: new Date() },
+      update: { passwordHash, failedAttempts: 0, lockedUntil: null, rotatedAt: new Date() },
+    });
+    await tx.authSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", breakGlassEnabled: true, breakGlassExpiresAt: expiresAt },
+      update: { breakGlassEnabled: true, breakGlassExpiresAt: expiresAt },
+    });
+    await writeAudit(tx, {
+      actorType: "system",
+      action: "breakglass.issued",
+      entityType: "BreakGlassCredential",
+      after: { expiresAt },
+    });
   });
   invalidateAuthSettingsCache();
-  await writeAudit(prisma, {
-    actorType: "system",
-    action: "breakglass.issued",
-    entityType: "BreakGlassCredential",
-    after: { expiresAt },
-  });
   return { passphrase, expiresAt };
 }
 
 /** CLI / auto-disable: turn break-glass off and clear the credential. */
 export async function disableBreakGlass(reason = "manual"): Promise<void> {
-  await prisma.authSettings.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", breakGlassEnabled: false, breakGlassExpiresAt: null },
-    update: { breakGlassEnabled: false, breakGlassExpiresAt: null },
-  });
-  await prisma.breakGlassCredential.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", passwordHash: null },
-    update: { passwordHash: null, failedAttempts: 0, lockedUntil: null },
+  // Disable flag + credential clear + audit commit together: a crash between
+  // them must not leave break-glass "off" while the password hash is still at
+  // rest (a credential believed cleared but still present).
+  await prisma.$transaction(async (tx) => {
+    await tx.authSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", breakGlassEnabled: false, breakGlassExpiresAt: null },
+      update: { breakGlassEnabled: false, breakGlassExpiresAt: null },
+    });
+    await tx.breakGlassCredential.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", passwordHash: null },
+      update: { passwordHash: null, failedAttempts: 0, lockedUntil: null },
+    });
+    await writeAudit(tx, {
+      actorType: "system",
+      action: "breakglass.disabled",
+      entityType: "BreakGlassCredential",
+      after: { reason },
+    });
   });
   invalidateAuthSettingsCache();
-  await writeAudit(prisma, {
-    actorType: "system",
-    action: "breakglass.disabled",
-    entityType: "BreakGlassCredential",
-    after: { reason },
-  });
 }

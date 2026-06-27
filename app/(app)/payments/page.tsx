@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { PaymentMethod, PaymentStatus } from "@/lib/generated/prisma/enums";
@@ -22,6 +23,7 @@ export default async function PaymentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireCapability("payments.manage");
   const sp = await searchParams;
   const first = (key: string): string => {
     const v = sp[key];

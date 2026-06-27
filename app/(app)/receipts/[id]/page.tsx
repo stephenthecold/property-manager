@@ -4,7 +4,7 @@ import { getReceiptWithContext } from "@/lib/services/receipts";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getDocumentDownloadUrl, listDocuments } from "@/lib/services/documents";
 import { getFileStorage } from "@/lib/providers/storage";
-import { getDisplayRole } from "@/lib/auth/session";
+import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/money";
 import { markSentAction } from "@/app/(app)/receipts/actions";
@@ -44,6 +44,7 @@ export default async function ReceiptPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireCapability("payments.manage");
   const { id } = await params;
   const [ctx, app, { actingRole }] = await Promise.all([
     getReceiptWithContext(id),

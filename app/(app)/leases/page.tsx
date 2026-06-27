@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency, sumCents } from "@/lib/money";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { LeaseStatus } from "@/lib/generated/prisma/enums";
@@ -26,6 +27,7 @@ export default async function LeasesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireCapability("leases.manage");
   const sp = await searchParams;
   const first = (key: string): string => {
     const v = sp[key];

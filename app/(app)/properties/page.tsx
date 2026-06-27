@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
@@ -8,6 +9,7 @@ export const runtime = "nodejs";
 export const metadata = { title: "Properties" };
 
 export default async function PropertiesPage() {
+  await requireCapability("properties.manage");
   const properties = await prisma.property.findMany({
     orderBy: { name: "asc" },
     include: {

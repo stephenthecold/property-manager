@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { createBuilding, createUnit, updateProperty } from "../actions";
@@ -48,6 +49,7 @@ export default async function PropertyDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireCapability("properties.manage");
   const { id } = await params;
   const property = await prisma.property.findUnique({
     where: { id },

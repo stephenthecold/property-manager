@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
 import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -26,6 +27,7 @@ export default async function TenantsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireCapability("tenants.manage");
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v)?.trim() ?? "";

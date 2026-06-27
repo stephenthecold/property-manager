@@ -58,29 +58,33 @@ export async function recordSmsConsent(
   const matches = await matchTenantsByPhone(rawPhone);
   const tenantId = matches[0]?.id ?? null;
 
-  const record = await prisma.consentRecord.create({
-    data: {
-      channel: "sms",
-      phone: key ?? rawPhone.trim(),
-      phoneRaw: rawPhone.trim() || null,
-      fullName: meta.fullName ?? null,
-      email: meta.email ?? null,
-      tenantId,
-      applicationId: meta.applicationId ?? null,
-      propertyUnit: meta.propertyUnit ?? null,
-      consent,
-      source,
-      consentText: meta.consentText ?? (consent ? SMS_CONSENT_TEXT : null),
-      consentVersion: meta.consentVersion ?? (consent ? SMS_CONSENT_VERSION : null),
-      ipAddress: meta.ipAddress ?? null,
-      userAgent: meta.userAgent ?? null,
-    },
-  });
+  // The compliance record AND the effective Tenant.smsConsent flip must commit
+  // together: a crash between them could leave a ConsentRecord that says "opted
+  // out" while the next reminder sweep still texts the number that sent STOP
+  // (TCPA exposure). One transaction makes them atomic.
+  const { recordId, changed } = await prisma.$transaction(async (tx) => {
+    const record = await tx.consentRecord.create({
+      data: {
+        channel: "sms",
+        phone: key ?? rawPhone.trim(),
+        phoneRaw: rawPhone.trim() || null,
+        fullName: meta.fullName ?? null,
+        email: meta.email ?? null,
+        tenantId,
+        applicationId: meta.applicationId ?? null,
+        propertyUnit: meta.propertyUnit ?? null,
+        consent,
+        source,
+        consentText: meta.consentText ?? (consent ? SMS_CONSENT_TEXT : null),
+        consentVersion: meta.consentVersion ?? (consent ? SMS_CONSENT_VERSION : null),
+        ipAddress: meta.ipAddress ?? null,
+        userAgent: meta.userAgent ?? null,
+      },
+    });
 
-  let changed = 0;
-  for (const t of matches) {
-    if (t.smsConsent === consent) continue;
-    await prisma.$transaction(async (tx) => {
+    let changed = 0;
+    for (const t of matches) {
+      if (t.smsConsent === consent) continue;
       await tx.tenant.update({ where: { id: t.id }, data: { smsConsent: consent } });
       await writeAudit(tx, {
         ...actor,
@@ -90,10 +94,11 @@ export async function recordSmsConsent(
         before: { smsConsent: t.smsConsent },
         after: { smsConsent: consent, source },
       });
-    });
-    changed++;
-  }
-  return { recordId: record.id, matchedTenants: changed };
+      changed++;
+    }
+    return { recordId: record.id, changed };
+  });
+  return { recordId, matchedTenants: changed };
 }
 
 export interface TenantConsentRow {

@@ -5,7 +5,7 @@ import { formatCurrency, fromCents } from "@/lib/money";
 import { leaseSnapshot } from "@/lib/services/accounting";
 import { computeVacancy } from "@/lib/units/vacancy";
 import { getAppSettings } from "@/lib/services/app-settings";
-import { getDisplayRole } from "@/lib/auth/session";
+import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import {
   OPEN_STATUSES,
@@ -61,6 +61,7 @@ export default async function UnitDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireCapability("properties.manage");
   const { id } = await params;
   const unit = await prisma.unit.findUnique({
     where: { id },
