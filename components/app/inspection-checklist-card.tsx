@@ -12,6 +12,7 @@ import {
 } from "@/lib/inspections/checklist";
 import type { ChecklistPhotoView } from "@/lib/services/inspections";
 import type { InspectionChecklistStatus } from "@/lib/generated/prisma/enums";
+import { formatCurrency, fromCents } from "@/lib/money";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,7 @@ export interface ChecklistItemView {
   category: string | null;
   status: InspectionChecklistStatus;
   note: string | null;
+  amountCents: bigint;
   photos: ChecklistPhotoView[];
 }
 
@@ -41,19 +43,23 @@ function StatusPill({ status }: { status: InspectionChecklistStatus }) {
 
 /**
  * Condition CHECKLIST for one inspection: ordered items, each with a pass/fail/na
- * status, a note, and photos. Photos are served via short-lived signed URLs (the
- * same mechanism as condition/maintenance photos) and are only reachable by staff
- * with the inspections capability that gates this page. Distinct from the money
- * deductions card — checklist items never touch balances.
+ * status, a note, photos, and — on a move-out (showAmount) — an optional deposit
+ * deduction that feeds the move-out disposition. Photos are served via short-lived
+ * signed URLs (the same mechanism as condition/maintenance photos), reachable only
+ * by staff with the inspections capability that gates this page. The deduction is
+ * an operating figure — the disposition never touches the ledger.
  */
 export function InspectionChecklistCard({
   inspectionId,
   items,
   editable,
+  showAmount = false,
 }: {
   inspectionId: string;
   items: ChecklistItemView[];
   editable: boolean;
+  /** Show + edit a per-item deposit deduction (move-out inspections). */
+  showAmount?: boolean;
 }) {
   return (
     <Card>
@@ -88,6 +94,15 @@ export function InspectionChecklistCard({
                 <Input id="ci-category" name="category" placeholder="e.g. Safety" />
               </div>
             </div>
+            {showAmount && (
+              <div className="space-y-2">
+                <Label htmlFor="ci-amount">Deposit deduction (optional)</Label>
+                <Input id="ci-amount" name="amount" inputMode="decimal" placeholder="0.00" />
+                <p className="text-xs text-muted-foreground">
+                  Counts toward the move-out deductions total. Leave blank for none.
+                </p>
+              </div>
+            )}
           </FormDialog>
         )}
       </CardHeader>
@@ -108,6 +123,11 @@ export function InspectionChecklistCard({
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusPill status={item.status} />
                       <span className="font-medium">{item.label}</span>
+                      {showAmount && item.amountCents > 0n && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                          −{formatCurrency(item.amountCents)} deduction
+                        </span>
+                      )}
                     </div>
                     {(item.area || item.category) && (
                       <div className="mt-0.5 text-xs text-muted-foreground">
@@ -151,6 +171,21 @@ export function InspectionChecklistCard({
                             placeholder="What you observed"
                           />
                         </div>
+                        {showAmount && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`amount-${item.id}`}>Deposit deduction</Label>
+                            <Input
+                              id={`amount-${item.id}`}
+                              name="amount"
+                              inputMode="decimal"
+                              defaultValue={item.amountCents > 0n ? fromCents(item.amountCents) : ""}
+                              placeholder="0.00"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Counts toward the move-out deductions total. Blank or 0 clears it.
+                            </p>
+                          </div>
+                        )}
                       </FormDialog>
                       <FormDialog
                         trigger="Photos"

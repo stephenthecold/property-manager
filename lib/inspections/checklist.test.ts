@@ -5,6 +5,7 @@ import {
   checklistStatusLabel,
   isChecklistStatus,
   parseChecklistStatus,
+  sumChecklistDeductions,
   tallyChecklist,
 } from "@/lib/inspections/checklist";
 
@@ -44,5 +45,16 @@ describe("inspections/checklist", () => {
     ]);
     expect(t).toEqual({ total: 5, pass: 2, fail: 1, na: 1, pending: 1 });
     expect(tallyChecklist([])).toEqual({ total: 0, pass: 0, fail: 0, na: 0, pending: 0 });
+  });
+
+  it("sums deduction amounts across items (bigint cents)", () => {
+    expect(
+      sumChecklistDeductions([
+        { amountCents: 30000n },
+        { amountCents: 0n },
+        { amountCents: 15000n },
+      ]),
+    ).toBe(45000n);
+    expect(sumChecklistDeductions([])).toBe(0n);
   });
 });

@@ -12,7 +12,7 @@ import type {
  * Bridges Inspection rows to the pure disposition math. Inspections are OPERATING
  * records — they never touch the ledger (deposits live on LeaseDeposit). Every
  * mutation is audited. The move-out deposit disposition is computed on read from
- * the lease's deposits minus the inspection's itemized deductions.
+ * the lease's deposits minus the deduction amounts on the condition checklist.
  */
 
 export async function listInspections() {
@@ -20,7 +20,7 @@ export async function listInspections() {
     orderBy: [{ status: "asc" }, { scheduledFor: "desc" }, { createdAt: "desc" }],
     take: 200,
     include: {
-      _count: { select: { items: true } },
+      _count: { select: { checklistItems: true } },
       lease: {
         select: {
           tenantId: true,
@@ -36,10 +36,9 @@ export async function getInspection(id: string) {
   return prisma.inspection.findUnique({
     where: { id },
     include: {
-      items: { orderBy: { createdAt: "asc" } },
-      // Checklist items + their photos are loaded separately via
-      // getInspectionChecklist() (it adds the photo join + signed URLs), so they
-      // are intentionally NOT included here to avoid a duplicate query.
+      // Checklist items + their photos (and any move-out deduction amount) are
+      // loaded separately via getInspectionChecklist() (it adds the photo join +
+      // signed URLs), so they are intentionally NOT included here.
       template: { select: { id: true, name: true } },
       lease: {
         select: {
@@ -81,7 +80,7 @@ export async function dispositionForInspection(
 ): Promise<DepositDisposition> {
   const [totals, items] = await Promise.all([
     depositTotals(leaseId),
-    prisma.inspectionItem.aggregate({
+    prisma.inspectionChecklistItem.aggregate({
       where: { inspectionId },
       _sum: { amountCents: true },
     }),
@@ -221,67 +220,11 @@ export async function cancelInspection(input: {
   return { ok: true };
 }
 
-export async function addDeduction(input: {
-  inspectionId: string;
-  label: string;
-  amountCents: bigint;
-  actor: AuditContext;
-}): Promise<{ ok: boolean; error?: string }> {
-  const insp = await prisma.inspection.findUnique({ where: { id: input.inspectionId } });
-  if (!insp) return { ok: false, error: "Inspection not found." };
-  if (insp.status === "canceled") {
-    return { ok: false, error: "A canceled inspection can't take deductions." };
-  }
-  await withAudit(
-    {
-      ...input.actor,
-      action: "inspection.deduction_added",
-      entityType: "Inspection",
-      entityId: insp.id,
-    },
-    async (tx) => {
-      await tx.inspectionItem.create({
-        data: {
-          inspectionId: insp.id,
-          label: input.label,
-          amountCents: input.amountCents,
-        },
-      });
-      return {
-        result: undefined,
-        after: { label: input.label, amountCents: input.amountCents.toString() },
-      };
-    },
-  );
-  return { ok: true };
-}
-
-export async function removeDeduction(input: {
-  itemId: string;
-  actor: AuditContext;
-}): Promise<{ ok: boolean }> {
-  const item = await prisma.inspectionItem.findUnique({ where: { id: input.itemId } });
-  if (!item) return { ok: true };
-  await withAudit(
-    {
-      ...input.actor,
-      action: "inspection.deduction_removed",
-      entityType: "Inspection",
-      entityId: item.inspectionId,
-      before: { label: item.label, amountCents: item.amountCents.toString() },
-    },
-    async (tx) => {
-      await tx.inspectionItem.delete({ where: { id: item.id } });
-      return { result: undefined };
-    },
-  );
-  return { ok: true };
-}
-
 // ---------------------------------------------------------------------------
-// CHECKLIST items (condition observations) — distinct from the money deductions
-// above. Each can carry pass/fail/na status, a note, and photos (UploadedDocument
-// rows, uploadType "inspection_photo"). Operating records; never touch balances.
+// CHECKLIST items (condition observations). Each carries a pass/fail/na status,
+// an optional note, photos (UploadedDocument rows, uploadType "inspection_photo"),
+// and — on a move-out — an optional deposit-deduction amount. The move-out
+// disposition sums those amounts. Operating records; never touch balances.
 // ---------------------------------------------------------------------------
 
 /** Add a blank condition checklist item to an inspection (appended at the end). */
@@ -290,6 +233,8 @@ export async function addChecklistItem(input: {
   label: string;
   area: string | null;
   category: string | null;
+  /** Optional move-out deposit deduction for this item. */
+  amountCents?: bigint;
   actor: AuditContext;
 }): Promise<{ ok: boolean; error?: string }> {
   const insp = await prisma.inspection.findUnique({
@@ -319,10 +264,14 @@ export async function addChecklistItem(input: {
           label: input.label,
           area: input.area,
           category: input.category,
+          amountCents: input.amountCents ?? 0n,
           sortOrder: (last?.sortOrder ?? -1) + 1,
         },
       });
-      return { result: undefined, after: { label: input.label } };
+      return {
+        result: undefined,
+        after: { label: input.label, amountCents: (input.amountCents ?? 0n).toString() },
+      };
     },
   );
   return { ok: true };
@@ -333,27 +282,37 @@ export async function updateChecklistItem(input: {
   itemId: string;
   status: InspectionChecklistStatus;
   note: string | null;
+  /** Deposit deduction for this item (move-out); 0 clears it. Omit to keep. */
+  amountCents?: bigint;
   actor: AuditContext;
 }): Promise<{ ok: boolean; error?: string }> {
   const item = await prisma.inspectionChecklistItem.findUnique({
     where: { id: input.itemId },
-    select: { id: true, inspectionId: true, status: true, note: true },
+    select: { id: true, inspectionId: true, status: true, note: true, amountCents: true },
   });
   if (!item) return { ok: false, error: "Checklist item not found." };
+  const amountCents = input.amountCents ?? item.amountCents;
   await withAudit(
     {
       ...input.actor,
       action: "inspection.checklist_item_updated",
       entityType: "Inspection",
       entityId: item.inspectionId,
-      before: { status: item.status, note: item.note },
+      before: {
+        status: item.status,
+        note: item.note,
+        amountCents: item.amountCents.toString(),
+      },
     },
     async (tx) => {
       await tx.inspectionChecklistItem.update({
         where: { id: item.id },
-        data: { status: input.status, note: input.note },
+        data: { status: input.status, note: input.note, amountCents },
       });
-      return { result: undefined, after: { status: input.status } };
+      return {
+        result: undefined,
+        after: { status: input.status, amountCents: amountCents.toString() },
+      };
     },
   );
   return { ok: true };
@@ -510,6 +469,7 @@ export async function getInspectionChecklist(inspectionId: string): Promise<
     category: string | null;
     status: InspectionChecklistStatus;
     note: string | null;
+    amountCents: bigint;
     photos: ChecklistPhotoView[];
   }[]
 > {
@@ -544,6 +504,7 @@ export async function getInspectionChecklist(inspectionId: string): Promise<
       category: it.category,
       status: it.status,
       note: it.note,
+      amountCents: it.amountCents,
       photos: await Promise.all(
         (byItem.get(it.id) ?? []).map(async (d) => {
           let url: string | null = null;

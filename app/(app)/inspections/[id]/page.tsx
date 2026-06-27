@@ -13,17 +13,12 @@ import {
   listConditionLogsForLease,
 } from "@/lib/services/unit-condition";
 import { formatCurrency } from "@/lib/money";
-import {
-  addDeductionAction,
-  completeInspectionAction,
-  removeDeductionAction,
-} from "../actions";
+import { completeInspectionAction } from "../actions";
 import { InspectionChecklistCard } from "@/components/app/inspection-checklist-card";
 import { BackLink } from "@/components/app/back-link";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -155,50 +150,11 @@ export default async function InspectionDetailPage({
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Itemized deductions</h3>
-                {inspection.status !== "canceled" && (
-                  <FormDialog
-                    trigger="Add deduction"
-                    title="Add deduction"
-                    action={addDeductionAction}
-                    submitLabel="Add"
-                  >
-                    <input type="hidden" name="inspectionId" value={inspection.id} />
-                    <div className="space-y-2">
-                      <Label htmlFor="label">What for</Label>
-                      <Input id="label" name="label" required placeholder="e.g. Carpet cleaning" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="amount">Amount</Label>
-                      <Input id="amount" name="amount" inputMode="decimal" placeholder="0.00" required />
-                    </div>
-                  </FormDialog>
-                )}
-              </div>
-              {inspection.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No deductions — the full refundable deposit is returned.</p>
-              ) : (
-                <ul className="divide-y rounded-md border">
-                  {inspection.items.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                      <span>{item.label}</span>
-                      <span className="flex items-center gap-3">
-                        <span className="font-medium">{formatCurrency(item.amountCents)}</span>
-                        <form action={removeDeductionAction}>
-                          <input type="hidden" name="itemId" value={item.id} />
-                          <input type="hidden" name="inspectionId" value={inspection.id} />
-                          <Button type="submit" variant="destructive" size="xs">
-                            Remove
-                          </Button>
-                        </form>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Itemize deductions on the condition checklist below — set an amount
+              on any item (e.g. a failed one) and it counts toward the deductions
+              total here.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -207,6 +163,7 @@ export default async function InspectionDetailPage({
         inspectionId={inspection.id}
         items={checklist}
         editable={checklistEditable}
+        showAmount={isMoveOut}
       />
 
       <Card>

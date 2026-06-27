@@ -10,13 +10,11 @@ import { parseChecklistStatus } from "@/lib/inspections/checklist";
 import {
   addChecklistItem,
   addChecklistItemPhotos,
-  addDeduction,
   cancelInspection,
   completeInspection,
   createInspection,
   deleteChecklistItemPhoto,
   removeChecklistItem,
-  removeDeduction,
   updateChecklistItem,
 } from "@/lib/services/inspections";
 import { getFormString as str, type FormState } from "@/lib/forms";
@@ -83,45 +81,21 @@ export async function cancelInspectionAction(fd: FormData): Promise<void> {
   revalidatePath(`/inspections/${id}`);
 }
 
-export async function addDeductionAction(
-  _prev: FormState,
-  fd: FormData,
-): Promise<FormState> {
-  await requireModuleCapability("inspections.manage", "inspections");
-  const inspectionId = str(fd, "inspectionId");
-  if (!inspectionId) return { error: "Missing inspection id." };
-  const label = str(fd, "label");
-  if (!label) return { error: "Describe the deduction." };
-
-  let amountCents: bigint;
-  try {
-    amountCents = toCents(str(fd, "amount"));
-  } catch {
-    return { error: "Enter a valid amount." };
-  }
-  if (amountCents <= 0n) return { error: "Amount must be greater than zero." };
-
-  const res = await addDeduction({
-    inspectionId,
-    label,
-    amountCents,
-    actor: await auditActor(),
-  });
-  if (!res.ok) return { error: res.error ?? "Could not add deduction." };
-  revalidatePath(`/inspections/${inspectionId}`);
-  return { ok: true };
-}
-
-export async function removeDeductionAction(fd: FormData): Promise<void> {
-  await requireModuleCapability("inspections.manage", "inspections");
-  const itemId = String(fd.get("itemId") ?? "").trim();
-  const inspectionId = String(fd.get("inspectionId") ?? "").trim();
-  if (!itemId) throw new Error("Missing item id.");
-  await removeDeduction({ itemId, actor: await auditActor() });
-  if (inspectionId) revalidatePath(`/inspections/${inspectionId}`);
-}
-
 // --- Condition CHECKLIST items + photos -----------------------------------
+
+/**
+ * Parse an optional move-out deduction amount on a checklist item. Blank → 0
+ * (clears it); a negative or unparseable value → null (a validation error).
+ */
+function parseAmount(raw: string): bigint | null {
+  if (!raw.trim()) return 0n;
+  try {
+    const c = toCents(raw);
+    return c < 0n ? null : c;
+  } catch {
+    return null;
+  }
+}
 
 export async function addChecklistItemAction(
   _prev: FormState,
@@ -133,11 +107,15 @@ export async function addChecklistItemAction(
   const label = str(fd, "label");
   if (!label) return { error: "Describe what to check." };
 
+  const amountCents = parseAmount(str(fd, "amount"));
+  if (amountCents === null) return { error: "Enter a valid deduction amount." };
+
   const res = await addChecklistItem({
     inspectionId,
     label,
     area: str(fd, "area") || null,
     category: str(fd, "category") || null,
+    amountCents,
     actor: await auditActor(),
   });
   if (!res.ok) return { error: res.error ?? "Could not add item." };
@@ -154,10 +132,14 @@ export async function updateChecklistItemAction(
   const inspectionId = str(fd, "inspectionId");
   if (!itemId) return { error: "Missing item id." };
 
+  const amountCents = parseAmount(str(fd, "amount"));
+  if (amountCents === null) return { error: "Enter a valid deduction amount." };
+
   const res = await updateChecklistItem({
     itemId,
     status: parseChecklistStatus(str(fd, "status")),
     note: str(fd, "note") || null,
+    amountCents,
     actor: await auditActor(),
   });
   if (!res.ok) return { error: res.error ?? "Could not update item." };

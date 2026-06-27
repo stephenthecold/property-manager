@@ -206,16 +206,18 @@ export default async function InspectionReportPage({
                   />
                 )}
               </dl>
-              {inspection.items.length > 0 && (
+              {checklist.some((it) => it.amountCents > 0n) && (
                 <ul className="mt-2 divide-y rounded-md border text-sm">
-                  {inspection.items.map((it) => (
-                    <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
-                      <span>{it.label}</span>
-                      <span className="font-medium tabular-nums">
-                        {formatCurrency(it.amountCents, property.currency)}
-                      </span>
-                    </li>
-                  ))}
+                  {checklist
+                    .filter((it) => it.amountCents > 0n)
+                    .map((it) => (
+                      <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span>{it.label}</span>
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(it.amountCents, property.currency)}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               )}
             </div>
