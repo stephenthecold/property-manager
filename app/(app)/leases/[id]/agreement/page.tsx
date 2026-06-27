@@ -13,6 +13,7 @@ import {
 import {
   getLeaseSigningOverview,
   signingKindLabel,
+  SIGNED_AGREEMENT_NOTE,
 } from "@/lib/services/esign";
 import { renderTemplate } from "@/lib/reminders/templates";
 import {
@@ -20,7 +21,8 @@ import {
   markerPassthroughVars,
 } from "@/lib/esign/markers";
 import { AgreementText, SIGNATURE_FONT } from "@/components/app/agreement-text";
-import { DEFAULT_LEASE_AGREEMENT_TEXT } from "@/lib/config/lease-agreement";
+import { leaseAgreementTemplate } from "@/lib/lease/agreement-format";
+import { getFileStorage } from "@/lib/providers/storage";
 import { PrintButton } from "@/components/app/print-button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -117,9 +119,10 @@ export default async function LeaseAgreementPage({
   const esignError = first("esign_error");
   const esignMessage = first("esign_message");
 
-  const [ctx, templates] = await Promise.all([
+  const [ctx, templates, leaseDocuments] = await Promise.all([
     buildAgreementVars(id),
     listDocuments({ uploadType: "lease_template" }),
+    listDocuments({ leaseId: id }),
   ]);
   if (!ctx) notFound();
   const { vars, lease, app } = ctx;
@@ -139,6 +142,31 @@ export default async function LeaseAgreementPage({
       signedDocUrl = null; // storage unavailable — the panel still renders
     }
   }
+
+  // Every document attached to this lease (generated .docx, the e-signed copy,
+  // any uploads) with a best-effort direct download link — so the signed
+  // agreement is reachable from the lease itself, not only the tenant page.
+  // Sign the storage keys already in memory (listDocuments returned full rows),
+  // so there's no per-document DB re-fetch.
+  const fileStorage = await getFileStorage().catch(() => null);
+  const leaseDocs = await Promise.all(
+    leaseDocuments.map(async (d) => {
+      let url: string | null = null;
+      try {
+        url = fileStorage ? await fileStorage.getSignedUrl(d.fileUrl) : null;
+      } catch {
+        url = null; // storage unavailable — fall back to the detail page
+      }
+      return {
+        id: d.id,
+        fileName: d.fileName,
+        createdAt: d.createdAt,
+        isSigned: d.notes === SIGNED_AGREEMENT_NOTE,
+        url,
+      };
+    }),
+  );
+
   const tz = lease.unit.property.timezone;
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-US", {
@@ -169,9 +197,12 @@ export default async function LeaseAgreementPage({
     .filter(Boolean)
     .join(" · ");
 
+  // The clause wording is this lease's FROZEN snapshot (lease.agreementText),
+  // captured at creation — editing the org-wide template never changes an
+  // existing lease's agreement (NULL falls back to the built-in default).
   // Signature/initial markers survive substitution and render as ruled
   // wet-signature lines below; the e-sign flow stamps real marks instead.
-  const clauseText = renderTemplate(app.leaseAgreementText ?? DEFAULT_LEASE_AGREEMENT_TEXT, {
+  const clauseText = renderTemplate(leaseAgreementTemplate(lease), {
     ...markerPassthroughVars(),
     ...vars,
   });
@@ -316,6 +347,10 @@ export default async function LeaseAgreementPage({
                     );
                   })}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Once every party signs, the completed copy is saved
+                  automatically and listed under “Documents on this lease”.
+                </p>
                 <form action={cancelEsignRequestAction}>
                   <input type="hidden" name="leaseId" value={lease.id} />
                   <input
@@ -389,6 +424,55 @@ export default async function LeaseAgreementPage({
                 )}
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {leaseDocs.length > 0 && (
+        <Card className="print-hidden">
+          <CardContent className="space-y-3 py-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Documents on this lease
+            </h2>
+            <div className="divide-y rounded-md border">
+              {leaseDocs.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium break-words">
+                      {d.fileName ?? "Document"}
+                      {d.isSigned && (
+                        <Badge className="ml-2 align-middle">Signed</Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Added {fmtDate(d.createdAt)}
+                    </div>
+                  </div>
+                  {d.url ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={
+                        <a href={d.url} target="_blank" rel="noopener noreferrer" />
+                      }
+                    >
+                      Download
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href={`/documents/${d.id}`} />}
+                    >
+                      Open
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}

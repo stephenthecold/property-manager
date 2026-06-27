@@ -1,4 +1,5 @@
 import { getSigningPageData, signingKindLabel } from "@/lib/services/esign";
+import type { AgreementChangeSummary } from "@/lib/lease/agreement-format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { AgreementText } from "@/components/app/agreement-text";
@@ -56,6 +57,43 @@ function fmt(iso: string): string {
     month: "long",
     day: "numeric",
   });
+}
+
+/**
+ * Renewal only: a heads-up that wording/terms differ from the tenant's last
+ * signed agreement, with the affected clause headings. Shown above the full
+ * agreement so they review before signing.
+ */
+function ChangesNotice({ changes }: { changes: AgreementChangeSummary }) {
+  const items = [
+    ...changes.changed.map((heading) => ({ kind: "Changed", heading })),
+    ...changes.added.map((heading) => ({ kind: "New", heading })),
+    ...changes.removed.map((heading) => ({ kind: "Removed", heading })),
+  ];
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900/60 dark:bg-amber-950/40">
+      <div className="font-semibold text-amber-900 dark:text-amber-200">
+        Some terms changed since your last lease
+      </div>
+      <p className="mt-1 text-amber-800 dark:text-amber-200/80">
+        Please review the full agreement below before signing.
+        {items.length > 0 &&
+          " These sections differ from your previous agreement:"}
+      </p>
+      {items.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {items.map((it) => (
+            <li
+              key={`${it.kind}-${it.heading}`}
+              className="text-amber-900 dark:text-amber-200"
+            >
+              <span className="font-medium">{it.kind}:</span> {it.heading}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default async function SignPage({
@@ -122,6 +160,8 @@ export default async function SignPage({
           ))}
         </CardContent>
       </Card>
+
+      {data.changes && <ChangesNotice changes={data.changes} />}
 
       {/* The frozen agreement text exactly as it was sent */}
       <Card>

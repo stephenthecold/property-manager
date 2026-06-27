@@ -687,6 +687,13 @@ model Lease {
   // aggregates already exclude them via status. Never set on active leases.
   isArchived           Boolean     @default(false)
   notes                String?
+  // Per-lease snapshot of the agreement clause template (with {{placeholders}})
+  // this lease was issued under, frozen at creation so later edits to the
+  // org-wide template (AppSettings.leaseAgreementText) never change an existing
+  // lease's agreement. NULL = use the built-in DEFAULT_LEASE_AGREEMENT_TEXT
+  // (pinned: a null lease never adopts a newly-set org template). A completed
+  // RENEWAL re-snapshots this to the then-current org template.
+  agreementText        String?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
