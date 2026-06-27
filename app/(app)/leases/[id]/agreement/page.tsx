@@ -30,11 +30,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GenerateDocxForm } from "./generate-docx-form";
+import { RenewalOfferForm } from "./renewal-offer-form";
 import {
   cancelEsignRequestAction,
+  cancelRenewalOfferAction,
   resendEsignLinkAction,
   sendEsignRequestAction,
 } from "./actions";
+import { listRenewalOffersForLease } from "@/lib/services/lease-renewal";
+import { formatCurrency, fromCents } from "@/lib/money";
+import { formatDateInTz } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -126,6 +131,11 @@ export default async function LeaseAgreementPage({
   ]);
   if (!ctx) notFound();
   const { vars, lease, app } = ctx;
+  // Renewal offers for this lease (newest first); the open one drives the panel.
+  const renewalOffers = await listRenewalOffersForLease(id);
+  const openRenewal = renewalOffers.find(
+    (o) => o.status === "draft" || o.status === "sent",
+  );
 
   // The printable page needs leases.manage; the e-sign panel additionally
   // needs esign.manage (manager+ by default) — hidden, not blocking.
@@ -168,6 +178,7 @@ export default async function LeaseAgreementPage({
   );
 
   const tz = lease.unit.property.timezone;
+  const currency = lease.unit.property.currency;
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-US", {
       month: "short",
@@ -423,6 +434,61 @@ export default async function LeaseAgreementPage({
                   </p>
                 )}
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {esign && lease.endDate && (
+        <Card className="print-hidden">
+          <CardContent className="space-y-4 py-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Renewal offer
+            </h2>
+            {openRenewal ? (
+              <div className="space-y-3 text-sm">
+                <p>
+                  Offer sent — proposing{" "}
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(openRenewal.proposedRentAmountCents, currency)}
+                  </span>
+                  /mo through{" "}
+                  <span className="font-medium">
+                    {formatDateInTz(openRenewal.proposedEndDate, tz)}
+                  </span>
+                  . Awaiting the tenant&rsquo;s signature.
+                </p>
+                <form action={cancelRenewalOfferAction}>
+                  <input type="hidden" name="leaseId" value={lease.id} />
+                  <input type="hidden" name="offerId" value={openRenewal.id} />
+                  <ConfirmSubmitButton
+                    variant="outline"
+                    confirmMessage="Cancel this renewal offer? The tenant's signing link will stop working."
+                  >
+                    Cancel offer
+                  </ConfirmSubmitButton>
+                </form>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Current rent{" "}
+                  <span className="font-medium tabular-nums">
+                    {formatCurrency(lease.rentAmountCents, currency)}
+                  </span>
+                  /mo, ending {formatDateInTz(lease.endDate, tz)}. Propose new terms —
+                  the tenant e-signs to accept and the lease extends automatically.
+                </p>
+                <RenewalOfferForm
+                  leaseId={lease.id}
+                  currentRentDollars={fromCents(lease.rentAmountCents)}
+                />
+              </div>
+            )}
+            {renewalOffers.some((o) => o.status === "accepted") && (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                A renewal was accepted — the end date and scheduled rent are updated.
+              </p>
             )}
           </CardContent>
         </Card>
