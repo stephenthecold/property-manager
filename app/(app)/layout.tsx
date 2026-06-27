@@ -12,6 +12,7 @@ import { TablePageSizeProvider } from "@/components/app/data-table";
 import { brandedLayoutMetadata } from "@/lib/config/metadata";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { CommandPalette } from "@/components/app/command-palette";
+import { PageTransition } from "@/components/app/page-transition";
 import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -199,7 +200,7 @@ export default async function AppLayout({
 
       <main className="mx-auto w-full max-w-[100rem] flex-1 px-4 py-6 sm:px-6 xl:px-8">
         <TablePageSizeProvider value={app.defaultTablePageSize ?? 10}>
-          {children}
+          <PageTransition>{children}</PageTransition>
         </TablePageSizeProvider>
       </main>
     </div>

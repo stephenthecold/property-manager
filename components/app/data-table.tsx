@@ -188,7 +188,7 @@ export function DataTable({
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={cn(
-                          "inline-flex h-8 items-center gap-1 rounded-md font-medium transition-colors hover:text-primary",
+                          "inline-flex h-8 items-center gap-1 rounded-md font-medium transition-colors hover:text-primary active:translate-y-px",
                           col.align === "right" ? "justify-end" : "-ml-1 px-1",
                           active && "text-primary",
                         )}
