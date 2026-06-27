@@ -36,14 +36,20 @@ const linkClass = (active: boolean) =>
       : "text-muted-foreground hover:bg-muted hover:text-foreground",
   );
 
-export function NavLinks({ items }: { items: NavEntry[] }) {
+export function NavLinks({
+  items,
+  className,
+}: {
+  items: NavEntry[];
+  className?: string;
+}) {
   const pathname = usePathname();
   // A link is active on its own path or any sub-path (e.g. /leases/123).
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <nav className="flex flex-wrap items-center gap-1">
+    <nav className={cn("flex flex-wrap items-center gap-1", className)}>
       {items.map((entry) => {
         if (!isGroup(entry)) {
           return (

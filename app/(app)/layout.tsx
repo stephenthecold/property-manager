@@ -7,6 +7,7 @@ import { doSignOut } from "@/app/login/actions";
 import { exitViewAs } from "@/app/(app)/settings/users/actions";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { NavLinks, type NavEntry } from "@/components/app/nav-links";
+import { MobileNav } from "@/components/app/mobile-nav";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
 import { TablePageSizeProvider } from "@/components/app/data-table";
 import { brandedLayoutMetadata } from "@/lib/config/metadata";
@@ -105,6 +106,14 @@ export default async function AppLayout({
     ["billing.settings", "organization.settings", "messaging.settings", "auth.settings", "users.manage"] as Capability[]
   ).some(can);
 
+  // Secondary links (Audit/Settings) + identity fold into the mobile drawer
+  // below lg, where the desktop right-cluster is hidden.
+  const secondaryLinks = [
+    ...(can("audit.view") ? [{ href: "/audit", label: "Audit" }] : []),
+    ...(showSettings ? [{ href: "/settings", label: "Settings" }] : []),
+  ];
+  const userLabel = `${user.email} · ${actingRole}`;
+
   // Business logo (uploaded at Settings → Organization) for the banner.
   let logoUrl: string | null = null;
   if (app.logoDocumentId) {
@@ -121,6 +130,11 @@ export default async function AppLayout({
       <header className="print-hidden border-b bg-card">
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 xl:px-8">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <MobileNav
+              items={navEntries}
+              secondary={secondaryLinks}
+              userLabel={userLabel}
+            />
             <Link
               href="/dashboard"
               className="flex items-center gap-2 font-semibold whitespace-nowrap"
@@ -135,26 +149,27 @@ export default async function AppLayout({
               )}
               {app.businessName}
             </Link>
-            <NavLinks items={navEntries} />
+            <NavLinks items={navEntries} className="hidden lg:flex" />
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 text-sm sm:gap-3">
             {/* ⌘K palette searches operating records; gate on the acting role's
                 tenants.manage (the cap /api/search requires) like every nav link
                 above, so it only shows to users who can actually use it. */}
             {can("tenants.manage") && <CommandPalette />}
-            {can("audit.view") && (
-              <Link href="/audit" className="text-muted-foreground hover:underline">
-                Audit
-              </Link>
-            )}
-            {showSettings && (
-              <Link href="/settings" className="text-muted-foreground hover:underline">
-                Settings
-              </Link>
-            )}
-            <span className="text-muted-foreground">
-              {user.email} · {actingRole}
-            </span>
+            {/* Audit/Settings/identity live in the mobile drawer below lg. */}
+            <div className="hidden items-center gap-3 lg:flex">
+              {can("audit.view") && (
+                <Link href="/audit" className="text-muted-foreground hover:underline">
+                  Audit
+                </Link>
+              )}
+              {showSettings && (
+                <Link href="/settings" className="text-muted-foreground hover:underline">
+                  Settings
+                </Link>
+              )}
+              <span className="text-muted-foreground">{userLabel}</span>
+            </div>
             <ThemeToggle />
             <form action={doSignOut}>
               <Button type="submit" variant="outline" size="sm">
