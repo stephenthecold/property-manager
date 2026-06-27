@@ -255,7 +255,11 @@ export async function cancelEsignRequestAction(fd: FormData): Promise<void> {
  * renewal e-sign whose document reflects those new terms. Applied on signing.
  */
 export async function createRenewalOfferAction(fd: FormData): Promise<void> {
+  // Renewing a lease (leases.manage) AND sending a tenant e-sign + applying the
+  // saved landlord signature (esign.manage) — require both, like every other
+  // e-sign send, so a leases-only role can't dispatch signing requests.
   await requireCapability("leases.manage");
+  await requireCapability("esign.manage");
   const actor = await auditActor();
 
   const leaseId = String(fd.get("leaseId") ?? "").trim();
@@ -289,7 +293,9 @@ export async function createRenewalOfferAction(fd: FormData): Promise<void> {
 
 /** Cancel an open renewal offer (its e-sign link stops working too). */
 export async function cancelRenewalOfferAction(fd: FormData): Promise<void> {
+  // Cancels the linked signing request too — same dual gate as creating one.
   await requireCapability("leases.manage");
+  await requireCapability("esign.manage");
   const actor = await auditActor();
 
   const leaseId = String(fd.get("leaseId") ?? "").trim();

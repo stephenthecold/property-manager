@@ -64,6 +64,16 @@ export async function createRenewalOffer(i: {
     },
   });
   if (!lease) return { ok: false, error: "Lease not found." };
+  // A renewal sets its OWN scheduled rent on acceptance; refuse to send one over
+  // a rent increase staff already scheduled, so accepting it can't silently
+  // clobber that pending increase (apply/clear it first).
+  if (lease.scheduledRentAmountCents != null) {
+    return {
+      ok: false,
+      error:
+        "This lease already has a scheduled rent increase — apply or clear it before sending a renewal.",
+    };
+  }
   const tz = lease.unit.property.timezone;
   const currency = lease.unit.property.currency;
 
@@ -218,6 +228,18 @@ export async function applyAcceptedRenewal(
     return;
   }
 
+  // Capture the prior endDate + scheduled rent so the audit trail records what
+  // the renewal replaced (creation refuses an offer over a pending increase, but
+  // one could be scheduled in the days between send and signature).
+  const prior = await tx.lease.findUnique({
+    where: { id: offer.leaseId },
+    select: {
+      endDate: true,
+      scheduledRentAmountCents: true,
+      scheduledRentEffectiveDate: true,
+    },
+  });
+
   // Extend: push the endDate and set a scheduled rent increase. The billing
   // worker rolls scheduledRentAmountCents -> rentAmountCents when the effective
   // date passes (audited as lease.rent_increase_applied) — we reuse that path
@@ -239,6 +261,11 @@ export async function applyAcceptedRenewal(
     action: "renewal.applied_extend",
     entityType: "Lease",
     entityId: offer.leaseId,
+    before: {
+      endDate: prior?.endDate?.toISOString() ?? null,
+      scheduledRentAmountCents: prior?.scheduledRentAmountCents?.toString() ?? null,
+      scheduledRentEffectiveDate: prior?.scheduledRentEffectiveDate?.toISOString() ?? null,
+    },
     after: {
       offerId: offer.id,
       endDate: offer.proposedEndDate.toISOString(),
