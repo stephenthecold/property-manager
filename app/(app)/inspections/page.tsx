@@ -130,7 +130,7 @@ export default async function InspectionsPage() {
           { key: "tenant", label: "Tenant / unit" },
           { key: "type", label: "Type" },
           { key: "status", label: "Status" },
-          { key: "deductions", label: "Deductions", align: "right", className: "hidden sm:table-cell" },
+          { key: "checklist", label: "Checklist", align: "right", className: "hidden sm:table-cell" },
           { key: "actions", label: "", align: "right", sortable: false },
         ]}
         rows={inspections.map((i) => ({
@@ -140,7 +140,7 @@ export default async function InspectionsPage() {
             `${i.lease.tenant.lastName}, ${i.lease.tenant.firstName}`,
             inspectionTypeLabel(i.type),
             i.status,
-            i._count.items,
+            i._count.checklistItems,
             null,
           ],
           cells: [
@@ -160,7 +160,7 @@ export default async function InspectionsPage() {
             <span key="s" className={statusClass(i.status)}>
               {inspectionStatusLabel(i.status)}
             </span>,
-            i.type === "move_out" ? i._count.items : "—",
+            i._count.checklistItems,
             <div key="a" className="flex justify-end gap-2">
               <Button variant="outline" size="xs" render={<Link href={`/inspections/${i.id}`} />}>
                 Open

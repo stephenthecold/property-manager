@@ -2,9 +2,8 @@ import type { InspectionChecklistStatus } from "@/lib/generated/prisma/enums";
 
 /**
  * Pure helpers for inspection CHECKLIST items (DB-free, unit-tested). A checklist
- * item is a condition observation with a pass/fail/na/pending status — distinct
- * from InspectionItem, which is a money deduction. None of this touches the
- * ledger or deposit disposition.
+ * item is a condition observation (pass/fail/na/pending) that can also carry an
+ * optional move-out deposit-deduction amount. None of this touches the ledger.
  */
 
 export const CHECKLIST_STATUSES: InspectionChecklistStatus[] = [
@@ -65,4 +64,11 @@ export function tallyChecklist(
   const t: ChecklistTally = { total: items.length, pass: 0, fail: 0, na: 0, pending: 0 };
   for (const i of items) t[i.status]++;
   return t;
+}
+
+/** Sum the deduction amounts across checklist items (the move-out disposition). */
+export function sumChecklistDeductions(
+  items: readonly { amountCents: bigint }[],
+): bigint {
+  return items.reduce((sum, i) => sum + i.amountCents, 0n);
 }

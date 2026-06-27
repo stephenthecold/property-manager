@@ -1061,8 +1061,9 @@ model Notice {
 // ---------------------------------------------------------------------------
 // Inspections (module "inspections") — scheduled/recorded property-condition
 // inspections (move-in / move-out / routine). A move-out inspection drives a
-// DEPOSIT DISPOSITION: itemized deductions (InspectionItem) against the lease's
-// refundable deposit → computed refund. Operating records, never ledger entries:
+// DEPOSIT DISPOSITION: per-item deductions on the condition checklist
+// (InspectionChecklistItem.amountCents) against the lease's refundable deposit →
+// computed refund. Operating records, never ledger entries:
 // they don't touch tenant balances (deposits live on LeaseDeposit, not the ledger).
 // ---------------------------------------------------------------------------
 
@@ -1093,7 +1094,6 @@ model Inspection {
   updatedAt    DateTime         @updatedAt
 
   lease Lease            @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  items InspectionItem[]
   /// Optional template the checklist was pre-populated from (kept for reference;
   /// SetNull so deleting a template never deletes inspections).
   templateId String?
@@ -1105,21 +1105,8 @@ model Inspection {
   @@index([templateId])
 }
 
-/// Itemized deposit-disposition deduction on a (move-out) inspection.
-model InspectionItem {
-  id           String   @id @default(cuid())
-  inspectionId String
-  label        String
-  amountCents  BigInt   @default(0) // deduction against the refundable deposit
-  createdAt    DateTime @default(now())
-
-  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-
-  @@index([inspectionId])
-}
-
 /// Pass/fail/na/pending state of a single inspection CHECKLIST item (condition
-/// observation). Distinct from InspectionItem, which is a money DEDUCTION.
+/// observation).
 enum InspectionChecklistStatus {
   pending // not yet assessed
   pass // acceptable condition
@@ -1163,10 +1150,11 @@ model InspectionTemplateItem {
   @@index([templateId])
 }
 
-/// A single condition CHECKLIST item on one inspection (label + optional
-/// area/category, a pass/fail/na status, an optional note, and attached photos
-/// via UploadedDocument.inspectionChecklistItemId). Distinct from InspectionItem
-/// (a deposit DEDUCTION); checklist items never carry money or touch balances.
+/// A single condition CHECKLIST item on one inspection: label + optional
+/// area/category, a pass/fail/na status, an optional note, attached photos
+/// (via UploadedDocument.inspectionChecklistItemId), and — on a move-out — an
+/// optional deposit DEDUCTION amount (amountCents). The move-out disposition
+/// sums these amounts. Operating record: never a ledger entry, never a balance.
 model InspectionChecklistItem {
   id           String                    @id @default(cuid())
   inspectionId String
@@ -1175,6 +1163,8 @@ model InspectionChecklistItem {
   category     String?
   status       InspectionChecklistStatus @default(pending)
   note         String?
+  /// Deposit deduction for this item (move-out); 0 when it isn't a deduction.
+  amountCents  BigInt                    @default(0)
   sortOrder    Int                       @default(0)
   createdAt    DateTime                  @default(now())
 

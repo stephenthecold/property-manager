@@ -12,6 +12,7 @@ import { inspectionStatusLabel, inspectionTypeLabel } from "@/lib/inspections/di
 import {
   checklistStatusClass,
   checklistStatusLabel,
+  sumChecklistDeductions,
   tallyChecklist,
 } from "@/lib/inspections/checklist";
 import { formatCurrency } from "@/lib/money";
@@ -36,12 +37,11 @@ export default async function InspectionReportPage({
   if (!inspection) notFound();
 
   const app = settings;
-  const [checklist, disposition] = await Promise.all([
-    getInspectionChecklist(inspection.id),
+  const checklist = await getInspectionChecklist(inspection.id);
+  const disposition =
     inspection.type === "move_out"
-      ? dispositionForInspection(inspection.id, inspection.lease.id)
-      : Promise.resolve(null),
-  ]);
+      ? await dispositionForInspection(inspection.lease.id, sumChecklistDeductions(checklist))
+      : null;
   const tally = tallyChecklist(checklist);
 
   const property = inspection.lease.unit.property;
@@ -206,16 +206,18 @@ export default async function InspectionReportPage({
                   />
                 )}
               </dl>
-              {inspection.items.length > 0 && (
+              {checklist.some((it) => it.amountCents > 0n) && (
                 <ul className="mt-2 divide-y rounded-md border text-sm">
-                  {inspection.items.map((it) => (
-                    <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
-                      <span>{it.label}</span>
-                      <span className="font-medium tabular-nums">
-                        {formatCurrency(it.amountCents, property.currency)}
-                      </span>
-                    </li>
-                  ))}
+                  {checklist
+                    .filter((it) => it.amountCents > 0n)
+                    .map((it) => (
+                      <li key={it.id} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span>{it.label}</span>
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(it.amountCents, property.currency)}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               )}
             </div>
