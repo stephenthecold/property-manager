@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UsersIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
@@ -6,6 +7,7 @@ import { batchLeaseSnapshots } from "@/lib/services/accounting";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,7 +134,28 @@ export default async function TenantsPage({
       )}
 
       <DataTable
-        emptyMessage="No tenants yet."
+        emptyState={
+          <EmptyState
+            icon={<UsersIcon />}
+            title={q ? "No matching tenants" : "No tenants yet"}
+            description={
+              q
+                ? "Try a different name, email, or phone — or clear the search."
+                : "Add your first tenant to start tracking leases and balances."
+            }
+            action={
+              q ? (
+                <Button variant="outline" size="sm" render={<Link href="/tenants" />}>
+                  Clear search
+                </Button>
+              ) : (
+                <Button size="sm" render={<Link href="/tenants/new" />}>
+                  Add tenant
+                </Button>
+              )
+            }
+          />
+        }
         columns={[
           { key: "name", label: "Name" },
           { key: "unit", label: "Unit" },
