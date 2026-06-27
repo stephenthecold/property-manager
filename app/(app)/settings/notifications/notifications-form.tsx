@@ -55,35 +55,39 @@ export function NotificationsForm({ initial }: { initial: NotificationsInitial }
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       )}
-      {TOGGLES.map((t) => (
-        <label
-          key={t.name}
-          className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/30"
-        >
-          <input
-            type="checkbox"
-            name={t.name}
-            defaultChecked={initial[t.name]}
-            className="mt-0.5 size-4 accent-primary"
+      <div className="grid gap-3 lg:grid-cols-3">
+        {TOGGLES.map((t) => (
+          <label
+            key={t.name}
+            className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/30"
+          >
+            <input
+              type="checkbox"
+              name={t.name}
+              defaultChecked={initial[t.name]}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>
+              <span className="block font-medium">{t.label}</span>
+              <span className="block text-sm text-muted-foreground">{t.description}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="phone">Mobile number for text alerts</Label>
+          <Input
+            id="phone"
+            name="phone"
+            type="tel"
+            placeholder="+1 555 000 1234"
+            defaultValue={initial.phone}
           />
-          <span>
-            <span className="block font-medium">{t.label}</span>
-            <span className="block text-sm text-muted-foreground">{t.description}</span>
-          </span>
-        </label>
-      ))}
-      <div className="space-y-2">
-        <Label htmlFor="phone">Mobile number for text alerts</Label>
-        <Input
-          id="phone"
-          name="phone"
-          type="tel"
-          placeholder="+1 555 000 1234"
-          defaultValue={initial.phone}
-        />
-        <p className="text-xs text-muted-foreground">
-          Leave blank for email-only alerts. Texts use the org SMS provider.
-        </p>
+          <p className="text-xs text-muted-foreground">
+            Leave blank for email-only alerts. Texts use the org SMS provider.
+          </p>
+        </div>
       </div>
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving…" : "Save notifications"}

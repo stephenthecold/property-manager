@@ -44,7 +44,7 @@ export default async function LeaseSettingsPage() {
   }
 
   return (
-    <div className="w-full max-w-3xl space-y-4">
+    <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Leases</h2>
         <p className="text-sm text-muted-foreground">
@@ -54,7 +54,8 @@ export default async function LeaseSettingsPage() {
         </p>
       </div>
 
-      <Card>
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle className="text-base">Printable agreement text</CardTitle>
         </CardHeader>
@@ -113,6 +114,7 @@ export default async function LeaseSettingsPage() {
           />
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

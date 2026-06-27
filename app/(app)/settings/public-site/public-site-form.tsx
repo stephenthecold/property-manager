@@ -90,31 +90,33 @@ export function PublicSiteForm({ initial }: { initial: PublicSiteInitial }) {
           </Alert>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="publicSiteUrl">Public site address</Label>
-          <Input
-            id="publicSiteUrl"
-            name="publicSiteUrl"
-            type="url"
-            inputMode="url"
-            placeholder="https://newedgerentals.com"
-            defaultValue={initial.publicSiteUrl}
-          />
-          <p className="text-xs text-muted-foreground">
-            The address residents use. Tenant-portal invite &amp; reset links point here; leave
-            blank to use the staff address. Set this once DNS + your reverse proxy route the
-            domain to the app (see docs/PUBLIC_SITE.md).
-          </p>
-        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="publicSiteUrl">Public site address</Label>
+            <Input
+              id="publicSiteUrl"
+              name="publicSiteUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://newedgerentals.com"
+              defaultValue={initial.publicSiteUrl}
+            />
+            <p className="text-xs text-muted-foreground">
+              The address residents use. Tenant-portal invite &amp; reset links point here; leave
+              blank to use the staff address. Set this once DNS + your reverse proxy route the
+              domain to the app (see docs/PUBLIC_SITE.md).
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="publicSiteTagline">Headline</Label>
-          <Input
-            id="publicSiteTagline"
-            name="publicSiteTagline"
-            placeholder={`Welcome to ${initial.businessName}`}
-            defaultValue={initial.publicSiteTagline}
-          />
+          <div className="space-y-2">
+            <Label htmlFor="publicSiteTagline">Headline</Label>
+            <Input
+              id="publicSiteTagline"
+              name="publicSiteTagline"
+              placeholder={`Welcome to ${initial.businessName}`}
+              defaultValue={initial.publicSiteTagline}
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
