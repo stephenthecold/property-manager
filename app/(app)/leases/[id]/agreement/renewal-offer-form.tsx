@@ -28,6 +28,20 @@ export function RenewalOfferForm({
   return (
     <form action={createRenewalOfferAction} className="space-y-3">
       <input type="hidden" name="leaseId" value={leaseId} />
+      <div className="space-y-1.5">
+        <Label htmlFor="renewalModel">Renewal type</Label>
+        <select
+          id="renewalModel"
+          name="renewalModel"
+          defaultValue="extend"
+          className="h-9 w-full rounded-md border px-3 text-sm sm:max-w-md"
+        >
+          <option value="extend">Extend this lease — same lease, new term + rent</option>
+          <option value="successor">
+            New lease — replaces this one when its term ends
+          </option>
+        </select>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="proposedRent">New monthly rent</Label>
