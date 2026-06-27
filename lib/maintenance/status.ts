@@ -1,4 +1,5 @@
 import type { MaintenanceJobStatus } from "@/lib/generated/prisma/enums";
+import { TONE_CLASS, type Tone } from "@/lib/ui/status-tone";
 
 /**
  * Pure helpers for the maintenance-job lifecycle. Display/label/classification
@@ -38,19 +39,15 @@ const LABELS: Record<MaintenanceJobStatus, string> = {
   canceled: "Canceled",
 };
 
-/** Themed badge tints per status (every tint carries a dark: variant). */
-const BADGE: Record<MaintenanceJobStatus, string> = {
-  pending:
-    "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  assigned:
-    "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
-  in_progress:
-    "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300",
-  on_hold:
-    "border-purple-200 bg-purple-100 text-purple-800 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300",
-  completed:
-    "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-  canceled: "border-muted bg-muted text-muted-foreground",
+/** Status -> badge tone, drawn from the shared tone source so lifecycle pills
+ *  stay in lockstep with the rest of the app. */
+const STATUS_TONE: Record<MaintenanceJobStatus, Tone> = {
+  pending: "warning",
+  assigned: "info",
+  in_progress: "progress",
+  on_hold: "hold",
+  completed: "success",
+  canceled: "neutral",
 };
 
 export function parseMaintenanceStatus(
@@ -65,7 +62,7 @@ export function statusLabel(s: MaintenanceJobStatus): string {
 
 /** Tailwind classes for a status badge (theme-safe). */
 export function statusBadgeClass(s: MaintenanceJobStatus): string {
-  return BADGE[s];
+  return TONE_CLASS[STATUS_TONE[s]];
 }
 
 /**

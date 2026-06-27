@@ -6,12 +6,19 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { getSignedUrlForDoc } from "@/lib/services/documents";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
+import { ToneBadge } from "@/components/status-badge";
+import type { Tone } from "@/lib/ui/status-tone";
 import { convertRequestToJobAction, setRequestStatusAction } from "./actions";
 
 export const runtime = "nodejs";
+
+const REQUEST_TONE: Record<string, Tone> = {
+  open: "warning",
+  in_progress: "info",
+  done: "success",
+};
 
 /**
  * Staff queue for portal submissions (maintenance issues + cash pickups).
@@ -78,20 +85,9 @@ export default async function RequestsPage({
   });
 
   const statusBadge = (status: string) => (
-    <Badge
-      variant="outline"
-      className={
-        status === "open"
-          ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-          : status === "in_progress"
-            ? "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-            : status === "done"
-              ? "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-              : "text-muted-foreground"
-      }
-    >
+    <ToneBadge tone={REQUEST_TONE[status] ?? "neutral"}>
       {status.replace(/_/g, " ")}
-    </Badge>
+    </ToneBadge>
   );
 
   return (

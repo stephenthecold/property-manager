@@ -8,7 +8,8 @@ import {
 } from "@/lib/sms/consent-status";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
-import { Badge } from "@/components/ui/badge";
+import { ToneBadge } from "@/components/status-badge";
+import type { Tone } from "@/lib/ui/status-tone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -17,14 +18,11 @@ import { sendOptInInviteEmailAction } from "./actions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const STATUS_BADGE: Record<SmsConsentStatus, string> = {
-  opted_in:
-    "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-  opted_out:
-    "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
-  not_opted_in:
-    "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  missing_mobile: "border-muted bg-muted text-muted-foreground",
+const STATUS_TONE: Record<SmsConsentStatus, Tone> = {
+  opted_in: "success",
+  opted_out: "danger",
+  not_opted_in: "warning",
+  missing_mobile: "neutral",
 };
 
 const STATUSES: SmsConsentStatus[] = [
@@ -135,13 +133,9 @@ export default async function SmsConsentsPage({
                 </Link>,
                 t.phone ?? "—",
                 t.email ?? "—",
-                <Badge
-                  key="s"
-                  variant="outline"
-                  className={`font-medium ${STATUS_BADGE[t.status]}`}
-                >
+                <ToneBadge key="s" tone={STATUS_TONE[t.status]}>
                   {SMS_CONSENT_STATUS_LABEL[t.status]}
-                </Badge>,
+                </ToneBadge>,
                 <span key="a" className="inline-flex justify-end gap-1">
                   {t.status !== "opted_in" && t.email && (
                     <FormDialog

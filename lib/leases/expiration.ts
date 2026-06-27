@@ -1,3 +1,5 @@
+import { TONE_CLASS, type Tone } from "@/lib/ui/status-tone";
+
 /**
  * Pure lease-expiration classification (DB-free, clock-injected) — unit-tested.
  *
@@ -87,21 +89,19 @@ export function expirationLabel(state: ExpirationStateName): string {
   }
 }
 
+/** Eligible states -> badge tone, drawn from the shared tone source. */
+const STATE_TONE: Record<Exclude<ExpirationStateName, "none">, Tone> = {
+  expired: "danger",
+  expiring_soon: "warning",
+  upcoming: "info",
+};
+
 /**
  * Themed badge classes per state — every colored tint carries its `dark:`
  * variant (UI convention). Returns "" for "none" (no badge).
  */
 export function expirationBadgeClass(state: ExpirationStateName): string {
-  switch (state) {
-    case "expired":
-      return "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300";
-    case "expiring_soon":
-      return "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300";
-    case "upcoming":
-      return "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300";
-    case "none":
-      return "";
-  }
+  return state === "none" ? "" : TONE_CLASS[STATE_TONE[state]];
 }
 
 /**

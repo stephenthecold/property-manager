@@ -8,7 +8,8 @@ import {
   type InboxStatus,
 } from "@/lib/services/inbound-email";
 import { DataTable } from "@/components/app/data-table";
-import { Badge } from "@/components/ui/badge";
+import { ToneBadge } from "@/components/status-badge";
+import type { Tone } from "@/lib/ui/status-tone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -28,19 +29,14 @@ function senderLabel(m: InboundEmailRow): string {
   return m.fromName ? `${m.fromName}` : m.fromEmail;
 }
 
+const STATUS_TONE: Record<string, Tone> = {
+  new: "info",
+  posted: "success",
+  archived: "neutral",
+};
+
 function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    new: "border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300",
-    posted:
-      "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-    archived:
-      "border-muted-foreground/30 bg-muted text-muted-foreground",
-  };
-  return (
-    <Badge variant="outline" className={map[status] ?? map.archived}>
-      {status}
-    </Badge>
-  );
+  return <ToneBadge tone={STATUS_TONE[status] ?? "neutral"}>{status}</ToneBadge>;
 }
 
 export default async function InboxPage({
@@ -94,12 +90,9 @@ export default async function InboxPage({
           <CardTitle className="text-base">
             {VIEWS.find((v) => v.key === view)?.label ?? "Inbox"}{" "}
             {view === "new" && unreadCount > 0 && (
-              <Badge
-                variant="outline"
-                className="ml-1 border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-              >
+              <ToneBadge tone="info" className="ml-1">
                 {unreadCount} unread
-              </Badge>
+              </ToneBadge>
             )}
           </CardTitle>
           <div className="flex items-center gap-1">
@@ -144,12 +137,9 @@ export default async function InboxPage({
                 <span key="r" className="whitespace-nowrap text-sm">
                   {m.receivedAt.toLocaleString()}
                   {!m.readAt && (
-                    <Badge
-                      variant="outline"
-                      className="ml-2 border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
-                    >
+                    <ToneBadge tone="info" className="ml-2">
                       New
-                    </Badge>
+                    </ToneBadge>
                   )}
                 </span>,
                 <span key="f" className="text-sm">

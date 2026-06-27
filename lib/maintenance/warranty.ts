@@ -1,4 +1,5 @@
 import { daysBetween } from "@/lib/accounting/periods";
+import { TONE_CLASS, type Tone } from "@/lib/ui/status-tone";
 
 /**
  * Pure warranty classification for registered assets. Clock-injected (`now`)
@@ -43,15 +44,12 @@ const LABELS: Record<WarrantyState, string> = {
   none: "No warranty",
 };
 
-/** Themed badge tints per warranty state (every tint carries a dark: variant). */
-const BADGE: Record<WarrantyState, string> = {
-  expired:
-    "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
-  expiring_soon:
-    "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  active:
-    "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-  none: "border-muted bg-muted text-muted-foreground",
+/** Warranty state -> badge tone, drawn from the shared tone source. */
+const STATE_TONE: Record<WarrantyState, Tone> = {
+  expired: "danger",
+  expiring_soon: "warning",
+  active: "success",
+  none: "neutral",
 };
 
 export function warrantyLabel(s: WarrantyState): string {
@@ -60,5 +58,5 @@ export function warrantyLabel(s: WarrantyState): string {
 
 /** Tailwind classes for a warranty badge (theme-safe). */
 export function warrantyBadgeClass(s: WarrantyState): string {
-  return BADGE[s];
+  return TONE_CLASS[STATE_TONE[s]];
 }
