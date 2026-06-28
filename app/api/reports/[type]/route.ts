@@ -23,7 +23,6 @@ import {
   UNIT_LEDGER_HEADERS,
   toCsv,
 } from "@/lib/services/reports";
-import { getAppSettings } from "@/lib/services/app-settings";
 import { reportTitle } from "@/lib/services/report-registry";
 import {
   FORMAT_META,
