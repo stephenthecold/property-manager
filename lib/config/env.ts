@@ -88,6 +88,14 @@ const envSchema = z.object({
   PAYMENT_WEBHOOK_SECRET: optionalSecret,
   STRIPE_SECRET_KEY: optionalSecret,
 
+  // Email bounce/complaint webhook (Phase 5). Shared secret used to authenticate
+  // the email provider's POST to /api/email/bounce: the sender signs the raw body
+  // with HMAC-SHA256(secret) (hex) in a header; we verify in constant time. Stays
+  // in env (never the DB), like PAYMENT_WEBHOOK_SECRET. Optional, but the route
+  // FAILS CLOSED without it — every bounce POST is rejected (no tenant is ever
+  // suppressed from an unauthenticated request).
+  EMAIL_WEBHOOK_SECRET: optionalSecret,
+
   // Background checks (tenant screening). Unset/"stub" = simulated decisions;
   // a real FCRA provider slots in behind lib/providers/background-check.
   BACKGROUND_CHECK_PROVIDER: z.string().optional(),

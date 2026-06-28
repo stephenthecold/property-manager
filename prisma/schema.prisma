@@ -647,6 +647,12 @@ model Tenant {
   // Preferred channel for automated reminders. Delivery still requires that
   // channel's consent + contact info; falls back to skip (never cross-sends).
   reminderChannel       NotificationChannel @default(sms)
+  // Email deliverability suppression (set by the /api/email/bounce webhook on a
+  // hard bounce / spam complaint). null = healthy; "bounced"/"complained" =
+  // suppressed, so reminder sends SKIP the email channel until staff clear it.
+  // See lib/reminders/suppression.ts (the pure decision) — NOT a consent flag.
+  emailDeliveryStatus   String?
+  emailSuppressedAt     DateTime?
   notes                 String?
   isActive              Boolean  @default(true)
   // How this tenant prefers to pay (set by staff or by the tenant in the

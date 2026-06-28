@@ -43,8 +43,10 @@ import {
   archiveTenantAction,
   unarchiveTenantAction,
   updateTenant,
+  clearEmailSuppressionAction,
 } from "@/app/(app)/tenants/actions";
 import { addRentShareAction, removeRentShareAction } from "./rent-share-actions";
+import { isEmailSuppressed } from "@/lib/reminders/suppression";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -376,6 +378,23 @@ export default async function TenantDetail({
                 Archived
               </Badge>
             )}
+            {isEmailSuppressed(tenant.emailDeliveryStatus) && (
+              <Badge
+                variant="outline"
+                className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
+                title={`Email ${tenant.emailDeliveryStatus}${
+                  tenant.emailSuppressedAt
+                    ? ` on ${tenant.emailSuppressedAt.toLocaleDateString()}`
+                    : ""
+                } — email reminders are skipped until cleared.`}
+              >
+                Email{" "}
+                {tenant.emailDeliveryStatus === "complained"
+                  ? "complaint"
+                  : "bounced"}{" "}
+                — suppressed
+              </Badge>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -424,6 +443,17 @@ export default async function TenantDetail({
                 </ConfirmSubmitButton>
               </form>
             ) : null)}
+          {canManageTenants && isEmailSuppressed(tenant.emailDeliveryStatus) && (
+            <form action={clearEmailSuppressionAction}>
+              <input type="hidden" name="tenantId" value={tenant.id} />
+              <ConfirmSubmitButton
+                variant="outline"
+                confirmMessage="Clear email suppression? Email reminders to this tenant will resume. Only do this once they've fixed their email address — re-bouncing will suppress it again."
+              >
+                Clear email suppression
+              </ConfirmSubmitButton>
+            </form>
+          )}
         </div>
       </div>
 
@@ -1635,6 +1665,12 @@ export default async function TenantDetail({
             {summary("Emergency phone", tenant.emergencyContactPhone ?? "—")}
             {summary("SMS consent", tenant.smsConsent ? "Yes" : "No")}
             {summary("Email consent", tenant.emailConsent ? "Yes" : "No")}
+            {summary(
+              "Email status",
+              isEmailSuppressed(tenant.emailDeliveryStatus)
+                ? `Suppressed (${tenant.emailDeliveryStatus})`
+                : "OK",
+            )}
             {summary(
               "Reminder channel",
               tenant.reminderChannel === "email" ? "Email" : "SMS",
