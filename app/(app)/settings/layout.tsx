@@ -55,6 +55,9 @@ const SETTINGS_GROUPS: { label: string; links: SettingsLink[] }[] = [
   {
     label: "Access",
     links: [
+      // Self-service: every staff member manages their OWN 2FA here (the
+      // owner-only org-enforcement toggle is rendered inside the page).
+      { href: "/settings/security", label: "Security (2FA)", cap: null },
       { href: "/settings/auth", label: "Authentication", cap: "auth.settings" },
       { href: "/settings/users", label: "Users", cap: "users.manage" },
       { href: "/settings/permissions", label: "Permissions", cap: "users.manage" },
