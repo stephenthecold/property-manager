@@ -130,13 +130,24 @@ function ScheduleInspectionDialog({
   );
 }
 
-export default async function InspectionsPage() {
+export default async function InspectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireCapability("inspections.manage");
   const settings = await getAppSettings();
   if (!settings.modules.inspections) redirect("/dashboard");
 
+  const sp = await searchParams;
+  const first = (v: string | string[] | undefined) =>
+    (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  // Scheduled (upcoming) by default; completed/canceled inspections are hidden
+  // until you switch the view to "all".
+  const view = first(sp.view) === "all" ? "all" : "scheduled";
+
   const [inspections, activeLeases, templates] = await Promise.all([
-    listInspections(),
+    listInspections({ statuses: view === "scheduled" ? ["scheduled"] : undefined }),
     prisma.lease.findMany({
       where: { status: { in: ["active", "month_to_month", "ended", "eviction"] } },
       orderBy: [
@@ -162,18 +173,51 @@ export default async function InspectionsPage() {
         }
       />
 
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="view">Show</Label>
+          <select
+            id="view"
+            name="view"
+            defaultValue={view}
+            className="h-9 w-36 rounded-md border px-3 text-sm"
+          >
+            <option value="scheduled">Scheduled</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {view !== "scheduled" && (
+          <Button variant="ghost" size="sm" render={<Link href="/inspections" />}>
+            Clear
+          </Button>
+        )}
+      </form>
+
       <DataTable
         emptyState={
           <EmptyState
             icon={<ClipboardCheckIcon />}
-            title="No inspections yet"
-            description="Schedule your first inspection to record property condition and itemize move-out deductions."
+            title={view === "scheduled" ? "No scheduled inspections" : "No inspections yet"}
+            description={
+              view === "scheduled"
+                ? "Upcoming (scheduled) inspections show here. Switch Show to “All” to include completed and canceled."
+                : "Schedule your first inspection to record property condition and itemize move-out deductions."
+            }
             action={
-              <ScheduleInspectionDialog
-                idSuffix="empty"
-                activeLeases={activeLeases}
-                templates={templates}
-              />
+              view === "scheduled" ? (
+                <Button variant="outline" size="sm" render={<Link href="/inspections?view=all" />}>
+                  Show all
+                </Button>
+              ) : (
+                <ScheduleInspectionDialog
+                  idSuffix="empty"
+                  activeLeases={activeLeases}
+                  templates={templates}
+                />
+              )
             }
           />
         }

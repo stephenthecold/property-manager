@@ -42,6 +42,9 @@ export function InboxConnect({ initial }: { initial: InboxConnectInitial }) {
   const [provider, setProvider] = useState<Provider>(
     initial.provider === "google" ? "google" : "microsoft",
   );
+  // Once a mailbox is connected, collapse the verbose client-ID/secret form to a
+  // compact "Connected" row; "Reconfigure" reopens it.
+  const [showConfig, setShowConfig] = useState(!initial.connected);
 
   // Connect is only usable once THIS provider's client secret has been saved.
   const savedForProvider =
@@ -69,7 +72,19 @@ export function InboxConnect({ initial }: { initial: InboxConnectInitial }) {
         </div>
       )}
 
-      <div className="flex gap-1">
+      {initial.connected && !showConfig && (
+        <button
+          type="button"
+          onClick={() => setShowConfig(true)}
+          className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Reconfigure connection
+        </button>
+      )}
+
+      {showConfig && (
+        <>
+          <div className="flex gap-1">
         {(["microsoft", "google"] as Provider[]).map((p) => (
           <Button
             key={p}
@@ -165,6 +180,8 @@ export function InboxConnect({ initial }: { initial: InboxConnectInitial }) {
           )}
         </div>
       </form>
+        </>
+      )}
     </div>
   );
 }
