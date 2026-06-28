@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { CheckIcon, TriangleAlertIcon } from "lucide-react";
 import type { PublicSiteReadinessReport } from "@/lib/services/public-site-readiness";
+import { StatusPanel } from "@/components/app/status-panel";
 
 /**
  * Carrier (10DLC / A2P SMS) brand-verification checklist, shown above the public
  * site settings. Surfaces exactly what carriers look for before approving an SMS
- * campaign — and links straight to the setting that fixes each gap.
+ * campaign — and links straight to the setting that fixes each gap. Collapses to
+ * a single "ready" row once every item passes (StatusPanel, keyed on `ready`).
  */
 export function PublicSiteReadiness({
   report,
@@ -13,26 +15,15 @@ export function PublicSiteReadiness({
   report: PublicSiteReadinessReport;
 }) {
   return (
-    <div
-      className={
+    <StatusPanel
+      tone={report.ready ? "ok" : "warn"}
+      headline={
         report.ready
-          ? "rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40"
-          : "rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40"
+          ? "SMS carrier verification ready"
+          : `SMS carrier verification — ${report.missingCount} to fix`
       }
     >
-      <div className="flex items-center gap-2">
-        {report.ready ? (
-          <CheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
-        ) : (
-          <TriangleAlertIcon className="size-4 text-amber-600 dark:text-amber-400" />
-        )}
-        <h3 className="text-sm font-semibold">
-          {report.ready
-            ? "SMS carrier verification ready"
-            : `SMS carrier verification — ${report.missingCount} to fix`}
-        </h3>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Carriers review this site before approving your SMS (10DLC/A2P) campaign.
         They require your business name, contact details, and a clear description
         of your services — reachable without a login.
@@ -63,6 +54,6 @@ export function PublicSiteReadiness({
           </li>
         ))}
       </ul>
-    </div>
+    </StatusPanel>
   );
 }

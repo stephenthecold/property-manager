@@ -3,18 +3,13 @@ import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { getStorageStatus } from "@/lib/services/storage-status";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusPanel } from "@/components/app/status-panel";
 import { OrganizationForm } from "./organization-form";
 import { StorageConfigForm } from "./storage-config-form";
 
 export const runtime = "nodejs";
-
-const HEALTH_BADGE = {
-  ok: "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
-  warn: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-  error: "border-red-200 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300",
-} as const;
 
 export default async function OrganizationSettingsPage() {
   await requireCapability("organization.settings");
@@ -67,14 +62,17 @@ export default async function OrganizationSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">File storage</CardTitle>
-          <Badge variant="outline" className={`font-medium ${HEALTH_BADGE[storage.health.level]}`}>
-            {storage.ready ? "Ready" : storage.provider === "stub" ? "Disabled" : "Needs attention"}
-          </Badge>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <StatusPanel
+        tone={storage.ready ? "ok" : storage.health.level === "error" ? "error" : "warn"}
+        headline={
+          storage.ready
+            ? "File storage ready"
+            : storage.provider === "stub"
+              ? "File storage — uploads disabled"
+              : "File storage — needs attention"
+        }
+      >
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{storage.health.message}</p>
 
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
@@ -121,8 +119,8 @@ export default async function OrganizationSettingsPage() {
               }}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </StatusPanel>
     </div>
   );
 }

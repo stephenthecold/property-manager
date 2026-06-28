@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ContactIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
@@ -82,12 +83,22 @@ function VendorFields({ defaults }: { defaults?: VendorDefaults }) {
   );
 }
 
-export default async function VendorsPage() {
+export default async function VendorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireCapability("vendors.manage");
   const settings = await getAppSettings();
   if (!settings.modules.vendors) redirect("/dashboard");
 
-  const vendors = await listVendors();
+  const sp = await searchParams;
+  const first = (v: string | string[] | undefined) =>
+    (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  // Active by default; deactivated vendors are hidden until you switch the view.
+  const view = first(sp.view) === "all" ? "all" : "active";
+
+  const vendors = await listVendors(view);
 
   return (
     <div className="space-y-6">
@@ -107,11 +118,34 @@ export default async function VendorsPage() {
         }
       />
 
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="view">Show</Label>
+          <select
+            id="view"
+            name="view"
+            defaultValue={view}
+            className="h-9 w-36 rounded-md border px-3 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {view !== "active" && (
+          <Button variant="ghost" size="sm" render={<Link href="/vendors" />}>
+            Clear
+          </Button>
+        )}
+      </form>
+
       <DataTable
         emptyState={
           <EmptyState
             icon={<ContactIcon />}
-            title="No vendors yet"
+            title={view === "all" ? "No vendors yet" : "No active vendors"}
             description="Add contractors and service providers so you can assign them to maintenance jobs."
             action={
               <FormDialog

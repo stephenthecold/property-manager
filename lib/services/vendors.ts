@@ -18,9 +18,14 @@ export interface VendorInput {
   notes: string | null;
 }
 
-export async function listVendors() {
+/**
+ * Vendor directory. Active-only by default; pass view "all" to include
+ * deactivated vendors (the page exposes this as a "Show" toggle).
+ */
+export async function listVendors(view: "active" | "all" = "active") {
   return prisma.vendor.findMany({
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    where: view === "all" ? {} : { isActive: true },
+    orderBy: { name: "asc" },
   });
 }
 

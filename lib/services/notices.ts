@@ -234,11 +234,19 @@ export async function voidNotice(input: {
 
 export async function listNotices(filter: {
   status?: NoticeStatus;
+  /** Restrict to a set of statuses (e.g. the "active" view: draft + served). A
+   *  specific `status` takes precedence over this set. */
+  statuses?: NoticeStatus[];
   type?: NoticeType;
 } = {}) {
+  const statusFilter = filter.status
+    ? { status: filter.status }
+    : filter.statuses
+      ? { status: { in: filter.statuses } }
+      : {};
   return prisma.notice.findMany({
     where: {
-      ...(filter.status ? { status: filter.status } : {}),
+      ...statusFilter,
       ...(filter.type ? { type: filter.type } : {}),
     },
     orderBy: { createdAt: "desc" },

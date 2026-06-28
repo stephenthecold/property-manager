@@ -109,10 +109,13 @@ export default async function PayersPage({
   const portalLink = first("portalLink");
   const portalSent = first("portalSent");
   const portalError = first("portalError");
+  // Active by default; deactivated payers are hidden until you switch the view.
+  const view = first("view") === "all" ? "all" : "active";
 
   const [payers, expectations, settings] = await Promise.all([
     prisma.payer.findMany({
-      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      where: view === "all" ? {} : { isActive: true },
+      orderBy: { name: "asc" },
       include: {
         _count: { select: { payments: true } },
         portalAccount: { select: { isActive: true, passwordHash: true } },
@@ -260,11 +263,35 @@ export default async function PayersPage({
       )}
 
       <h2 className="text-lg font-semibold">Payer directory</h2>
+
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="view">Show</Label>
+          <select
+            id="view"
+            name="view"
+            defaultValue={view}
+            className="h-9 w-36 rounded-md border px-3 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {view !== "active" && (
+          <Button variant="ghost" size="sm" render={<Link href="/payers" />}>
+            Clear
+          </Button>
+        )}
+      </form>
+
       <DataTable
         emptyState={
           <EmptyState
             icon={<HandCoinsIcon />}
-            title="No payers yet"
+            title={view === "all" ? "No payers yet" : "No active payers"}
             description="Add a housing authority or other third-party payer to attribute payments made on a tenant's behalf."
             action={
               <FormDialog

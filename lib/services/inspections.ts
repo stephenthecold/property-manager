@@ -5,6 +5,7 @@ import { saveMaintenancePhotos } from "@/lib/services/maintenance-photos";
 import { getFileStorage } from "@/lib/providers/storage";
 import type {
   InspectionChecklistStatus,
+  InspectionStatus,
   InspectionType,
 } from "@/lib/generated/prisma/enums";
 
@@ -15,8 +16,15 @@ import type {
  * the lease's deposits minus the deduction amounts on the condition checklist.
  */
 
-export async function listInspections() {
+export async function listInspections(
+  filter: {
+    /** Restrict to a set of statuses (e.g. the "scheduled" view). Omit for
+     *  every status. */
+    statuses?: InspectionStatus[];
+  } = {},
+) {
   return prisma.inspection.findMany({
+    where: filter.statuses ? { status: { in: filter.statuses } } : {},
     orderBy: [{ status: "asc" }, { scheduledFor: "desc" }, { createdAt: "desc" }],
     take: 200,
     include: {

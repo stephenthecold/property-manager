@@ -59,9 +59,17 @@ export default async function NoticesPage({
   const type = (NOTICE_TYPES as readonly string[]).includes(typeRaw)
     ? (typeRaw as NoticeType)
     : undefined;
+  // Active by default (draft + served); void notices are hidden until you
+  // switch the view to "all". A specific Status filter overrides the view.
+  const view = first("view") === "all" ? "all" : "active";
+  const ACTIVE_STATUSES = ["draft", "served"] as const;
 
   const [notices, activeLeases] = await Promise.all([
-    listNotices({ status, type }),
+    listNotices({
+      status,
+      statuses: view === "active" ? [...ACTIVE_STATUSES] : undefined,
+      type,
+    }),
     prisma.lease.findMany({
       where: { status: { in: ["active", "month_to_month"] } },
       orderBy: [
@@ -162,10 +170,17 @@ export default async function NoticesPage({
             ))}
           </select>
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="fView">Show</Label>
+          <select id="fView" name="view" defaultValue={view} className="h-9 w-36 rounded-md border px-3 text-sm">
+            <option value="active">Active</option>
+            <option value="all">All</option>
+          </select>
+        </div>
         <Button type="submit" size="sm">
           Apply
         </Button>
-        {(status || type) && (
+        {(status || type || view !== "active") && (
           <Button variant="ghost" size="sm" render={<Link href="/notices" />}>
             Clear
           </Button>
@@ -176,14 +191,22 @@ export default async function NoticesPage({
         emptyState={
           <EmptyState
             icon={<BellIcon />}
-            title={status || type ? "No matching notices" : "No notices yet"}
+            title={
+              status || type
+                ? "No matching notices"
+                : view === "active"
+                  ? "No active notices"
+                  : "No notices yet"
+            }
             description={
               status || type
                 ? "Try a different status or type — or clear the filters."
-                : "Create a notice from a per-type template prefilled with the lease details."
+                : view === "active"
+                  ? "Draft and served notices show here. Switch Show to “All” to include void notices."
+                  : "Create a notice from a per-type template prefilled with the lease details."
             }
             action={
-              status || type ? (
+              status || type || view !== "active" ? (
                 <Button variant="outline" size="sm" render={<Link href="/notices" />}>
                   Clear filters
                 </Button>

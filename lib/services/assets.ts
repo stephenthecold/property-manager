@@ -25,9 +25,14 @@ export interface AssetInput {
   notes: string | null;
 }
 
-export async function listAssets() {
+/**
+ * Asset registry. Active-only by default; pass view "all" to include
+ * deactivated assets (the page exposes this as a "Show" toggle).
+ */
+export async function listAssets(view: "active" | "all" = "active") {
   return prisma.asset.findMany({
-    orderBy: [{ active: "desc" }, { name: "asc" }],
+    where: view === "all" ? {} : { active: true },
+    orderBy: { name: "asc" },
     include: {
       // timezone drives date-only render + warranty math (property-tz, not UTC).
       property: { select: { id: true, name: true, timezone: true } },

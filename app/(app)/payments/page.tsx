@@ -37,10 +37,13 @@ export default async function PaymentsPage({
   const method = (METHODS as readonly string[]).includes(methodRaw)
     ? (methodRaw as PaymentMethod)
     : undefined;
+  // Status view: the default ("active") hides undone payments (voided/reversed);
+  // an explicit posted/voided pick or "all" overrides it.
   const statusRaw = first("status");
   const status = (STATUSES as readonly string[]).includes(statusRaw)
     ? (statusRaw as PaymentStatus)
     : undefined;
+  const showAllStatuses = statusRaw === "all";
   const from = first("from");
   const to = first("to");
 
@@ -58,10 +61,12 @@ export default async function PaymentsPage({
   const where: Prisma.PaymentWhereInput = {};
   if (method) where.method = method;
   if (status) where.status = status;
+  else if (!showAllStatuses) where.status = { notIn: ["voided", "reversed"] };
   if (paymentDate.gte || paymentDate.lte) where.paymentDate = paymentDate;
-  const filtering = Boolean(
-    method || status || paymentDate.gte || paymentDate.lte,
-  );
+  // Explicit narrowing filters (drive the "no matching" empty copy); the All
+  // view also shows a Clear affordance back to the default Active view.
+  const narrowed = Boolean(method || status || paymentDate.gte || paymentDate.lte);
+  const filtering = narrowed || showAllStatuses;
 
   const payments = await prisma.payment.findMany({
     where,
@@ -203,15 +208,16 @@ export default async function PaymentsPage({
           <select
             id="status"
             name="status"
-            defaultValue={status ?? ""}
+            defaultValue={status ?? (showAllStatuses ? "all" : "active")}
             className="h-9 w-36 rounded-md border px-3 text-sm capitalize"
           >
-            <option value="">All statuses</option>
+            <option value="active">Active</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
+            <option value="all">All statuses</option>
           </select>
         </div>
         <div className="space-y-2">
@@ -236,9 +242,15 @@ export default async function PaymentsPage({
         emptyState={
           <EmptyState
             icon={<CreditCardIcon />}
-            title={filtering ? "No matching payments" : "No payments yet"}
+            title={
+              narrowed
+                ? "No matching payments"
+                : showAllStatuses
+                  ? "No payments yet"
+                  : "No active payments"
+            }
             description={
-              filtering
+              narrowed
                 ? "Try a different method, status, or date range — or clear the filters."
                 : "Record a payment, or confirm a tenant self-report, and it shows up here."
             }

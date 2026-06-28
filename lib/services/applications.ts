@@ -126,8 +126,15 @@ export async function submitApplication(
   return { id: created.id };
 }
 
-export async function listApplications() {
+export async function listApplications(
+  filter: {
+    /** Restrict to a set of statuses (e.g. the "open" view: submitted +
+     *  reviewing). Omit for every status. */
+    statuses?: RentalApplicationStatus[];
+  } = {},
+) {
   return prisma.rentalApplication.findMany({
+    where: filter.statuses ? { status: { in: filter.statuses } } : {},
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: {
       property: { select: { name: true } },

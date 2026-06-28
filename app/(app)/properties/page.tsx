@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
@@ -11,9 +12,20 @@ import { PageHeader } from "@/components/app/page-header";
 export const runtime = "nodejs";
 export const metadata = { title: "Properties" };
 
-export default async function PropertiesPage() {
+export default async function PropertiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireCapability("properties.manage");
+  const sp = await searchParams;
+  const first = (v: string | string[] | undefined) =>
+    (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+  // Active by default; archived properties are hidden until you switch the view.
+  const view = first(sp.view) === "all" ? "all" : "active";
+
   const properties = await prisma.property.findMany({
+    where: view === "all" ? {} : { isActive: true },
     orderBy: { name: "asc" },
     include: {
       _count: { select: { buildings: true, units: true } },
@@ -38,11 +50,34 @@ export default async function PropertiesPage() {
         actions={<Button render={<Link href="/properties/new" />}>Add property</Button>}
       />
 
+      <form method="GET" className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="view">Show</Label>
+          <select
+            id="view"
+            name="view"
+            defaultValue={view}
+            className="h-9 w-36 rounded-md border px-3 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+        {view !== "active" && (
+          <Button variant="ghost" size="sm" render={<Link href="/properties" />}>
+            Clear
+          </Button>
+        )}
+      </form>
+
       <DataTable
         emptyState={
           <EmptyState
             icon={<Building2Icon />}
-            title="No properties yet"
+            title={view === "all" ? "No properties yet" : "No active properties"}
             description="Add your first property to start tracking buildings, units, and leases."
             action={
               <Button size="sm" render={<Link href="/properties/new" />}>
