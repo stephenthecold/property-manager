@@ -11,6 +11,7 @@ import { INBOX_POLL_CHANNEL } from "@/lib/services/inbox-poll-signal";
 import {
   runWeeklyLeaseExpirationDigest,
   runWeeklyMaintenanceDigest,
+  runWeeklyPreventiveMaintenanceDigest,
   runWeeklyStaffDigest,
   runWeeklyWarrantyDigest,
 } from "@/lib/services/staff-digest";
@@ -196,6 +197,17 @@ async function runStaffDigestOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] warranty digest failed:", e);
+  }
+  // The preventive-maintenance (overdue recurring tasks) digest shares the
+  // Monday cadence + per-week idempotency; isolated so a failure never blocks
+  // the others.
+  try {
+    const res = await runWeeklyPreventiveMaintenanceDigest(new Date());
+    console.log(
+      `[worker] preventive-maintenance digest: sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+    );
+  } catch (e) {
+    console.error("[worker] preventive-maintenance digest failed:", e);
   }
 }
 
