@@ -110,7 +110,7 @@ export default async function ApplicationDetail({
   return (
     <div className="space-y-6">
       <PageHeader
-        back={{ href: "/applications", label: "All applications" }}
+        back={{ href: "/applications", label: "Applications" }}
         title={`${app.firstName} ${app.lastName}`}
         description={
           <span className="capitalize">

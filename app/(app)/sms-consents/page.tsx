@@ -122,7 +122,7 @@ export default async function SmsConsentsPage({
                       size="sm"
                       render={<Link href="/sms-consents" />}
                     >
-                      Clear filter
+                      Clear filters
                     </Button>
                   ) : undefined
                 }
