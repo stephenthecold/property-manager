@@ -10,16 +10,19 @@ import {
 import { getOverdue } from "@/lib/services/reports";
 import { expiringLeases } from "@/lib/services/lease-expirations";
 import { listExpiringWarranties } from "@/lib/services/warranty-alerts";
+import { listOverdueRecurringTasks } from "@/lib/services/preventive-maintenance-alerts";
 import {
   formatExpirationDigest,
   formatMaintenanceDigest,
   formatOverdueDigest,
+  formatPreventiveMaintenanceDigest,
   formatWarrantyDigest,
   isoWeekKey,
   type ExpirationDigestRow,
   type MaintenanceDigestJobRow,
   type MaintenanceDigestTaskRow,
   type OverdueDigestRow,
+  type PreventiveMaintenanceDigestRow,
   type WarrantyDigestRow,
 } from "@/lib/reminders/digest";
 import { nextOccurrenceISO } from "@/lib/maintenance/schedule";
@@ -462,6 +465,87 @@ export async function runWeeklyWarrantyDigest(
     entityType: "StaffDigest",
     entityId: `warranty:${isoWeekKey(now)}`,
     after: { recipients: sent, assetCount: rows.length },
+  });
+
+  return { sent, skipped };
+}
+
+/**
+ * Weekly preventive-maintenance digest: active recurring tasks past their due
+ * day this period with no completion recorded (the audit gap — tenants got an
+ * SMS but staff got no overdue nudge). Reuses the maintenance-digest opt-in
+ * (notifyMaintenanceDigest) + Maintenance module gate; email-only, same Monday
+ * cron, one audit row per ISO week.
+ */
+export async function runWeeklyPreventiveMaintenanceDigest(
+  now: Date,
+): Promise<StaffDigestResult> {
+  const settings = await getAppSettings();
+  if (!settings.modules.maintenance) {
+    return { sent: 0, skipped: 0, reason: "maintenance module disabled" };
+  }
+  if (!settings.emailEnabled) {
+    return { sent: 0, skipped: 0, reason: "email disabled" };
+  }
+
+  const tasks = await listOverdueRecurringTasks(now);
+  if (tasks.length === 0) {
+    return { sent: 0, skipped: 0, reason: "no overdue tasks" };
+  }
+
+  const rows: PreventiveMaintenanceDigestRow[] = tasks.map((t) => ({
+    title: t.title,
+    propertyName: t.propertyName,
+    dueISO: t.dueISO,
+    daysOverdue: t.daysOverdue,
+  }));
+
+  const digest = formatPreventiveMaintenanceDigest({
+    businessName: settings.businessName,
+    now,
+    rows,
+  });
+  if (!digest) {
+    return { sent: 0, skipped: 0, reason: "no overdue tasks" };
+  }
+
+  const recipients = await staffNotificationRecipients("notifyMaintenanceDigest");
+  if (recipients.length === 0) {
+    return { sent: 0, skipped: 0, reason: "no staff recipients" };
+  }
+
+  let provider: EmailProvider;
+  try {
+    provider = await resolveEmailProvider();
+  } catch (e) {
+    return { sent: 0, skipped: recipients.length, reason: errorMessage(e) };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+  for (const recipient of recipients) {
+    try {
+      const res = await provider.send({
+        to: recipient.email,
+        subject: digest.subject,
+        text: digest.text,
+      });
+      if (res.status === "failed") skipped++;
+      else sent++;
+    } catch (e) {
+      skipped++;
+      console.error(`[preventive-maintenance-digest] send failed:`, errorMessage(e));
+    }
+  }
+
+  // ONE audit row per weekly run, keyed by ISO week. Aggregates only.
+  await writeAudit(prisma, {
+    actorType: "system",
+    actorId: null,
+    action: "digest.staff_preventive_maintenance_sent",
+    entityType: "StaffDigest",
+    entityId: `preventive_maintenance:${isoWeekKey(now)}`,
+    after: { recipients: sent, taskCount: tasks.length },
   });
 
   return { sent, skipped };
