@@ -57,4 +57,41 @@ describe("parseStripeEvent", () => {
     expect(parseStripeEvent(null)).toBeNull();
     expect(parseStripeEvent({ type: "checkout.session.completed" })).toBeNull();
   });
+
+  it("records a settled ACH async_payment_succeeded event", () => {
+    // ACH settles days after checkout via this event; it must post (paid).
+    const ev = sessionEvent(
+      { id: "evt_ach", type: "checkout.session.async_payment_succeeded" },
+      { payment_method_types: ["us_bank_account"], payment_status: "paid" },
+    );
+    expect(parseStripeEvent(ev)).toMatchObject({
+      eventId: "evt_ach",
+      leaseId: "lease_xyz",
+      amountCents: 120000n,
+      method: "ach",
+    });
+  });
+
+  it("ignores the unpaid ACH checkout.session.completed (defers to settlement)", () => {
+    const ev = sessionEvent(
+      {},
+      { payment_method_types: ["us_bank_account"], payment_status: "unpaid" },
+    );
+    expect(parseStripeEvent(ev)).toBeNull();
+  });
+
+  it("maps a bank-debit-only session to the ach method", () => {
+    const ev = sessionEvent({}, { payment_method_types: ["us_bank_account"] });
+    expect(parseStripeEvent(ev)?.method).toBe("ach");
+  });
+
+  it("keeps card when a session allows both card and bank debit", () => {
+    // The bare session can't tell which was used, so stay conservative (card).
+    const ev = sessionEvent({}, { payment_method_types: ["card", "us_bank_account"] });
+    expect(parseStripeEvent(ev)?.method).toBe("card");
+  });
+
+  it("defaults to card when no payment_method_types are present", () => {
+    expect(parseStripeEvent(sessionEvent())?.method).toBe("card");
+  });
 });

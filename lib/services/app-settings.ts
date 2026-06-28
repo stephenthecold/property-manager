@@ -68,6 +68,9 @@ export interface ModuleFlags {
   tenantLedgerExport: boolean;
   /** Group properties by legal entity (LLC) for per-entity financials. */
   portfolio: boolean;
+  /** Tenant-facing online pay + pay-instructions/self-report surfaces. Staff
+   *  manual payment recording (core ledger) is ALWAYS on, independent of this. */
+  payments: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -84,6 +87,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   mailbox: false,
   tenantLedgerExport: false,
   portfolio: false,
+  payments: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -123,6 +127,43 @@ function resolveModules(raw: unknown): ModuleFlags {
         : MODULE_DEFAULTS.tenantLedgerExport,
     portfolio:
       typeof obj.portfolio === "boolean" ? obj.portfolio : MODULE_DEFAULTS.portfolio,
+    payments:
+      typeof obj.payments === "boolean" ? obj.payments : MODULE_DEFAULTS.payments,
+  };
+}
+
+/**
+ * Which offline payment methods the tenant portal offers as "I paid via …"
+ * self-report options. Pure config — never touches the ledger. The payments
+ * module must ALSO be on for any of these to render.
+ */
+export interface PortalPaymentMethods {
+  /** Show Cash App "pay to $tag" instructions + a CashApp self-report option. */
+  cashApp: boolean;
+  /** Show cash instructions + a Cash self-report option. */
+  cash: boolean;
+  /** Offer ACH (Stripe us_bank_account online + an ACH self-report option). */
+  ach: boolean;
+}
+
+/** Defaults when no method config has been saved: nothing is offered until the
+ *  operator opts in (and CashApp also needs a cashtag set). */
+const PORTAL_PAYMENT_METHOD_DEFAULTS: PortalPaymentMethods = {
+  cashApp: false,
+  cash: false,
+  ach: false,
+};
+
+export function resolvePortalPaymentMethods(raw: unknown): PortalPaymentMethods {
+  const obj = (raw ?? {}) as Partial<Record<keyof PortalPaymentMethods, unknown>>;
+  return {
+    cashApp:
+      typeof obj.cashApp === "boolean"
+        ? obj.cashApp
+        : PORTAL_PAYMENT_METHOD_DEFAULTS.cashApp,
+    cash:
+      typeof obj.cash === "boolean" ? obj.cash : PORTAL_PAYMENT_METHOD_DEFAULTS.cash,
+    ach: typeof obj.ach === "boolean" ? obj.ach : PORTAL_PAYMENT_METHOD_DEFAULTS.ach,
   };
 }
 
@@ -230,6 +271,9 @@ export interface ResolvedAppSettings {
   landlordInitialsImageKey: string | null;
   /** Org Cash App cashtag ("$Example") for notices and the tenant portal. */
   cashAppCashtag: string | null;
+  /** Which offline methods the tenant portal offers as self-report options
+   *  (gated by the payments module). */
+  portalPaymentMethods: PortalPaymentMethods;
   /** 10DLC / A2P compliance links. Privacy/terms render at /privacy & /terms
    *  when the *Text is set, unless a *Url override points elsewhere. (The
    *  sample embedded link is derived from APP_URL, not stored.) */
@@ -410,6 +454,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     landlordSignatureImageKey: row?.landlordSignatureImageKey ?? null,
     landlordInitialsImageKey: row?.landlordInitialsImageKey ?? null,
     cashAppCashtag: row?.cashAppCashtag ?? null,
+    portalPaymentMethods: resolvePortalPaymentMethods(row?.portalPaymentMethods),
     privacyPolicyText: row?.privacyPolicyText ?? null,
     privacyPolicyUrl: row?.privacyPolicyUrl ?? null,
     termsText: row?.termsText ?? null,
@@ -1221,6 +1266,41 @@ export async function saveCashAppCashtag(
       entityId: "singleton",
       before: before ? { cashAppCashtag: before.cashAppCashtag } : undefined,
       after: { cashAppCashtag: cashtag },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/**
+ * Persist which offline methods the tenant portal offers as self-report options.
+ * Pure config — never touches the ledger or any tenant balance. The payments
+ * module must also be on for these to render.
+ */
+export async function savePortalPaymentMethods(
+  methods: PortalPaymentMethods,
+  actor: AuditContext,
+): Promise<void> {
+  const clean = resolvePortalPaymentMethods(methods);
+  const data = {
+    portalPaymentMethods: { ...clean } as unknown as InputJsonValue,
+    updatedBy: actor.actorId ?? null,
+  };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.payment_methods.updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before
+        ? { portalPaymentMethods: resolvePortalPaymentMethods(before.portalPaymentMethods) }
+        : undefined,
+      after: { portalPaymentMethods: clean },
     });
   });
   invalidateAppSettingsCache();
