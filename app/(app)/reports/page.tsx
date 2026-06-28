@@ -11,6 +11,9 @@ import {
   getPaymentMethodSummary,
   getRentRoll,
 } from "@/lib/services/reports";
+import { getCollectedTrend } from "@/lib/services/kpis";
+import { formatCurrency } from "@/lib/money";
+import type { PeriodDelta } from "@/lib/accounting/kpis";
 import { DataTable } from "@/components/app/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +37,30 @@ function amountClass(v: string): string {
   if (v.startsWith("-")) return "text-emerald-600 dark:text-emerald-400";
   if (owed(v)) return "text-red-600 dark:text-red-400";
   return "";
+}
+
+/** Tint + arrow + signed-% for a period delta (up = green, down = red). */
+function DeltaBadge({ delta }: { delta: PeriodDelta }) {
+  const up = delta.deltaCents > 0n;
+  const down = delta.deltaCents < 0n;
+  const tone = up
+    ? "text-emerald-600 dark:text-emerald-400"
+    : down
+      ? "text-red-600 dark:text-red-400"
+      : "text-muted-foreground";
+  const pct =
+    delta.deltaPct === null
+      ? "—"
+      : `${delta.deltaPct >= 0 ? "+" : "−"}${Math.abs(Math.round(delta.deltaPct * 100))}%`;
+  return (
+    <span className={cn("tabular-nums", tone)}>
+      {pct}{" "}
+      <span className="text-muted-foreground">
+        ({delta.deltaCents >= 0n ? "+" : "−"}
+        {formatCurrency(delta.deltaCents >= 0n ? delta.deltaCents : -delta.deltaCents)})
+      </span>
+    </span>
+  );
 }
 
 /** Parse an optional "yyyy-MM-dd" filter; invalid input -> undefined (ignored). */
@@ -77,7 +104,7 @@ export default async function ReportsPage({
   const windowDays = /^\d+$/.test(windowRaw) ? Number(windowRaw) : 90;
 
   const now = new Date();
-  const [rentRoll, overdue, backRent, income, expirations, methods, properties, tenants, units] =
+  const [rentRoll, overdue, backRent, income, expirations, methods, trend, properties, tenants, units] =
     await Promise.all([
       getRentRoll(now),
       getOverdue(now),
@@ -85,6 +112,8 @@ export default async function ReportsPage({
       getIncomeSummary({ from, to, propertyId: propertyId || undefined }, now),
       getLeaseExpirations({ windowDays }, now),
       getPaymentMethodSummary({ from, to }),
+      // Collected period-over-period (MoM + YoY), honoring the property filter.
+      getCollectedTrend(now, app.defaultTimezone, propertyId || undefined),
       prisma.property.findMany({ orderBy: { name: "asc" } }),
       prisma.tenant.findMany({
         where: { isActive: true },
@@ -328,6 +357,46 @@ export default async function ReportsPage({
               ],
             }))}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-t-4 border-t-emerald-500">
+        <CardHeader>
+          <CardTitle>Collected — period over period</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                This month ({trend.currentMonthKey})
+              </div>
+              <div className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                {formatCurrency(trend.monthOverMonth.currentCents)}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                vs last month ({trend.priorMonthKey})
+              </div>
+              <div className="text-base font-medium">
+                <DeltaBadge delta={trend.monthOverMonth} />
+              </div>
+              <div className="text-xs tabular-nums text-muted-foreground">
+                was {formatCurrency(trend.monthOverMonth.priorCents)}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                vs last year ({trend.sameMonthLastYearKey})
+              </div>
+              <div className="text-base font-medium">
+                <DeltaBadge delta={trend.yearOverYear} />
+              </div>
+              <div className="text-xs tabular-nums text-muted-foreground">
+                was {formatCurrency(trend.yearOverYear.priorCents)}
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

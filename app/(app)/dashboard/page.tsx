@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getDashboard, getVacancyOutlook } from "@/lib/services/dashboard";
+import {
+  getCollectedTrend,
+  getDashboardKpis,
+  getTurnoverCost,
+} from "@/lib/services/kpis";
+import type { PeriodDelta } from "@/lib/accounting/kpis";
 import { expiringLeases } from "@/lib/services/lease-expirations";
 import {
   expirationBadgeClass,
@@ -61,7 +67,7 @@ function Stat({
 }: {
   label: string;
   value: string;
-  hint?: string;
+  hint?: React.ReactNode;
   tone: Tone;
   valueClassName?: string;
 }) {
@@ -90,6 +96,37 @@ function balanceClass(cents: bigint): string {
   return "";
 }
 
+/** Whole-percent label for a 0..1 occupancy rate ("92%"). */
+function pctLabel(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+/**
+ * A "+12% vs last month" delta line: up = green, down = red, flat/no-base =
+ * muted. A null deltaPct (prior was zero) shows the absolute change only. Both
+ * themes carry a dark: variant on the tint.
+ */
+function DeltaLine({ label, delta }: { label: string; delta: PeriodDelta }) {
+  const up = delta.deltaCents > 0n;
+  const down = delta.deltaCents < 0n;
+  const tone = up
+    ? "text-emerald-600 dark:text-emerald-400"
+    : down
+      ? "text-red-600 dark:text-red-400"
+      : "text-muted-foreground";
+  const arrow = up ? "▲" : down ? "▼" : "■";
+  const pct =
+    delta.deltaPct === null
+      ? formatCurrency(delta.deltaCents > 0n ? delta.deltaCents : -delta.deltaCents)
+      : `${delta.deltaPct >= 0 ? "+" : "−"}${Math.abs(Math.round(delta.deltaPct * 100))}%`;
+  return (
+    <span className={cn("inline-flex items-center gap-1 tabular-nums", tone)}>
+      <span aria-hidden>{arrow}</span>
+      {pct} {label}
+    </span>
+  );
+}
+
 export default async function DashboardPage() {
   const now = new Date();
   const [{ actingRole }, settings] = await Promise.all([
@@ -102,11 +139,25 @@ export default async function DashboardPage() {
   const canCollect = hasCapability(actingRole, "payments.manage", settings.rolePermissions);
   const showProfit = canFinance && settings.modules.financials;
 
-  const [d, profit, vacancies, expirations] = await Promise.all([
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [d, profit, vacancies, expirations, kpis, trend] = await Promise.all([
     getDashboard(now),
     showProfit ? getProfitSnapshot(now) : Promise.resolve(null),
     getVacancyOutlook(now),
     expiringLeases({ now, withinDays: settings.leaseExpirationAlertDays }),
+    // Occupancy + vacancy-loss are operational (always shown). Turnover cost is
+    // month-to-date so the dashboard card is comparable to the other "this
+    // month" tiles; /reports can range it.
+    Promise.all([
+      getDashboardKpis(now),
+      canFinance
+        ? getTurnoverCost({ from: monthStart, to: now }).catch(() => null)
+        : Promise.resolve(null),
+    ]).then(([k, turnover]) => ({ ...k, turnover })),
+    // Period-over-period collected is a financial figure → finance-gated.
+    canFinance
+      ? getCollectedTrend(now, settings.defaultTimezone)
+      : Promise.resolve(null),
   ]);
   // Fixed monthly costs = mortgage + insurance + taxes (yearly figures /12).
   const fixedCostsMonthlyCents = profit
@@ -151,6 +202,14 @@ export default async function DashboardPage() {
                 label="Collected this month"
                 value={formatCurrency(d.monthCollectedCents)}
                 tone="emerald"
+                hint={
+                  trend ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+                      <DeltaLine label="vs last month" delta={trend.monthOverMonth} />
+                      <DeltaLine label="vs last year" delta={trend.yearOverYear} />
+                    </span>
+                  ) : undefined
+                }
               />
             ),
           },
@@ -198,6 +257,55 @@ export default async function DashboardPage() {
         <Stat label="Vacant / other units" value={String(d.vacantUnits)} tone="amber" />
       ),
     },
+    {
+      id: "occupancy_rate",
+      label: "Occupancy rate",
+      node: (
+        <Stat
+          label="Occupancy rate"
+          value={pctLabel(kpis.occupancy.rate)}
+          hint={`${kpis.occupancy.occupiedUnits} of ${kpis.occupancy.rentableUnits} rentable`}
+          tone="indigo"
+        />
+      ),
+    },
+    ...(canFinance
+      ? [
+          {
+            id: "vacancy_loss",
+            label: "Vacancy loss (MTD est.)",
+            node: (
+              <Stat
+                label="Vacancy loss (est.)"
+                value={formatCurrency(kpis.vacancyLoss.totalLostRentCents)}
+                hint={`${kpis.vacancyLoss.totalDaysVacant} vacant-day(s) · ${kpis.vacancyLoss.vacantUnits} unit(s)`}
+                tone="amber"
+                valueClassName={
+                  kpis.vacancyLoss.totalLostRentCents > 0n
+                    ? "text-red-600 dark:text-red-400"
+                    : undefined
+                }
+              />
+            ),
+          },
+          ...(kpis.turnover
+            ? [
+                {
+                  id: "turnover_cost",
+                  label: "Turnover cost (this month)",
+                  node: (
+                    <Stat
+                      label="Turnover cost (mo.)"
+                      value={formatCurrency(kpis.turnover.totalCents)}
+                      hint={`damages ${formatCurrency(kpis.turnover.moveOutDamagesCents)} · work ${formatCurrency(kpis.turnover.turnoverExpensesCents)}`}
+                      tone="violet"
+                    />
+                  ),
+                },
+              ]
+            : []),
+        ]
+      : []),
     ...(profit
       ? [
           {
