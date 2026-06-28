@@ -8,6 +8,7 @@ import { brandedPageMetadata } from "@/lib/config/metadata";
 import {
   availabilityWhen,
   formatBedsBaths,
+  formatRent,
   listPublicAvailability,
 } from "@/lib/services/public-site";
 import { BrandColorStyle } from "@/components/app/brand-color-style";
@@ -22,13 +23,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const photoUrl = (id: string) => `/welcome/photo/${id}`;
-
-/** Display-only money format from integer cents — BigInt math, never a float. */
-function formatRent(cents: bigint): string {
-  const dollars = (cents / 100n).toLocaleString("en-US");
-  const rem = Number(cents % 100n);
-  return rem === 0 ? `$${dollars}` : `$${dollars}.${String(rem).padStart(2, "0")}`;
-}
 
 /**
  * Public marketing site served at the public host root (Caddy rewrites
@@ -103,6 +97,11 @@ export default async function WelcomePage() {
               {s.modules.applications && (
                 <Button size="lg" render={<Link href="/apply" />}>
                   Apply now
+                </Button>
+              )}
+              {s.showVacancies && (
+                <Button size="lg" variant="secondary" render={<Link href="/vacancies" />}>
+                  View vacancies
                 </Button>
               )}
               {s.modules.tenantPortal && (

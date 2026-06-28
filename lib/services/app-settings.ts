@@ -66,6 +66,8 @@ export interface ModuleFlags {
   mailbox: boolean;
   /** Resident-portal ledger CSV export + date/type filters (/portal/ledger). */
   tenantLedgerExport: boolean;
+  /** Group properties by legal entity (LLC) for per-entity financials. */
+  portfolio: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -81,6 +83,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   publicSite: false,
   mailbox: false,
   tenantLedgerExport: false,
+  portfolio: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -118,6 +121,8 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.tenantLedgerExport === "boolean"
         ? obj.tenantLedgerExport
         : MODULE_DEFAULTS.tenantLedgerExport,
+    portfolio:
+      typeof obj.portfolio === "boolean" ? obj.portfolio : MODULE_DEFAULTS.portfolio,
   };
 }
 
@@ -247,6 +252,8 @@ export interface ResolvedAppSettings {
   publicSiteGallery: PublicSiteGalleryItem[];
   /** Show the live current-availability (vacant units) section. */
   publicSiteShowAvailability: boolean;
+  /** Master switch for the dedicated public /vacancies browse page (default true). */
+  showVacancies: boolean;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -416,6 +423,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     publicSiteHeroDocumentId: row?.publicSiteHeroDocumentId ?? null,
     publicSiteGallery: resolvePublicSiteGallery(row?.publicSiteGallery),
     publicSiteShowAvailability: row?.publicSiteShowAvailability ?? false,
+    showVacancies: row?.showVacancies ?? true,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
@@ -1305,6 +1313,8 @@ export interface PublicSiteSettingsInput {
   publicSiteHours: string | null;
   publicSiteAmenities: string | null;
   publicSiteShowAvailability: boolean;
+  /** Master switch for the dedicated public /vacancies browse page. */
+  showVacancies: boolean;
 }
 
 /**

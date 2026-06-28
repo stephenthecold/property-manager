@@ -81,4 +81,25 @@ describe("resolveReminderDelivery — email preference", () => {
     const r = resolveReminderDelivery({ ...email, email: "  a@b.co " });
     expect(r).toEqual({ ok: true, channel: "email", destination: "a@b.co" });
   });
+
+  it("skips a suppressed mailbox (hard bounce / complaint) despite consent + address", () => {
+    expect(resolveReminderDelivery({ ...email, emailSuppressed: true })).toEqual({
+      ok: false,
+      reason: "email suppressed",
+    });
+  });
+
+  it("delivers normally when emailSuppressed is false/undefined", () => {
+    expect(resolveReminderDelivery({ ...email, emailSuppressed: false })).toEqual({
+      ok: true,
+      channel: "email",
+      destination: "tenant@example.com",
+    });
+  });
+
+  it("does NOT suppress the SMS channel for an email-suppressed tenant", () => {
+    // SMS-preferred tenant whose EMAIL bounced still gets SMS reminders.
+    const r = resolveReminderDelivery({ ...base, emailSuppressed: true });
+    expect(r).toEqual({ ok: true, channel: "sms", destination: "+15551234567" });
+  });
 });

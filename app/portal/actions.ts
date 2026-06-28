@@ -10,6 +10,11 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { createTenantRequest } from "@/lib/services/tenant-requests";
 import { saveMaintenancePhotos } from "@/lib/services/maintenance-photos";
 import { setTenantSmsConsent } from "@/lib/services/sms-consent";
+import {
+  isPortalReminderType,
+  setTenantReminderPref,
+} from "@/lib/services/reminder-prefs";
+import { parseReminderPrefChannel } from "@/lib/reminders/pref";
 
 /**
  * Tenant-side portal actions. EVERY mutation re-verifies the portal session
@@ -79,6 +84,57 @@ export async function setSmsConsentAction(
       ? "You're opted in — we may text you account messages."
       : "You're opted out — we won't text you.",
   };
+}
+
+/**
+ * Self-service per-reminder-type channel override. Re-checks the portal session
+ * and uses ONLY the session tenant's id — the reminderType + channel come from
+ * the form, but the tenant is never taken from it. Consent-gated: a tenant
+ * can't choose SMS without SMS consent (or Email without email consent); "off"
+ * is always allowed. Audited via the service.
+ */
+export async function saveReminderPrefAction(
+  _prev: PortalActionState,
+  fd: FormData,
+): Promise<PortalActionState> {
+  const { tenant } = await requirePortalSession();
+
+  const reminderType = String(fd.get("reminderType") ?? "").trim();
+  if (!isPortalReminderType(reminderType)) {
+    return { error: "Unknown reminder type." };
+  }
+  const channel = parseReminderPrefChannel(String(fd.get("channel") ?? "").trim());
+  if (channel == null) {
+    return { error: "Choose SMS, Email, or Off." };
+  }
+
+  // Re-read the signed-in tenant's live consent — never trust the page snapshot.
+  const fresh = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: { smsConsent: true, emailConsent: true, phone: true, email: true },
+  });
+  if (channel === "sms" && !(fresh?.smsConsent && fresh.phone?.trim())) {
+    return {
+      error:
+        "Turn on text messages (and add a mobile number) before choosing SMS for this reminder.",
+    };
+  }
+  if (channel === "email" && !(fresh?.emailConsent && fresh.email?.trim())) {
+    return {
+      error:
+        "Email isn't enabled for your account. Ask your property manager to turn it on.",
+    };
+  }
+
+  const ok = await setTenantReminderPref(tenant.id, reminderType, channel, {
+    actorType: "system",
+    actorEmail: "portal (tenant)",
+  });
+  if (!ok) return { error: "Couldn't save that preference. Please try again." };
+
+  revalidatePath("/portal/notifications");
+  revalidatePath("/portal");
+  return { ok: true, message: "Preference saved." };
 }
 
 /** "I'll pay cash" — opens a pickup request and alerts opted-in managers. */

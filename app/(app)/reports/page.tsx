@@ -11,12 +11,18 @@ import {
   getPaymentMethodSummary,
   getRentRoll,
 } from "@/lib/services/reports";
+import { getCollectedTrend } from "@/lib/services/kpis";
+import { formatCurrency } from "@/lib/money";
+import type { PeriodDelta } from "@/lib/accounting/kpis";
 import { DataTable } from "@/components/app/data-table";
+import { ReportExportButtons } from "@/components/app/report-export-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { hasCapability } from "@/lib/auth/permissions";
+import { getDisplayRole } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const metadata = { title: "Reports" };
@@ -34,6 +40,30 @@ function amountClass(v: string): string {
   if (v.startsWith("-")) return "text-emerald-600 dark:text-emerald-400";
   if (owed(v)) return "text-red-600 dark:text-red-400";
   return "";
+}
+
+/** Tint + arrow + signed-% for a period delta (up = green, down = red). */
+function DeltaBadge({ delta }: { delta: PeriodDelta }) {
+  const up = delta.deltaCents > 0n;
+  const down = delta.deltaCents < 0n;
+  const tone = up
+    ? "text-emerald-600 dark:text-emerald-400"
+    : down
+      ? "text-red-600 dark:text-red-400"
+      : "text-muted-foreground";
+  const pct =
+    delta.deltaPct === null
+      ? "—"
+      : `${delta.deltaPct >= 0 ? "+" : "−"}${Math.abs(Math.round(delta.deltaPct * 100))}%`;
+  return (
+    <span className={cn("tabular-nums", tone)}>
+      {pct}{" "}
+      <span className="text-muted-foreground">
+        ({delta.deltaCents >= 0n ? "+" : "−"}
+        {formatCurrency(delta.deltaCents >= 0n ? delta.deltaCents : -delta.deltaCents)})
+      </span>
+    </span>
+  );
 }
 
 /** Parse an optional "yyyy-MM-dd" filter; invalid input -> undefined (ignored). */
@@ -63,6 +93,9 @@ export default async function ReportsPage({
 }) {
   await requireCapability("reports.view");
   const app = await getAppSettings();
+  // Show the "Scheduled delivery" link only to roles that can manage schedules.
+  const { actingRole } = await getDisplayRole();
+  const canSchedule = hasCapability(actingRole, "reports.schedule", app.rolePermissions);
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v) ?? "";
@@ -77,7 +110,7 @@ export default async function ReportsPage({
   const windowDays = /^\d+$/.test(windowRaw) ? Number(windowRaw) : 90;
 
   const now = new Date();
-  const [rentRoll, overdue, backRent, income, expirations, methods, properties, tenants, units] =
+  const [rentRoll, overdue, backRent, income, expirations, methods, trend, properties, tenants, units] =
     await Promise.all([
       getRentRoll(now),
       getOverdue(now),
@@ -85,6 +118,8 @@ export default async function ReportsPage({
       getIncomeSummary({ from, to, propertyId: propertyId || undefined }, now),
       getLeaseExpirations({ windowDays }, now),
       getPaymentMethodSummary({ from, to }),
+      // Collected period-over-period (MoM + YoY), honoring the property filter.
+      getCollectedTrend(now, app.defaultTimezone, propertyId || undefined),
       prisma.property.findMany({ orderBy: { name: "asc" } }),
       prisma.tenant.findMany({
         where: { isActive: true },
@@ -109,9 +144,23 @@ export default async function ReportsPage({
     to: to ? toRaw : undefined,
   });
 
+  // Portfolio module: add a legal-entity column to the income summary.
+  const portfolioOn = app.modules.portfolio;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Reports</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Reports</h1>
+        {canSchedule && (
+          <Button
+            render={<Link href="/settings/report-schedules" />}
+            variant="outline"
+            size="sm"
+          >
+            Scheduled delivery
+          </Button>
+        )}
+      </div>
       {app.reportHeaderText && (
         <p className="whitespace-pre-line text-sm text-muted-foreground">
           {app.reportHeaderText}
@@ -172,9 +221,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-sky-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Rent roll</CardTitle>
-          <Button render={<Link href="/api/reports/rent-roll" />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href="/api/reports/rent-roll" />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -230,9 +277,7 @@ export default async function ReportsPage({
                 SMS all overdue
               </Button>
             </form>
-            <Button render={<Link href="/api/reports/overdue" />} variant="outline" size="sm">
-              Export CSV
-            </Button>
+            <ReportExportButtons href="/api/reports/overdue" />
           </div>
         </CardHeader>
         <CardContent>
@@ -281,9 +326,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-orange-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Back rent (terminated leases)</CardTitle>
-          <Button render={<Link href="/api/reports/back-rent" />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href="/api/reports/back-rent" />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -332,11 +375,49 @@ export default async function ReportsPage({
       </Card>
 
       <Card className="border-t-4 border-t-emerald-500">
+        <CardHeader>
+          <CardTitle>Collected — period over period</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                This month ({trend.currentMonthKey})
+              </div>
+              <div className="text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                {formatCurrency(trend.monthOverMonth.currentCents)}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                vs last month ({trend.priorMonthKey})
+              </div>
+              <div className="text-base font-medium">
+                <DeltaBadge delta={trend.monthOverMonth} />
+              </div>
+              <div className="text-xs tabular-nums text-muted-foreground">
+                was {formatCurrency(trend.monthOverMonth.priorCents)}
+              </div>
+            </div>
+            <div className="rounded-lg border p-4">
+              <div className="text-xs font-medium text-muted-foreground">
+                vs last year ({trend.sameMonthLastYearKey})
+              </div>
+              <div className="text-base font-medium">
+                <DeltaBadge delta={trend.yearOverYear} />
+              </div>
+              <div className="text-xs tabular-nums text-muted-foreground">
+                was {formatCurrency(trend.yearOverYear.priorCents)}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-t-4 border-t-emerald-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Income summary</CardTitle>
-          <Button render={<Link href={incomeHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={incomeHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -344,6 +425,9 @@ export default async function ReportsPage({
             columns={[
               { key: "month", label: "Month" },
               { key: "property", label: "Property" },
+              ...(portfolioOn
+                ? [{ key: "entity", label: "Entity" } as const]
+                : []),
               { key: "cash", label: "Cash received", align: "right", numeric: true },
               { key: "payments", label: "Payments", align: "right", numeric: true },
               {
@@ -366,6 +450,7 @@ export default async function ReportsPage({
               sortValues: [
                 r.month,
                 r.property,
+                ...(portfolioOn ? [r.entity] : []),
                 r.cashReceived,
                 r.paymentCount,
                 r.chargesBilled,
@@ -374,6 +459,13 @@ export default async function ReportsPage({
               cells: [
                 r.month,
                 r.property,
+                ...(portfolioOn
+                  ? [
+                      <span key="ent" className={r.entity ? "" : "text-muted-foreground"}>
+                        {r.entity || "Unassigned"}
+                      </span>,
+                    ]
+                  : []),
                 <span key="c" className="tabular-nums text-emerald-700 dark:text-emerald-400">
                   {money(r.cashReceived)}
                 </span>,
@@ -395,9 +487,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-amber-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Lease expirations (next {windowDays} days)</CardTitle>
-          <Button render={<Link href={expirationsHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={expirationsHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -451,9 +541,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-violet-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Payments by method</CardTitle>
-          <Button render={<Link href={methodsHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={methodsHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -508,8 +596,18 @@ export default async function ReportsPage({
                     </option>
                   ))}
                 </select>
+                <select
+                  name="format"
+                  defaultValue="csv"
+                  aria-label="Tenant ledger format"
+                  className="h-9 rounded-md border px-2 text-sm"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                  <option value="xlsx">Excel</option>
+                </select>
                 <Button type="submit" variant="outline">
-                  Download CSV
+                  Download
                 </Button>
               </div>
             </form>
@@ -524,8 +622,18 @@ export default async function ReportsPage({
                     </option>
                   ))}
                 </select>
+                <select
+                  name="format"
+                  defaultValue="csv"
+                  aria-label="Unit ledger format"
+                  className="h-9 rounded-md border px-2 text-sm"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                  <option value="xlsx">Excel</option>
+                </select>
                 <Button type="submit" variant="outline">
-                  Download CSV
+                  Download
                 </Button>
               </div>
             </form>

@@ -22,6 +22,7 @@ export const CAPABILITIES = [
   "documents.manage",
   "reminders.send",
   "reports.view",
+  "reports.schedule",
   "financials.view",
   "financials.manage",
   "maintenance.manage",
@@ -60,6 +61,9 @@ const MIN_ROLE: Record<Capability, Role> = {
   "documents.manage": "manager",
   "reminders.send": "manager",
   "reports.view": "manager",
+  // Scheduling recurring emailed reports to arbitrary recipients sets up
+  // automated outbound mail — admin-only, like the other delivery/settings caps.
+  "reports.schedule": "admin",
   // Financial totals/profit are confidential: finance+ by default (NOT manager).
   "financials.view": "finance",
   "financials.manage": "finance",
@@ -103,7 +107,8 @@ export const CAPABILITY_META: Record<
   "payers.manage": { label: "Manage non-tenant payers", group: "Operations", description: "Maintain the directory of third-party payers (HUD/housing authorities, employers, guarantors) who pay on a tenant's behalf." },
   "documents.manage": { label: "Manage documents", group: "Operations", description: "Upload documents, run OCR, and view document detail." },
   "reminders.send": { label: "Send reminders", group: "Operations", description: "Send individual and bulk SMS reminders." },
-  "reports.view": { label: "View & export reports", group: "Operations", description: "View the Reports page and export financial CSVs." },
+  "reports.view": { label: "View & export reports", group: "Operations", description: "View the Reports page and export financial reports (CSV, PDF, Excel)." },
+  "reports.schedule": { label: "Schedule report email delivery", group: "Settings", description: "Create and manage recurring (weekly/monthly) emailed report deliveries to chosen recipients." },
   "financials.view": { label: "View financial totals & profit", group: "Operations", description: "See expected/collected totals on the dashboard and the Financials (ROI) page." },
   "financials.manage": { label: "Manage financials", group: "Operations", description: "Log property expenses and edit building mortgage terms." },
   "maintenance.manage": { label: "Maintenance jobs & tasks", group: "Operations", description: "Track unit maintenance jobs and monthly recurring tasks." },

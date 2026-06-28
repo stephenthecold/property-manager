@@ -11,7 +11,16 @@ import {
   resolveSmsProvider,
 } from "@/lib/services/app-settings";
 import type { NotificationChannel } from "@/lib/generated/prisma/enums";
-import { resolveReminderDelivery } from "@/lib/reminders/channel";
+import {
+  resolveReminderDelivery,
+  type ReminderSkipReason,
+} from "@/lib/reminders/channel";
+import { isEmailSuppressed } from "@/lib/reminders/suppression";
+import { resolveEffectiveChannel } from "@/lib/reminders/pref";
+import {
+  effectiveChannelFor,
+  loadReminderPrefsForTenants,
+} from "@/lib/services/reminder-prefs";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import { daysBetween } from "@/lib/accounting/periods";
 import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
@@ -46,6 +55,23 @@ function isUniqueViolation(e: unknown): boolean {
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Human-readable skip reason from a per-channel delivery refusal. */
+function skipReasonMessage(
+  reason: ReminderSkipReason,
+  channel: NotificationChannel,
+): string {
+  switch (reason) {
+    case "channel disabled":
+      return `${channel} sending is disabled in Settings → Messaging`;
+    case "no consent":
+      return `no ${channel} consent`;
+    case "email suppressed":
+      return "email suppressed (bounced/complaint) — clear it on the tenant";
+    case "no contact":
+      return channel === "email" ? "no email address" : "no phone number";
+  }
 }
 
 /** Normalized result shape shared by the SMS and email providers. */
@@ -156,6 +182,10 @@ export interface SendReminderInput {
   lease?: LeaseWithProperty;
   /** Precomputed (batched) accounting for the lease — skips the snapshot query. */
   accounting?: LeaseAccounting;
+  /** This tenant's per-type channel overrides (reminderType → stored channel),
+   *  batch-loaded by a sweep so sendReminder skips its own per-call pref query.
+   *  Absent → sendReminder loads the single override itself. */
+  reminderPrefs?: Map<string, string>;
   actor: AuditContext;
   now?: Date;
 }
@@ -177,27 +207,41 @@ export async function sendReminder(
     return { reminderId: null, status: "skipped", error: "tenant not found" };
   }
 
+  // The tenant's per-reminder-type override (portal self-serve) layers on top
+  // of their single global reminderChannel. A `null` effective channel means
+  // the tenant muted THIS type ("off") — skip before any send. Types without a
+  // portal override (manual/maintenance) simply have no row, so this returns
+  // the global channel unchanged. The sweep passes a batch-loaded override map
+  // (resolved locally, no query); single sends fall back to a one-row lookup.
+  const effectiveChannel = i.reminderPrefs
+    ? resolveEffectiveChannel({
+        globalChannel: tenant.reminderChannel,
+        override: i.reminderPrefs.get(i.reminderType),
+      })
+    : await effectiveChannelFor(
+        tenant.id,
+        i.reminderType,
+        tenant.reminderChannel,
+      );
+  if (effectiveChannel === null) {
+    return { reminderId: null, status: "skipped", error: "reminder muted" };
+  }
+
   // Resolve the channel + destination up front. Consent is absolute and
-  // per-channel: only the tenant's preferred channel is attempted, and only
-  // with that channel's consent + contact info. Never cross-send.
+  // per-channel: only the effective channel is attempted, and only with that
+  // channel's consent + contact info. Never cross-send.
   const delivery = resolveReminderDelivery({
-    preferredChannel: tenant.reminderChannel,
+    preferredChannel: effectiveChannel,
     smsConsent: tenant.smsConsent,
     phone: tenant.phone,
     emailConsent: tenant.emailConsent,
     email: tenant.email,
     smsEnabled: settings.smsEnabled,
     emailEnabled: settings.emailEnabled,
+    emailSuppressed: isEmailSuppressed(tenant.emailDeliveryStatus),
   });
   if (!delivery.ok) {
-    const error =
-      delivery.reason === "channel disabled"
-        ? `${tenant.reminderChannel} sending is disabled in Settings → Messaging`
-        : delivery.reason === "no consent"
-          ? `no ${tenant.reminderChannel} consent`
-          : tenant.reminderChannel === "email"
-            ? "no email address"
-            : "no phone number";
+    const error = skipReasonMessage(delivery.reason, effectiveChannel);
     return { reminderId: null, status: "skipped", error };
   }
   const { channel, destination } = delivery;
@@ -354,10 +398,15 @@ async function retryExistingSlot(
         email: tenant.email,
         smsEnabled: settings.smsEnabled,
         emailEnabled: settings.emailEnabled,
+        emailSuppressed: isEmailSuppressed(tenant.emailDeliveryStatus),
       })
     : ({ ok: false, reason: "no consent" } as const);
   if (!delivery.ok) {
-    return { reminderId: null, status: "skipped", error: `no ${row.channel} consent` };
+    return {
+      reminderId: null,
+      status: "skipped",
+      error: skipReasonMessage(delivery.reason, row.channel),
+    };
   }
   const { channel, destination } = delivery;
 
@@ -433,12 +482,17 @@ export async function sendBulkOverdueReminders(
     skippedDuplicate: 0,
   };
 
-  // One batched read for the whole sweep (two queries total) instead of two
-  // per lease — the per-lease pure compute below is unchanged.
+  // One batched read for the whole sweep (a fixed number of queries) instead of
+  // per-lease/per-recipient — the per-lease pure compute below is unchanged.
   const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
   const overdueGuards = await loadTenantOverdueGuards(
     leases.map((l) => l.id),
     now,
+  );
+  // Per-tenant channel overrides for every recipient, in one query, so each
+  // sendReminder resolves its effective channel locally (no per-call lookup).
+  const prefsByTenant = await loadReminderPrefsForTenants(
+    leases.flatMap((l) => [l.tenantId, ...l.coTenants.map((ct) => ct.tenantId)]),
   );
 
   for (const lease of leases) {
@@ -478,6 +532,7 @@ export async function sendBulkOverdueReminders(
           dueDate: oldestOverdue.dueDate,
           lease,
           accounting: acc,
+          reminderPrefs: prefsByTenant.get(tenantId),
           actor,
           now,
         });
@@ -485,6 +540,9 @@ export async function sendBulkOverdueReminders(
         else if (r.status === "failed") result.failed++;
         else if (r.error === "duplicate") result.skippedDuplicate++;
         else if (r.error === "no phone number") result.skippedNoPhone++;
+        // A muted type ("off") isn't a consent problem — count it as a duplicate
+        // skip (a no-op for this recipient) rather than mislabeling "no consent".
+        else if (r.error === "reminder muted") result.skippedDuplicate++;
         else result.skippedNoConsent++;
       }
     } catch (e) {
@@ -537,14 +595,19 @@ export async function runScheduledReminders(
     skipped: 0,
   };
 
-  // One batched read for the whole sweep (two queries total) instead of two
-  // per lease — the per-lease pure compute below is unchanged.
+  // One batched read for the whole sweep (a fixed number of queries) instead of
+  // per-lease/per-recipient — the per-lease pure compute below is unchanged.
   const accountingByLease = await batchLeaseAccounting(leases.map((l) => l.id));
   // Don't-dun guards: for subsidized leases, skip the tenant overdue reminder
   // once the tenant has paid their own portion (the shortfall is the subsidy's).
   const overdueGuards = await loadTenantOverdueGuards(
     leases.map((l) => l.id),
     now,
+  );
+  // Per-tenant channel overrides for every recipient, in one query, so each
+  // sendReminder resolves its effective channel locally (no per-call lookup).
+  const prefsByTenant = await loadReminderPrefsForTenants(
+    leases.flatMap((l) => [l.tenantId, ...l.coTenants.map((ct) => ct.tenantId)]),
   );
 
   for (const lease of leases) {
@@ -602,6 +665,7 @@ export async function runScheduledReminders(
               periodKey: candidate.periodKey,
               lease,
               accounting: acc,
+              reminderPrefs: prefsByTenant.get(tenantId),
               actor,
               now,
             });
@@ -647,6 +711,7 @@ export async function runScheduledReminders(
             dueDate: c.dueDate,
             lease,
             accounting: acc,
+            reminderPrefs: prefsByTenant.get(tenantId),
             actor,
             now,
           });

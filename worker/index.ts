@@ -13,6 +13,7 @@ import {
   runWeeklyMaintenanceDigest,
   runWeeklyStaffDigest,
 } from "@/lib/services/staff-digest";
+import { runReportScheduleDelivery } from "@/lib/services/report-schedules";
 
 /**
  * Dedicated billing worker: a daily idempotent run that generates due rent
@@ -25,6 +26,10 @@ import {
 const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
 const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
 const INBOX_POLL_SCHEDULE = process.env.INBOX_POLL_CRON ?? "*/5 * * * *"; // every 5 min
+// Scheduled report email delivery runs DAILY (07:00) so monthly schedules can
+// fire on the 1st; the pure cadence math (ISO week / calendar month) makes a
+// daily check — and restart catch-up — safe from double-sends within a period.
+const REPORT_DELIVERY_SCHEDULE = process.env.REPORT_DELIVERY_CRON ?? "0 7 * * *";
 // Reminder schedule is resolved at startup: Settings → Messaging "send hour"
 // (DB) wins, else REMINDER_CRON env, else 09:00 daily (lib/reminders/schedule).
 
@@ -183,6 +188,22 @@ async function runStaffDigestOnce(): Promise<void> {
   }
 }
 
+async function runReportDeliveryOnce(): Promise<void> {
+  // Emails due weekly/monthly report schedules (rendered CSV/PDF/Excel). No-ops
+  // when email is off or nothing is due; per-schedule isolation lives inside the
+  // service. Safe to run at startup — cadence boundaries prevent double-sends.
+  try {
+    const res = await runReportScheduleDelivery(new Date());
+    if (res.due > 0 || res.reason === undefined) {
+      console.log(
+        `[worker] report delivery: due=${res.due} sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+      );
+    }
+  } catch (e) {
+    console.error("[worker] report delivery failed:", e);
+  }
+}
+
 async function main(): Promise<void> {
   // DB-over-env: the saved send hour wins over REMINDER_CRON. Read once at
   // startup; changing it in Settings takes effect on the next worker restart.
@@ -199,11 +220,12 @@ async function main(): Promise<void> {
   }
   const reminderSchedule = reminderCron(reminderSendHour, process.env.REMINDER_CRON);
   console.log(
-    `[worker] starting (billing="${SCHEDULE}", reminders="${reminderSchedule}", staffDigest="${STAFF_DIGEST_SCHEDULE}", inbox="${INBOX_POLL_SCHEDULE}")`,
+    `[worker] starting (billing="${SCHEDULE}", reminders="${reminderSchedule}", staffDigest="${STAFF_DIGEST_SCHEDULE}", inbox="${INBOX_POLL_SCHEDULE}", reportDelivery="${REPORT_DELIVERY_SCHEDULE}")`,
   );
   await runOnce(); // startup back-fill
   await runRemindersOnce(); // startup catch-up (idempotent, duplicates skip)
   await runInboxOnce(); // startup catch-up (idempotent on messageId)
+  await runReportDeliveryOnce(); // startup catch-up (cadence-bounded, no double-send)
   cron.schedule(SCHEDULE, () => {
     void runOnce();
   });
@@ -218,6 +240,11 @@ async function main(): Promise<void> {
   // so running it at boot would re-email staff on every container restart.
   cron.schedule(STAFF_DIGEST_SCHEDULE, () => {
     void runStaffDigestOnce();
+  });
+  // Daily so monthly schedules can fire on the 1st; the cadence math bounds
+  // double-sends, so unlike the digests a daily/startup run is safe.
+  cron.schedule(REPORT_DELIVERY_SCHEDULE, () => {
+    void runReportDeliveryOnce();
   });
 }
 

@@ -369,8 +369,15 @@ export default async function PortalHomePage({
 
       {/* Text messages & help */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">Text messages</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            render={<Link href="/portal/notifications" />}
+          >
+            Notification preferences
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <p className="text-muted-foreground">

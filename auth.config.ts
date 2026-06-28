@@ -17,6 +17,7 @@ const PUBLIC_PREFIXES = [
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
   "/api/sms/inbound", // inbound STOP/START/HELP webhook — HMAC-verified, not session
   "/api/payments/webhook", // payment-gateway webhook — verified by provider signature, not session
+  "/api/email/bounce", // email bounce/complaint webhook — HMAC-verified shared secret, not session
   "/api/health", // container healthcheck — returns only {ok}, no data
   "/sign", // tenant e-sign pages — gated by a single-use token hash, not a session
   "/portal", // tenant portal — its own local session (lib/portal/session.ts), never staff auth
@@ -27,6 +28,7 @@ const PUBLIC_PREFIXES = [
   "/apply", // public rental-application intake — module-gated at the service layer
   "/sms-opt-in", // public SMS opt-in form — records consent only, no session
   "/welcome", // public marketing splash — module-gated, operator-authored copy, no data
+  "/vacancies", // public vacancies browse — module+setting-gated, marketing-safe vacant units only
 ];
 
 function isPublic(pathname: string): boolean {

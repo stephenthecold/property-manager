@@ -22,6 +22,8 @@ export interface PublicSiteInitial {
   publicSiteHours: string;
   publicSiteAmenities: string;
   showAvailability: boolean;
+  /** Whether the dedicated public /vacancies browse page is enabled. */
+  showVacancies: boolean;
   heroDocumentId: string | null;
   /** UploadedDocument ids; previewed via the public /welcome/photo/[id] route. */
   gallery: string[];
@@ -188,6 +190,23 @@ export function PublicSiteForm({ initial }: { initial: PublicSiteInitial }) {
             <span className="font-medium">Show current availability</span> — lists your
             currently-vacant units (beds/baths/rent/available date, no floor plans) with an Apply
             link, pulled live from your data. Leave off to keep the site marketing-only.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+          <input
+            type="checkbox"
+            name="showVacancies"
+            defaultChecked={initial.showVacancies}
+            className="mt-0.5 size-4 shrink-0 accent-primary"
+          />
+          <span>
+            <span className="font-medium">Enable the vacancies page</span> — a dedicated{" "}
+            <Link href="/vacancies" className="text-primary underline underline-offset-2">
+              /vacancies
+            </Link>{" "}
+            browse page (filter by property, sort by rent/availability) linked from your public
+            site. Requires the public website module. Leave off to hide it.
           </span>
         </label>
 
