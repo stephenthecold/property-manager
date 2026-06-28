@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { DateTime } from "luxon";
 import { authorizeApiCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { prisma } from "@/lib/db";
 import {
   BACK_RENT_HEADERS,
@@ -15,6 +16,7 @@ import {
   getTenantLedger,
   getUnitLedger,
   INCOME_HEADERS,
+  INCOME_HEADERS_WITH_ENTITY,
   LEDGER_HEADERS,
   METHOD_HEADERS,
   RENT_ROLL_HEADERS,
@@ -113,7 +115,9 @@ export async function GET(
       { from, to, propertyId },
       now,
     )) as unknown as Record<string, string>[];
-    headers = INCOME_HEADERS;
+    // Portfolio module on → include the legal-entity column.
+    const { modules } = await getAppSettings();
+    headers = modules.portfolio ? INCOME_HEADERS_WITH_ENTITY : INCOME_HEADERS;
   } else if (type === "lease-expirations") {
     const raw = q.get("windowDays");
     let windowDays: number | undefined;

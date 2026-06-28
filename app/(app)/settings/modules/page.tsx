@@ -73,6 +73,12 @@ const MODULE_INFO = [
     description:
       "Adds an Account ledger page in the resident portal (/portal/ledger) where a signed-in tenant can filter their OWN charge/payment history by date range and entry type and download it as a CSV. Strictly scoped to the logged-in tenant — they only ever see and export their own ledger. Requires the Tenant portal module to be on. Turning it off removes the ledger page, the filters, and the CSV download (the export endpoint also stops responding); nothing is deleted.",
   },
+  {
+    key: "portfolio" as const,
+    label: "Portfolio (legal-entity grouping)",
+    description:
+      "Group properties by legal entity for per-entity financials. Adds an optional \"Legal entity / LLC\" field to each property; when on, Financials subtotals the net-income table by entity (with a portfolio grand total) and the Reports income summary gains an entity column. Properties with no entity set roll up under \"Unassigned\". Turning it off just hides the grouping and the field — the saved entity names are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

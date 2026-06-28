@@ -1,6 +1,7 @@
 import { createProperty } from "../actions";
 import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { ActionForm } from "@/components/app/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ export const runtime = "nodejs";
 export default async function NewPropertyPage() {
   await requireCapability("properties.manage");
   const env = getEnv();
+  const { modules } = await getAppSettings();
   return (
     <div className="mx-auto max-w-xl">
       <Card>
@@ -57,6 +59,16 @@ export default async function NewPropertyPage() {
                 <Input id="currency" name="currency" defaultValue={env.DEFAULT_CURRENCY} />
               </div>
             </div>
+            {modules.portfolio && (
+              <div className="space-y-2">
+                <Label htmlFor="legalEntityName">Legal entity / LLC</Label>
+                <Input
+                  id="legalEntityName"
+                  name="legalEntityName"
+                  placeholder="Acme Holdings LLC"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" />

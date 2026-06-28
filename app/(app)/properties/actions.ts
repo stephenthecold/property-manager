@@ -72,6 +72,8 @@ export async function createProperty(
       state: str(fd, "state") || null,
       zip: str(fd, "zip") || null,
       notes: str(fd, "notes") || null,
+      // Portfolio module: optional legal entity / LLC (always stored).
+      legalEntityName: str(fd, "legalEntityName") || null,
       timezone,
       currency,
     },
@@ -289,6 +291,8 @@ export async function updateProperty(
     state: str(fd, "state") || null,
     zip: str(fd, "zip") || null,
     notes: str(fd, "notes") || null,
+    // Portfolio module: optional legal entity / LLC (always stored).
+    legalEntityName: str(fd, "legalEntityName") || null,
     timezone,
     currency,
     monthlyMortgageCents,
@@ -313,6 +317,7 @@ export async function updateProperty(
         state: property.state,
         zip: property.zip,
         notes: property.notes,
+        legalEntityName: property.legalEntityName,
         timezone: property.timezone,
         currency: property.currency,
         monthlyMortgageCents: property.monthlyMortgageCents,

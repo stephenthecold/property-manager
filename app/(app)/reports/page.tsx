@@ -109,6 +109,9 @@ export default async function ReportsPage({
     to: to ? toRaw : undefined,
   });
 
+  // Portfolio module: add a legal-entity column to the income summary.
+  const portfolioOn = app.modules.portfolio;
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Reports</h1>
@@ -344,6 +347,9 @@ export default async function ReportsPage({
             columns={[
               { key: "month", label: "Month" },
               { key: "property", label: "Property" },
+              ...(portfolioOn
+                ? [{ key: "entity", label: "Entity" } as const]
+                : []),
               { key: "cash", label: "Cash received", align: "right", numeric: true },
               { key: "payments", label: "Payments", align: "right", numeric: true },
               {
@@ -366,6 +372,7 @@ export default async function ReportsPage({
               sortValues: [
                 r.month,
                 r.property,
+                ...(portfolioOn ? [r.entity] : []),
                 r.cashReceived,
                 r.paymentCount,
                 r.chargesBilled,
@@ -374,6 +381,13 @@ export default async function ReportsPage({
               cells: [
                 r.month,
                 r.property,
+                ...(portfolioOn
+                  ? [
+                      <span key="ent" className={r.entity ? "" : "text-muted-foreground"}>
+                        {r.entity || "Unassigned"}
+                      </span>,
+                    ]
+                  : []),
                 <span key="c" className="tabular-nums text-emerald-700 dark:text-emerald-400">
                   {money(r.cashReceived)}
                 </span>,

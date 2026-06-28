@@ -69,7 +69,7 @@ export default async function PropertyDetail({
     },
   });
   if (!property) notFound();
-  const { billing } = await getAppSettings();
+  const { billing, modules } = await getAppSettings();
 
   // "$2,400.00/yr ($200.00/mo)" — /12n truncates sub-cent remainders (display only).
   const yearlyWithMonthly = (cents: bigint | null) =>
@@ -226,6 +226,17 @@ export default async function PropertyDetail({
                   <Label htmlFor="pcurrency">Currency</Label>
                   <Input id="pcurrency" name="currency" defaultValue={property.currency} />
                 </div>
+                {modules.portfolio && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="plegalEntity">Legal entity / LLC</Label>
+                    <Input
+                      id="plegalEntity"
+                      name="legalEntityName"
+                      placeholder="Acme Holdings LLC"
+                      defaultValue={property.legalEntityName ?? ""}
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="pmortgage">Monthly mortgage</Label>
                   <Input
@@ -344,6 +355,9 @@ export default async function PropertyDetail({
             />
             <Field label="Timezone" value={property.timezone} />
             <Field label="Currency" value={property.currency} />
+            {modules.portfolio && (
+              <Field label="Legal entity" value={property.legalEntityName || "—"} />
+            )}
             <Field
               label="Status"
               value={

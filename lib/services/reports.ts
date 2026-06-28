@@ -290,6 +290,9 @@ export async function getUnitLedger(unitId: string): Promise<UnitLedgerRow[]> {
 export interface IncomeRow {
   month: string;
   property: string;
+  /** Owning legal entity / LLC (Portfolio module); "" when unset. Always
+   *  computed; only surfaced as a column when the portfolio module is on. */
+  entity: string;
   cashReceived: string;
   paymentCount: string;
   chargesBilled: string;
@@ -305,10 +308,25 @@ export const INCOME_HEADERS = [
   "lateFeesBilled",
 ] as const;
 
+/** Income CSV columns with the legal-entity column (Portfolio module on). */
+export const INCOME_HEADERS_WITH_ENTITY = [
+  "month",
+  "property",
+  "entity",
+  "cashReceived",
+  "paymentCount",
+  "chargesBilled",
+  "lateFeesBilled",
+] as const;
+
 /**
  * Cash received per (month, property), bucketed by effectiveDate in the
  * property timezone; payment reversals net cash out. chargesBilled /
  * lateFeesBilled are accrual columns for comparison. See lib/accounting/income.
+ *
+ * `entity` carries the property's legal entity (Portfolio module) onto each row;
+ * it never changes bucketing (groups stay month + property) and is "" when the
+ * property has no entity set.
  */
 export async function getIncomeSummary(
   i: { from?: Date; to?: Date; propertyId?: string },
@@ -340,10 +358,12 @@ export async function getIncomeSummary(
     amountCents: e.amountCents,
     reversesPayment: e.reversesEntry?.entryType === "payment",
     property: e.lease.unit.property.name,
+    entity: e.lease.unit.property.legalEntityName,
   }));
   return groupIncomeByMonth(inputs).map((g) => ({
     month: g.month,
     property: g.property,
+    entity: g.entity,
     cashReceived: fromCents(g.cashReceivedCents),
     paymentCount: String(g.paymentCount),
     chargesBilled: fromCents(g.chargesBilledCents),
