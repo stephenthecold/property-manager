@@ -284,3 +284,66 @@ export function formatExpirationDigest(
 
   return { subject, text };
 }
+
+// ---------------------------------------------------------------------------
+// Weekly asset-warranty digest (same Monday cron as the other staff digests)
+// ---------------------------------------------------------------------------
+
+/** One registered asset whose warranty is expired or expiring within 30 days. */
+export interface WarrantyDigestRow {
+  assetName: string;
+  propertyName: string;
+  /** Unit-scoped asset; null = whole property. */
+  unitLabel: string | null;
+  /** "yyyy-MM-dd" warranty expiry in the property timezone. */
+  expiresISO: string;
+  /** Whole days from now to expiry (negative once past). */
+  daysUntil: number;
+  state: "expired" | "expiring_soon";
+}
+
+/**
+ * Build the weekly asset-warranty digest email. Returns null when nothing is
+ * expiring (the caller must not send an empty digest). Rows are sorted
+ * soonest-expiry (most overdue) first, ties broken by asset name.
+ */
+export function formatWarrantyDigest(input: {
+  businessName: string;
+  now: Date;
+  rows: WarrantyDigestRow[];
+}): { subject: string; text: string } | null {
+  const { businessName, now, rows } = input;
+  if (rows.length === 0) return null;
+
+  const sorted = [...rows].sort(
+    (a, b) => a.daysUntil - b.daysUntil || a.assetName.localeCompare(b.assetName),
+  );
+  const expiredCount = sorted.filter((r) => r.state === "expired").length;
+
+  const subject = `Asset warrant${sorted.length === 1 ? "y" : "ies"} expiring: ${
+    sorted.length
+  }${expiredCount > 0 ? ` (${expiredCount} expired)` : ""} — ${businessName}`;
+
+  const lines = sorted.map((r) => {
+    const where = r.unitLabel
+      ? `${r.propertyName} · ${r.unitLabel}`
+      : r.propertyName;
+    const when =
+      r.state === "expired"
+        ? `expired ${r.expiresISO}`
+        : `expires ${r.expiresISO} (${daysUntilLabel(r.daysUntil)})`;
+    return `${r.assetName} — ${where} — ${when}`;
+  });
+
+  const text = [
+    `Asset warranties expired or expiring within 30 days as of ${now
+      .toISOString()
+      .slice(0, 10)}:`,
+    "",
+    ...lines,
+    "",
+    `Sent by ${businessName} property manager — weekly warranty digest`,
+  ].join("\n");
+
+  return { subject, text };
+}
