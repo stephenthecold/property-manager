@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InboxIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
@@ -7,7 +8,8 @@ import {
   rejectSelfReportedPaymentAction,
 } from "../actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const runtime = "nodejs";
@@ -36,27 +38,28 @@ export default async function PendingPaymentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Pending self-reports</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+      <PageHeader
+        back={{ href: "/payments", label: "Payments" }}
+        title="Pending self-reports"
+        description={
+          <>
             Payments tenants reported paying offline (Cash App, cash, bank
-            transfer). These do <span className="font-medium text-foreground">not</span>{" "}
+            transfer). These do{" "}
+            <span className="font-medium text-foreground">not</span>{" "}
             affect a tenant&apos;s balance until you confirm them — confirming
             posts the payment to the ledger and applies it oldest-charge-first.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" render={<Link href="/payments" />}>
-          All payments
-        </Button>
-      </div>
+          </>
+        }
+      />
 
       {pending.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No self-reported payments are waiting for confirmation.
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border bg-card">
+          <EmptyState
+            icon={<InboxIcon />}
+            title="No pending self-reports"
+            description="When a tenant reports paying offline, it appears here to confirm and post to the ledger."
+          />
+        </div>
       ) : (
         <div className="space-y-3">
           {pending.map((p) => {

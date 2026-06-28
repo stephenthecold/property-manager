@@ -53,7 +53,7 @@ export default async function InspectionDetailPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        back={{ href: "/inspections", label: "All inspections" }}
+        back={{ href: "/inspections", label: "Inspections" }}
         title={`${inspectionTypeLabel(inspection.type)} inspection`}
         description={
           <>

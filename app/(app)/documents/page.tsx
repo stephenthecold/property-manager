@@ -98,7 +98,7 @@ export default async function DocumentsPage({
             action={
               uploadType ? (
                 <Button variant="outline" size="sm" render={<Link href="/documents" />}>
-                  Clear filter
+                  Clear filters
                 </Button>
               ) : (
                 <UploadDocumentDialog tenantId={tenantId} trigger="Upload document" />

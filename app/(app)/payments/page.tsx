@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CreditCardIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
@@ -7,6 +8,8 @@ import type { PaymentMethod, PaymentStatus } from "@/lib/generated/prisma/enums"
 import { voidPaymentAction } from "./actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,31 +157,29 @@ export default async function PaymentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Payments</h1>
-          <p className="text-sm text-muted-foreground">
-            Showing the 100 most recent.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {pendingSelfReports > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              render={<Link href="/payments/pending" />}
-            >
-              {pendingSelfReports} pending self-report
-              {pendingSelfReports === 1 ? "" : "s"} to confirm
-            </Button>
-          )}
-          <RecordPaymentDialog
-            leaseOptions={leaseOptions}
-            payerOptions={payerOptions}
-            trigger="Record payment"
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Payments"
+        description="Showing the 100 most recent."
+        actions={
+          <>
+            {pendingSelfReports > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href="/payments/pending" />}
+              >
+                {pendingSelfReports} pending self-report
+                {pendingSelfReports === 1 ? "" : "s"} to confirm
+              </Button>
+            )}
+            <RecordPaymentDialog
+              leaseOptions={leaseOptions}
+              payerOptions={payerOptions}
+              trigger="Record payment"
+            />
+          </>
+        }
+      />
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">
@@ -232,7 +233,24 @@ export default async function PaymentsPage({
       </form>
 
       <DataTable
-        emptyMessage="No payments yet."
+        emptyState={
+          <EmptyState
+            icon={<CreditCardIcon />}
+            title={filtering ? "No matching payments" : "No payments yet"}
+            description={
+              filtering
+                ? "Try a different method, status, or date range — or clear the filters."
+                : "Record a payment, or confirm a tenant self-report, and it shows up here."
+            }
+            action={
+              filtering ? (
+                <Button variant="outline" size="sm" render={<Link href="/payments" />}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          />
+        }
         columns={[
           { key: "date", label: "Date" },
           { key: "tenant", label: "Tenant" },
@@ -320,6 +338,7 @@ export default async function PaymentsPage({
                   <input
                     name="reason"
                     placeholder="Reason"
+                    aria-label="Void reason"
                     className="h-8 w-28 rounded border bg-card px-2 text-xs dark:bg-input/30"
                     required
                   />

@@ -170,7 +170,7 @@ export default async function RemindersPage({
                   size="sm"
                   render={<Link href="/reminders" />}
                 >
-                  Clear filter
+                  Clear filters
                 </Button>
               ) : undefined
             }
