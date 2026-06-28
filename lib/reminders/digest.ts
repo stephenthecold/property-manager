@@ -347,3 +347,57 @@ export function formatWarrantyDigest(input: {
 
   return { subject, text };
 }
+
+// ---------------------------------------------------------------------------
+// Weekly preventive-maintenance digest (overdue recurring tasks)
+// ---------------------------------------------------------------------------
+
+/** One active recurring task past its due day this period with no completion. */
+export interface PreventiveMaintenanceDigestRow {
+  title: string;
+  propertyName: string;
+  /** "yyyy-MM-dd" this month's due date in the property timezone. */
+  dueISO: string;
+  daysOverdue: number;
+}
+
+/**
+ * Build the weekly overdue-recurring-task digest email. Returns null when
+ * nothing is overdue (the caller must not send an empty digest). Most-overdue
+ * first, ties broken by title.
+ */
+export function formatPreventiveMaintenanceDigest(input: {
+  businessName: string;
+  now: Date;
+  rows: PreventiveMaintenanceDigestRow[];
+}): { subject: string; text: string } | null {
+  const { businessName, now, rows } = input;
+  if (rows.length === 0) return null;
+
+  const sorted = [...rows].sort(
+    (a, b) => b.daysOverdue - a.daysOverdue || a.title.localeCompare(b.title),
+  );
+
+  const subject = `Overdue recurring task${
+    sorted.length === 1 ? "" : "s"
+  }: ${sorted.length} — ${businessName}`;
+
+  const lines = sorted.map(
+    (r) =>
+      `${r.title} — ${r.propertyName} — due ${r.dueISO} (${r.daysOverdue} day${
+        r.daysOverdue === 1 ? "" : "s"
+      } overdue)`,
+  );
+
+  const text = [
+    `Recurring maintenance tasks past their due day and not marked done, as of ${now
+      .toISOString()
+      .slice(0, 10)}:`,
+    "",
+    ...lines,
+    "",
+    `Sent by ${businessName} property manager — weekly preventive-maintenance digest`,
+  ].join("\n");
+
+  return { subject, text };
+}
