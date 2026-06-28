@@ -45,19 +45,24 @@ import { getFileStorage } from "@/lib/providers/storage";
  * AppSettings signature, applied at send time by a manager+ (esign.manage).
  */
 
-export type SigningKind = "lease" | "renewal";
+export type SigningKind = "lease" | "renewal" | "amendment";
 
 const KIND_LABEL: Record<SigningKind, string> = {
   lease: "lease agreement",
   renewal: "lease renewal agreement",
+  amendment: "lease amendment",
 };
+
+/** Kinds that make up the agreement lifecycle (one active at a time); an
+ *  amendment is a separate, parallel ceremony tracked on its own. */
+const AGREEMENT_KINDS = ["lease", "renewal"] as const;
 
 /** notes stamped on the completed e-signed artifact document; the lease's
  *  documents list keys its "Signed" badge off this exact value. */
 export const SIGNED_AGREEMENT_NOTE = "E-signed agreement";
 
 export function signingKindLabel(kind: string): string {
-  return KIND_LABEL[(kind === "renewal" ? "renewal" : "lease") as SigningKind];
+  return KIND_LABEL[kind as SigningKind] ?? KIND_LABEL.lease;
 }
 
 function sha256Hex(text: string): string {
@@ -170,6 +175,10 @@ export async function createSigningRequest(i: {
   /** Override computed agreement vars (e.g. a renewal's proposed rent/end date)
    *  so the signed document reflects the NEW terms, not the lease's current ones. */
   varOverrides?: TemplateVars;
+  /** Source template to freeze instead of the lease/org agreement (an amendment
+   *  supplies its own rider template). Rendered through the same single-pass
+   *  substitution, so it must carry the signature markers it wants stamped. */
+  documentTemplate?: string;
   now?: Date;
 }): Promise<CreateSigningRequestResult> {
   const now = i.now ?? new Date();
@@ -189,15 +198,23 @@ export async function createSigningRequest(i: {
     };
   }
 
+  // One open ceremony at a time PER CATEGORY: a new lease/renewal is blocked by
+  // another open lease/renewal, and a new amendment by another open amendment —
+  // but an amendment and the agreement signing can be out concurrently (separate
+  // documents, separate links).
+  const kindScope =
+    i.kind === "amendment" ? "amendment" : { in: [...AGREEMENT_KINDS] };
   const existing = await prisma.signingRequest.findFirst({
-    where: { leaseId: i.leaseId, status: "sent", expiresAt: { gt: now } },
+    where: { leaseId: i.leaseId, status: "sent", expiresAt: { gt: now }, kind: kindScope },
     select: { id: true },
   });
   if (existing) {
     return {
       ok: false,
       error:
-        "A signing request is already in progress for this lease — cancel it before sending a new one.",
+        i.kind === "amendment"
+          ? "An amendment is already out for signature on this lease — cancel it before sending another."
+          : "A signing request is already in progress for this lease — cancel it before sending a new one.",
     };
   }
 
@@ -205,13 +222,15 @@ export async function createSigningRequest(i: {
   // frozen wording snapshot (lease.agreementText, captured at creation) so the
   // signing page matches the printable page; a RENEWAL adopts the CURRENT
   // org-wide template, so renewed wording can differ from the prior lease (the
-  // signing page diffs the two for the tenant). Signature/initial markers
-  // survive substitution (passthrough vars) so the signing page and final
-  // artifact can stamp marks at every occurrence.
+  // signing page diffs the two for the tenant); an AMENDMENT supplies its own
+  // rider template via i.documentTemplate. Signature/initial markers survive
+  // substitution (passthrough vars) so the signing page and final artifact can
+  // stamp marks at every occurrence.
   const sourceTemplate =
-    i.kind === "renewal"
+    i.documentTemplate ??
+    (i.kind === "renewal"
       ? orgAgreementTemplate(app)
-      : leaseAgreementTemplate(lease);
+      : leaseAgreementTemplate(lease));
   const documentText = renderTemplate(sourceTemplate, {
     ...markerPassthroughVars(),
     ...vars,
@@ -354,7 +373,7 @@ export async function resendSignerLink(i: {
     name: signer.name,
     email: signer.email,
     token,
-    kind: signer.request.kind === "renewal" ? "renewal" : "lease",
+    kind: signer.request.kind as SigningKind,
     expiresAt: signer.request.expiresAt,
     timezone: lease?.unit.property.timezone ?? "America/New_York",
     actor: i.actor,
@@ -475,7 +494,10 @@ export async function completeIfAllSigned(
         signers,
         completedAtISO: now.toISOString(),
       });
-      const fileName = `lease-signed-${slugPart(lease.unit.unitNumber, "unit")}-${slugPart(
+      // Kind-aware prefix so a signed amendment is distinguishable from the
+      // signed lease in the Documents list (both share the SIGNED badge note).
+      const namePrefix = request.kind === "amendment" ? "amendment-signed" : "lease-signed";
+      const fileName = `${namePrefix}-${slugPart(lease.unit.unitNumber, "unit")}-${slugPart(
         lease.tenant.lastName,
         "tenant",
       )}.html`;
@@ -809,7 +831,7 @@ export async function getSigningPageData(
   return {
     state,
     businessName: app.businessName,
-    kind: request.kind === "renewal" ? "renewal" : "lease",
+    kind: request.kind as SigningKind,
     documentText: request.documentText,
     needsInitials: documentNeedsInitials(request.documentText),
     landlordName: request.landlordName,
@@ -859,21 +881,24 @@ export async function getLeaseSigningOverview(
   leaseId: string,
   now: Date = new Date(),
 ): Promise<LeaseSigningOverview> {
+  // This panel tracks the AGREEMENT lifecycle only — amendments have their own
+  // panel/list, so they never appear here as active/completed/expired.
+  const agreementKinds = { in: [...AGREEMENT_KINDS] };
   const [active, completed] = await Promise.all([
     prisma.signingRequest.findFirst({
-      where: { leaseId, status: "sent", expiresAt: { gt: now } },
+      where: { leaseId, status: "sent", expiresAt: { gt: now }, kind: agreementKinds },
       orderBy: { sentAt: "desc" },
       include: { signers: { orderBy: { createdAt: "asc" } } },
     }),
     prisma.signingRequest.findFirst({
-      where: { leaseId, status: "completed" },
+      where: { leaseId, status: "completed", kind: agreementKinds },
       orderBy: { completedAt: "desc" },
     }),
   ]);
   const expired = active
     ? null
     : await prisma.signingRequest.findFirst({
-        where: { leaseId, status: "sent", expiresAt: { lte: now } },
+        where: { leaseId, status: "sent", expiresAt: { lte: now }, kind: agreementKinds },
         orderBy: { sentAt: "desc" },
         select: { id: true, expiresAt: true },
       });

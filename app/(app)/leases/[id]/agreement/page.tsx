@@ -38,6 +38,11 @@ import {
   sendEsignRequestAction,
 } from "./actions";
 import { listRenewalOffersForLease } from "@/lib/services/lease-renewal";
+import {
+  listAmendmentsForLease,
+  type AmendmentDisplayStatus,
+} from "@/lib/services/lease-amendments";
+import { AmendmentForm } from "./amendment-form";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { formatDateInTz } from "@/lib/dates";
 
@@ -59,6 +64,30 @@ function termRow(label: string, value: string) {
       <dd className="text-right font-medium tabular-nums">{value}</dd>
     </div>
   );
+}
+
+function AmendmentStatusBadge({ status }: { status: AmendmentDisplayStatus }) {
+  switch (status) {
+    case "completed":
+      return <Badge>Signed</Badge>;
+    case "out_for_signature":
+      return <Badge variant="outline">Out for signature</Badge>;
+    case "expired":
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+        >
+          Expired
+        </Badge>
+      );
+    case "canceled":
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          Canceled
+        </Badge>
+      );
+  }
 }
 
 function SignatureBlock({
@@ -152,6 +181,25 @@ export default async function LeaseAgreementPage({
       signedDocUrl = null; // storage unavailable — the panel still renders
     }
   }
+
+  // Amendments / addenda (own e-sign ceremony, separate from the agreement
+  // lifecycle). Resolve a direct download for each signed one; the artifact also
+  // lands in "Documents on this lease" below.
+  const amendments = esign ? await listAmendmentsForLease(lease.id) : [];
+  const amendmentRows = await Promise.all(
+    amendments.map(async (a) => {
+      let signedUrl: string | null = null;
+      if (a.signedDocumentId) {
+        try {
+          signedUrl = (await getDocumentDownloadUrl(a.signedDocumentId))?.url ?? null;
+        } catch {
+          signedUrl = null; // storage unavailable — still list the row
+        }
+      }
+      return { ...a, signedUrl };
+    }),
+  );
+  const hasOpenAmendment = amendmentRows.some((a) => a.status === "out_for_signature");
 
   // Every document attached to this lease (generated .docx, the e-signed copy,
   // any uploads) with a best-effort direct download link — so the signed
@@ -489,6 +537,163 @@ export default async function LeaseAgreementPage({
               <p className="text-xs text-emerald-700 dark:text-emerald-400">
                 A renewal was accepted — the end date and scheduled rent are updated.
               </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {esign && (
+        <Card className="print-hidden">
+          <CardContent className="space-y-4 py-5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Amendments &amp; addenda
+              </h2>
+              {!hasOpenAmendment && app.landlordSignatureName && (
+                <AmendmentForm leaseId={lease.id} />
+              )}
+            </div>
+
+            {!app.landlordSignatureName && (
+              <p className="text-xs text-destructive">
+                No landlord signature is saved yet — set it up under{" "}
+                <Link
+                  href="/settings/leases"
+                  className="font-medium underline underline-offset-4"
+                >
+                  Settings → Leases
+                </Link>{" "}
+                before sending an amendment.
+              </p>
+            )}
+
+            {amendmentRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No amendments yet. Add a signed rider to change a term mid-lease —
+                a pet or parking addendum, an added occupant, or a rent change —
+                without rewriting the whole lease. All other terms stay in effect.
+              </p>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {amendmentRows.map((a) => {
+                  const signedCount = a.signers.filter((s) => s.signedAt).length;
+                  const showProgress =
+                    a.status === "out_for_signature" || a.status === "expired";
+                  return (
+                    <div key={a.id} className="space-y-2.5 px-3 py-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium break-words">{a.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Sent {fmtDate(a.sentAt)}
+                            {showProgress &&
+                              ` · ${signedCount}/${a.signers.length} signed`}
+                            {a.status === "completed" &&
+                              a.completedAt &&
+                              ` · signed ${fmtDate(a.completedAt)}`}
+                          </div>
+                        </div>
+                        <AmendmentStatusBadge status={a.status} />
+                      </div>
+
+                      {a.status === "out_for_signature" && (
+                        <div className="space-y-2">
+                          <div className="divide-y rounded-md border">
+                            {a.signers.map((s) => {
+                              const channels = [
+                                s.phone ? "SMS" : null,
+                                s.email ? "email" : null,
+                              ].filter(Boolean);
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="font-medium">{s.name}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {channels.length > 0 ? (
+                                        <>via {channels.join(" + ")}</>
+                                      ) : (
+                                        <span className="text-destructive">
+                                          no contact method on file
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {s.signedAt ? (
+                                    <Badge>Signed {fmtDate(s.signedAt)}</Badge>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline">Pending</Badge>
+                                      <form action={resendEsignLinkAction}>
+                                        <input
+                                          type="hidden"
+                                          name="leaseId"
+                                          value={lease.id}
+                                        />
+                                        <input
+                                          type="hidden"
+                                          name="signerId"
+                                          value={s.id}
+                                        />
+                                        <Button
+                                          type="submit"
+                                          variant="outline"
+                                          size="xs"
+                                        >
+                                          Resend
+                                        </Button>
+                                      </form>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <form action={cancelEsignRequestAction}>
+                            <input type="hidden" name="leaseId" value={lease.id} />
+                            <input type="hidden" name="requestId" value={a.id} />
+                            <ConfirmSubmitButton
+                              variant="outline"
+                              confirmMessage="Cancel this amendment? Links already sent will stop working."
+                            >
+                              Cancel amendment
+                            </ConfirmSubmitButton>
+                          </form>
+                        </div>
+                      )}
+
+                      {a.status === "completed" &&
+                        (a.signedUrl ? (
+                          <a
+                            href={a.signedUrl}
+                            className="text-sm font-medium underline underline-offset-4"
+                          >
+                            Download the signed amendment
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            The signed copy is listed under “Documents on this lease”.
+                          </span>
+                        ))}
+
+                      {a.status === "expired" && (
+                        <form action={cancelEsignRequestAction}>
+                          <input type="hidden" name="leaseId" value={lease.id} />
+                          <input type="hidden" name="requestId" value={a.id} />
+                          <ConfirmSubmitButton
+                            variant="outline"
+                            confirmMessage="Dismiss this expired amendment?"
+                          >
+                            Dismiss
+                          </ConfirmSubmitButton>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>

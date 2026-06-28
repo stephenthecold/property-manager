@@ -112,8 +112,12 @@ export default async function SignPage({
       <div className="space-y-1 text-center">
         <div className="text-lg font-semibold">{data.businessName}</div>
         <h1 className="text-2xl font-semibold tracking-wide">
-          {data.kind === "renewal" ? "Lease renewal" : "Lease agreement"} — ready
-          for your signature
+          {data.kind === "renewal"
+            ? "Lease renewal"
+            : data.kind === "amendment"
+              ? "Lease amendment"
+              : "Lease agreement"}{" "}
+          — ready for your signature
         </h1>
         <p className="text-sm text-muted-foreground">
           Prepared for {data.signer.name}

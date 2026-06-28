@@ -26,7 +26,9 @@ import {
   cancelRenewalOffer,
   createRenewalOffer,
 } from "@/lib/services/lease-renewal";
+import { createLeaseAmendment } from "@/lib/services/lease-amendments";
 import { toCents } from "@/lib/money";
+import { getFormString, type FormState } from "@/lib/forms";
 
 export interface GenerateDocxState {
   ok?: boolean;
@@ -313,4 +315,35 @@ export async function cancelRenewalOfferAction(fd: FormData): Promise<void> {
   }
   if (!result.ok) backToAgreement(leaseId, { error: result.error });
   backToAgreement(leaseId, { message: "Renewal offer canceled." });
+}
+
+/**
+ * Draft + send a lease amendment for e-signature. FormDialog-shaped (returns
+ * FormState) so a validation message renders inline in the dialog instead of as
+ * a page redirect. Same dual gate as a renewal: amending the lease
+ * (leases.manage) AND dispatching a tenant e-sign with the saved landlord
+ * signature (esign.manage).
+ */
+export async function createAmendmentAction(
+  _prev: FormState,
+  fd: FormData,
+): Promise<FormState> {
+  await requireCapability("leases.manage");
+  await requireCapability("esign.manage");
+  const actor = await auditActor();
+
+  const leaseId = getFormString(fd, "leaseId");
+  if (!leaseId) return { error: "Missing lease." };
+  const title = getFormString(fd, "title");
+  const body = getFormString(fd, "body");
+
+  let result;
+  try {
+    result = await createLeaseAmendment({ leaseId, title, body, actor });
+  } catch (e) {
+    console.error("[amendment] create failed:", e);
+    return { error: "Could not send the amendment — check the server log." };
+  }
+  if (!result.ok) return { error: result.error };
+  return { ok: true };
 }
