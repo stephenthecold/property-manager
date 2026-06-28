@@ -9,15 +9,18 @@ import {
 } from "@/lib/services/app-settings";
 import { getOverdue } from "@/lib/services/reports";
 import { expiringLeases } from "@/lib/services/lease-expirations";
+import { listExpiringWarranties } from "@/lib/services/warranty-alerts";
 import {
   formatExpirationDigest,
   formatMaintenanceDigest,
   formatOverdueDigest,
+  formatWarrantyDigest,
   isoWeekKey,
   type ExpirationDigestRow,
   type MaintenanceDigestJobRow,
   type MaintenanceDigestTaskRow,
   type OverdueDigestRow,
+  type WarrantyDigestRow,
 } from "@/lib/reminders/digest";
 import { nextOccurrenceISO } from "@/lib/maintenance/schedule";
 import { OPEN_STATUSES } from "@/lib/maintenance/status";
@@ -373,6 +376,92 @@ export async function runWeeklyLeaseExpirationDigest(
       leaseCount: rows.length,
       windowDays: settings.leaseExpirationAlertDays,
     },
+  });
+
+  return { sent, skipped };
+}
+
+/**
+ * Weekly asset-warranty digest: registered assets whose warranty is expired or
+ * expiring within 30 days (classified per property tz via the pure
+ * warrantyState, through listExpiringWarranties). Reuses the maintenance-digest
+ * opt-in (notifyMaintenanceDigest) + the Maintenance module gate; email-only,
+ * same Monday cron, one audit row per ISO week so a restart can't double-send.
+ */
+export async function runWeeklyWarrantyDigest(
+  now: Date,
+): Promise<StaffDigestResult> {
+  const settings = await getAppSettings();
+  if (!settings.modules.maintenance) {
+    return { sent: 0, skipped: 0, reason: "maintenance module disabled" };
+  }
+  if (!settings.emailEnabled) {
+    return { sent: 0, skipped: 0, reason: "email disabled" };
+  }
+
+  const assets = await listExpiringWarranties(now);
+  if (assets.length === 0) {
+    return { sent: 0, skipped: 0, reason: "no expiring warranties" };
+  }
+
+  const rows: WarrantyDigestRow[] = assets.map((a) => ({
+    assetName: a.assetName,
+    propertyName: a.propertyName,
+    unitLabel: a.unitLabel,
+    // warrantyExpiresOn is stored midnight in the property tz — render it back there.
+    expiresISO: DateTime.fromJSDate(a.warrantyExpiresOn, {
+      zone: a.timezone,
+    }).toFormat("yyyy-MM-dd"),
+    daysUntil: a.daysUntil,
+    state: a.state,
+  }));
+
+  const digest = formatWarrantyDigest({
+    businessName: settings.businessName,
+    now,
+    rows,
+  });
+  if (!digest) {
+    return { sent: 0, skipped: 0, reason: "no expiring warranties" };
+  }
+
+  const recipients = await staffNotificationRecipients("notifyMaintenanceDigest");
+  if (recipients.length === 0) {
+    return { sent: 0, skipped: 0, reason: "no staff recipients" };
+  }
+
+  let provider: EmailProvider;
+  try {
+    provider = await resolveEmailProvider();
+  } catch (e) {
+    return { sent: 0, skipped: recipients.length, reason: errorMessage(e) };
+  }
+
+  let sent = 0;
+  let skipped = 0;
+  for (const recipient of recipients) {
+    try {
+      const res = await provider.send({
+        to: recipient.email,
+        subject: digest.subject,
+        text: digest.text,
+      });
+      if (res.status === "failed") skipped++;
+      else sent++;
+    } catch (e) {
+      skipped++;
+      console.error(`[warranty-digest] send failed:`, errorMessage(e));
+    }
+  }
+
+  // ONE audit row per weekly run, keyed by ISO week. Aggregates only.
+  await writeAudit(prisma, {
+    actorType: "system",
+    actorId: null,
+    action: "digest.staff_warranty_sent",
+    entityType: "StaffDigest",
+    entityId: `warranty:${isoWeekKey(now)}`,
+    after: { recipients: sent, assetCount: rows.length },
   });
 
   return { sent, skipped };

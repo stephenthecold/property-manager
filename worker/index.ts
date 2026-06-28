@@ -12,6 +12,7 @@ import {
   runWeeklyLeaseExpirationDigest,
   runWeeklyMaintenanceDigest,
   runWeeklyStaffDigest,
+  runWeeklyWarrantyDigest,
 } from "@/lib/services/staff-digest";
 import { runReportScheduleDelivery } from "@/lib/services/report-schedules";
 
@@ -185,6 +186,16 @@ async function runStaffDigestOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] lease-expiration digest failed:", e);
+  }
+  // The warranty digest shares the Monday cadence + per-week idempotency;
+  // isolated so a failure never blocks the others.
+  try {
+    const res = await runWeeklyWarrantyDigest(new Date());
+    console.log(
+      `[worker] warranty digest: sent=${res.sent} skipped=${res.skipped}${res.reason ? ` (${res.reason})` : ""}`,
+    );
+  } catch (e) {
+    console.error("[worker] warranty digest failed:", e);
   }
 }
 
