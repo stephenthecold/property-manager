@@ -177,21 +177,29 @@ export function ApplyTermsForm({ activeLeases }: { activeLeases: number }) {
   );
 }
 
-export function PaymentMethodsForm({ initialCashtag }: { initialCashtag: string }) {
+export interface PaymentMethodsInitial {
+  cashtag: string;
+  /** Which offline methods the tenant portal offers as self-report options. */
+  cashApp: boolean;
+  cash: boolean;
+  ach: boolean;
+}
+
+export function PaymentMethodsForm({ initial }: { initial: PaymentMethodsInitial }) {
   const [state, formAction, pending] = useActionState<BillingState, FormData>(
     savePaymentMethodsAction,
     {},
   );
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="space-y-4">
       <StateAlerts state={state} />
       <div className="space-y-2">
         <Label htmlFor="cashAppCashtag">Cash App cashtag</Label>
         <Input
           id="cashAppCashtag"
           name="cashAppCashtag"
-          defaultValue={initialCashtag}
+          defaultValue={initial.cashtag}
           placeholder="$YourBusiness"
           maxLength={21}
         />
@@ -202,6 +210,45 @@ export function PaymentMethodsForm({ initialCashtag }: { initialCashtag: string 
           API — record incoming payments manually with the “cash app” method and
           the transaction reference. Leave blank to disable.
         </p>
+      </div>
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Tenant portal self-report options</div>
+        <p className="text-xs text-muted-foreground">
+          Which offline methods tenants can report paying from the portal (the
+          Tenant payments module must be on). A self-report is recorded as
+          pending and only changes a balance once you confirm it under Payments →
+          “pending self-reports”.
+        </p>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="methodCashApp"
+            defaultChecked={initial.cashApp}
+            className="mt-0.5 size-4 accent-primary"
+          />
+          <span>Cash App (needs a cashtag above)</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="methodCash"
+            defaultChecked={initial.cash}
+            className="mt-0.5 size-4 accent-primary"
+          />
+          <span>Cash</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="methodAch"
+            defaultChecked={initial.ach}
+            className="mt-0.5 size-4 accent-primary"
+          />
+          <span>
+            Bank transfer / ACH (also enables Stripe ACH bank debit at online
+            checkout when a Stripe gateway is configured)
+          </span>
+        </label>
       </div>
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving…" : "Save payment methods"}

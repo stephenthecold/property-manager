@@ -70,6 +70,12 @@ export default async function PaymentsPage({
     },
   });
 
+  // Tenant self-reported payments awaiting staff confirmation (pending + never
+  // posted to the ledger). Surfaced as a link to the confirmation queue.
+  const pendingSelfReports = await prisma.payment.count({
+    where: { status: "pending", reportedAt: { not: null } },
+  });
+
   // Active leases for the "Record payment" dialog's lease picker.
   const activeLeases = await prisma.lease.findMany({
     where: { status: { in: ["active", "month_to_month"] } },
@@ -155,11 +161,23 @@ export default async function PaymentsPage({
             Showing the 100 most recent.
           </p>
         </div>
-        <RecordPaymentDialog
-          leaseOptions={leaseOptions}
-          payerOptions={payerOptions}
-          trigger="Record payment"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {pendingSelfReports > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/payments/pending" />}
+            >
+              {pendingSelfReports} pending self-report
+              {pendingSelfReports === 1 ? "" : "s"} to confirm
+            </Button>
+          )}
+          <RecordPaymentDialog
+            leaseOptions={leaseOptions}
+            payerOptions={payerOptions}
+            trigger="Record payment"
+          />
+        </div>
       </div>
 
       <form method="GET" className="flex flex-wrap items-end gap-3">

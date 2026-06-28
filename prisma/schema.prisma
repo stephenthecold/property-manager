@@ -447,6 +447,14 @@ model AppSettings {
   // portal's "how to pay" panel. Manual recording only — Cash App has no API.
   cashAppCashtag String?
 
+  // Which offline payment methods the TENANT PORTAL offers as "I paid via …"
+  // self-report options, e.g. { "cashApp": true, "cash": true, "ach": false }.
+  // Gates only the tenant-facing pay-instructions surfaces (the payments module
+  // must also be on). Missing keys use the defaults in
+  // lib/services/app-settings.ts (resolvePortalPaymentMethods). Never touches
+  // the ledger — a self-report is recorded pending until staff confirm it.
+  portalPaymentMethods Json @default("{}")
+
   // Org-wide charge defaults ("rates"), editable in Settings -> Billing
   // (finance+). Prefill new leases/units; an explicit bulk action can apply
   // grace/late-fee terms to existing active leases.
@@ -937,6 +945,15 @@ model Payment {
   // captured inbound email (module "mailbox"). Loose ref like tenantId — never
   // affects allocation or balances.
   sourceEmailId    String?
+  // Tenant self-report → confirm flow (payments module). A self-reported offline
+  // payment is created with status=pending + reportedAt set and NO LedgerEntry /
+  // ChargeAllocation, so it does NOT change the lease balance. Staff CONFIRM is
+  // the only step that posts (status=posted, sets confirmedAt/By, writes the
+  // ledger entry + FIFO allocations); REJECT marks it voided with no ledger
+  // touch. null on all three for staff-recorded/gateway payments.
+  reportedAt       DateTime?
+  confirmedAt      DateTime?
+  confirmedBy      String?
   notes            String?
   createdBy        String?
   createdAt        DateTime      @default(now())
