@@ -169,6 +169,19 @@ model User {
   // Per-user UI preference only — resolved/clamped to known sections in
   // lib/dashboard/layout.ts; never security-relevant.
   dashboardLayout Json?
+  // Optional staff 2FA (TOTP). The base32 secret is AES-256-GCM encrypted at
+  // rest with SETTINGS_ENC_KEY (field-bound AAD), mirroring the OIDC/SMS
+  // secrets — null until enrollment starts. totpConfirmedAt is null until the
+  // user proves a live code (enrollment complete); a non-null value means 2FA
+  // is active and is required at login. totpBackupCodes is a JSON array of
+  // { hash, usedAt } one-time recovery codes (argon2id-hashed). See
+  // lib/auth/totp.ts + lib/services/totp.ts. Break-glass logins bypass all of
+  // this (recovery lane).
+  totpSecretCiphertext String?
+  totpSecretNonce      String?
+  totpSecretTag        String?
+  totpConfirmedAt      DateTime?
+  totpBackupCodes      Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -453,6 +466,13 @@ model AppSettings {
   defaultLateFeeBps         Int?
   defaultLateFeeMaxCents    BigInt?
   defaultInternetFeeCents   BigInt?
+
+  // Security: when true, every staff member must have TOTP 2FA enrolled to use
+  // the app (unenrolled users are forced into enrollment at login). Owner-only
+  // toggle at Settings → Security. Break-glass sessions are exempt (recovery
+  // lane). Default off so existing installs are unchanged. Resolved into
+  // ResolvedAppSettings.require2fa (lib/services/app-settings.ts).
+  require2fa Boolean @default(false)
 
   updatedBy String?
   createdAt DateTime @default(now())

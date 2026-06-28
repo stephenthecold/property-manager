@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { requireCapability, auditActor } from "@/lib/auth/session";
 import { withAudit, writeAudit } from "@/lib/audit/audit";
+import { adminResetTotp } from "@/lib/services/totp";
 import { isRole, roleAtLeast } from "@/lib/auth/rbac";
 import { VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { getFormString as str } from "@/lib/forms";
@@ -143,6 +144,29 @@ export async function exitViewAs(): Promise<void> {
     });
   }
   revalidatePath("/", "layout");
+}
+
+/**
+ * Admin/recovery reset of a user's 2FA (Settings → Users). Clears their TOTP so
+ * a staff member locked out of their authenticator + backup codes can re-enroll
+ * (a break-glass owner uses this to recover too). Guards mirror role/active:
+ * admins cannot reset the owner unless they ARE the owner; bumps the target's
+ * security stamp. Audited in adminResetTotp.
+ */
+export async function resetUserTotp(fd: FormData): Promise<void> {
+  const { dbUser: actor } = await requireCapability("users.manage");
+  const userId = str(fd, "userId");
+  if (!userId) fail("Invalid user.");
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) fail("User not found.");
+  if (target.role === "owner" && actor.role !== "owner") {
+    fail("Only the owner can reset the owner's two-factor authentication.");
+  }
+  const result = await adminResetTotp(target.id, {
+    ...(await auditActor()),
+  });
+  if (!result.ok) fail(result.error);
+  revalidatePath("/settings/users");
 }
 
 /** Admin-managed notification settings for any user (Settings → Users). */

@@ -13,6 +13,9 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/emergency",
   "/setup",
+  "/2fa", // 2FA challenge/enrollment step — reached AFTER primary auth but while
+  //         the session is still twoFactorPending; the page re-checks the
+  //         session itself (a truly anonymous visitor is bounced to /login there).
   "/api/auth",
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
   "/api/sms/inbound", // inbound STOP/START/HELP webhook — HMAC-verified, not session
@@ -49,6 +52,7 @@ export const authConfig = {
         session.user.securityStamp = token.securityStamp as string | undefined;
         session.user.viaBreakGlass = token.viaBreakGlass as boolean | undefined;
         session.user.bgExpiresAt = token.bgExp as number | undefined;
+        session.user.twoFactorPending = token.twoFactorPending as boolean | undefined;
       }
       return session;
     },

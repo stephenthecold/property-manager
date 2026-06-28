@@ -61,6 +61,26 @@ export function sha256(value: string): string {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+/**
+ * Keyed HMAC-SHA-256 over `value` using the server KEK (SETTINGS_ENC_KEY). Used
+ * to mint short, unforgeable server-side proofs that travel through an otherwise
+ * client-influenced channel (e.g. the NextAuth session-update body): a client
+ * cannot compute this without the secret. Returns base64.
+ */
+export function hmacSign(value: string): string {
+  return crypto.createHmac("sha256", kek()).update(value, "utf8").digest("base64");
+}
+
+/** Constant-time check of an {@link hmacSign} proof for `value`. */
+export function hmacVerify(value: string, proof: string): boolean {
+  if (!proof) return false;
+  const expected = hmacSign(value);
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(proof, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 const ARGON2_OPTS = {
   type: argon2.argon2id,
   memoryCost: 19456, // ~19 MiB
