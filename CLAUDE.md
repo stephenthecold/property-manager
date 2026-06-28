@@ -3,11 +3,16 @@
 Rental property-management platform. Phases 1–4.7 are built and deployed (core app, receipts,
 SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) — see
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for what exists and
-[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. A Phase-5 batch of enterprise-gap
-features has since shipped (two-way SMS inbox, ⌘K global search, per-tenant activity timeline,
-work-order lifecycle, preventive-maintenance log, asset/warranty registry, lease-expiration alerts,
-portal notices, lease abstract, reminder delivery tracking, maintenance/audit photos & CSV export) —
-the prioritized enterprise-gap backlog ([`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md))
+[`docs/PHASE5_PLAN.md`](docs/PHASE5_PLAN.md) for the next phase. Several Phase-5 batches of
+enterprise-gap features have since shipped — two-way SMS inbox, ⌘K global search, per-tenant activity
+timeline, work-order lifecycle, preventive-maintenance log, asset/warranty registry + warranty
+alerts, lease-expiration alerts, portal notices, lease abstract, reminder delivery tracking,
+maintenance/audit photos & CSV export; then renewals, lease amendments, deposit→ledger move-out,
+inspection templates, turnover/make-ready; most recently a payments module (offline self-report →
+staff confirm), an own-LLC portfolio rollup, a public `/vacancies` page, report PDF/Excel export +
+scheduled delivery, email-bounce + reminder-preference hardening, optional staff 2FA/TOTP, and an
+app-wide UI-consistency harden — the prioritized enterprise-gap backlog
+([`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md))
 tracks what shipped, what's left, and the pending live-DB verification pass (refresh it with
 `/competitive-audit`; turn an item into a build with `/feature-intake`). This file is the working
 guide; [`docs/`](docs/) has the details.
