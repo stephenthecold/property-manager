@@ -1563,6 +1563,9 @@ model PropertyExpense {
   @@index([unitId])
   @@index([category])
   @@index([vendorId])
+  // Partial unique index (raw SQL migration — not expressible in Prisma schema):
+  // UNIQUE(sourceType, sourceId) WHERE sourceType = 'maintenance_job'. Enforces
+  // exactly one expense mirror per maintenance job so completion is idempotent.
 }
 
 // ---------------------------------------------------------------------------

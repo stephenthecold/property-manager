@@ -102,4 +102,23 @@ describe("dailyLateFeeAccruals ($10/day after 5 grace days)", () => {
       (7000n + a.reduce((s, x) => s + x.amountCents, 0n)) <= 10000n,
     ).toBe(true);
   });
+
+  it("re-assessment at the same clock posts nothing already posted (no double-accrual)", () => {
+    // First pass: 4 days late, all accrued and posted.
+    const first = dailyLateFeeAccruals({ ...base, now: new Date("2026-06-10T12:00:00-04:00") });
+    expect(first.map((x) => x.day)).toEqual([1, 2, 3, 4]);
+    const postedThrough = first[first.length - 1].day;
+    const postedSum = first.reduce((s, x) => s + x.amountCents, 0n);
+    // Second pass at the SAME `now` with those days posted returns nothing. This
+    // is the void-charge → recreate-same-period → re-assess path: each accrued
+    // day's key is "<periodKey>+d<N>" (already posted), so the resume window is
+    // empty and the partial unique index would block any duplicate regardless.
+    const second = dailyLateFeeAccruals({
+      ...base,
+      fromDay: postedThrough,
+      alreadyAccruedCents: postedSum,
+      now: new Date("2026-06-10T12:00:00-04:00"),
+    });
+    expect(second).toEqual([]);
+  });
 });
