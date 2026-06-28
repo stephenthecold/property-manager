@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 export default async function BillingSettingsPage() {
   await requireCapability("billing.settings");
-  const { billing, cashAppCashtag } = await getAppSettings();
+  const { billing, cashAppCashtag, portalPaymentMethods } = await getAppSettings();
   const activeLeases = await prisma.lease.count({
     where: { status: { in: ["active", "month_to_month"] } },
   });
@@ -59,7 +59,14 @@ export default async function BillingSettingsPage() {
           <CardTitle className="text-base">How tenants pay</CardTitle>
         </CardHeader>
         <CardContent>
-          <PaymentMethodsForm initialCashtag={cashAppCashtag ?? ""} />
+          <PaymentMethodsForm
+            initial={{
+              cashtag: cashAppCashtag ?? "",
+              cashApp: portalPaymentMethods.cashApp,
+              cash: portalPaymentMethods.cash,
+              ach: portalPaymentMethods.ach,
+            }}
+          />
         </CardContent>
       </Card>
     </div>

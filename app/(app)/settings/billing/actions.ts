@@ -7,6 +7,7 @@ import { writeAudit } from "@/lib/audit/audit";
 import {
   saveBillingDefaults,
   saveCashAppCashtag,
+  savePortalPaymentMethods,
   getAppSettings,
 } from "@/lib/services/app-settings";
 import { normalizeCashtag } from "@/lib/payments/cash-app";
@@ -205,9 +206,11 @@ export async function applyChargeTermsToActiveLeases(
 }
 
 /**
- * Save the org Cash App cashtag. Empty input clears it; otherwise it is
- * canonicalized to "$Tag". Surfaced to tenants via the {{cash_app_tag}} /
- * {{cash_app_link}} template variables and the portal's "how to pay" panel.
+ * Save the org Cash App cashtag AND which offline methods the tenant portal
+ * offers as self-report options (CashApp/Cash/ACH). The cashtag is canonicalized
+ * to "$Tag" (empty clears it). The method toggles only matter when the payments
+ * module is on; they never touch the ledger — a self-report stays pending until
+ * staff confirm it.
  */
 export async function savePaymentMethodsAction(
   _prev: BillingState,
@@ -222,10 +225,24 @@ export async function savePaymentMethodsAction(
         "That doesn't look like a cashtag — letters/numbers, starting with a letter, up to 20 characters (the $ is optional).",
     };
   }
-  await saveCashAppCashtag(cashtag, await auditActor());
+  const methods = {
+    cashApp: fd.get("methodCashApp") === "on",
+    cash: fd.get("methodCash") === "on",
+    ach: fd.get("methodAch") === "on",
+  };
+  if (methods.cashApp && cashtag === null) {
+    return {
+      error:
+        "Set a Cash App cashtag above to offer Cash App as a tenant payment method.",
+    };
+  }
+  const actor = await auditActor();
+  await saveCashAppCashtag(cashtag, actor);
+  await savePortalPaymentMethods(methods, actor);
   revalidatePath("/settings/billing");
+  revalidatePath("/portal");
   return {
     ok: true,
-    message: cashtag ? `Cash App cashtag saved as ${cashtag}.` : "Cash App cashtag cleared.",
+    message: "Payment methods saved.",
   };
 }

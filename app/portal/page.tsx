@@ -14,6 +14,7 @@ import { countServedNoticesForTenant } from "@/lib/services/notices";
 import { listPendingRenewalsForTenant } from "@/lib/services/portal-renewals";
 import { formatDateInTz } from "@/lib/dates";
 import { startPortalCheckoutAction } from "./pay/actions";
+import { SelfReportPaymentForm } from "./pay/self-report-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,15 +80,33 @@ export default async function PortalHomePage({
       ? snapshotFromAccounting(activeLease, activeLease.unit, now, tz, accounting)
       : null;
 
-  // Online "Pay now": available when a gateway is configured and there's an
-  // active lease. Default the amount to the balance (or current period due).
-  const payNowAvailable = !!activeLease && onlinePaymentsConfigured();
+  // Tenant-facing pay surfaces are gated by the `payments` module. Online "Pay
+  // now" also needs a configured gateway + an active lease.
+  const paymentsModuleOn = settings.modules.payments;
+  const payNowAvailable =
+    paymentsModuleOn && !!activeLease && onlinePaymentsConfigured();
   const defaultPayAmount =
     snap && snap.netBalanceCents > 0n
       ? fromCents(snap.netBalanceCents)
       : snap && snap.currentPeriodOutstandingCents > 0n
         ? fromCents(snap.currentPeriodOutstandingCents)
         : "";
+
+  // Offline self-report: which methods the operator enabled (CashApp needs a
+  // cashtag set to be meaningful). Only rendered with the payments module on.
+  const methodCfg = settings.portalPaymentMethods;
+  const selfReportMethods = paymentsModuleOn
+    ? [
+        ...(methodCfg.cashApp && settings.cashAppCashtag
+          ? [{ value: "cash_app", label: "Cash App" }]
+          : []),
+        ...(methodCfg.cash ? [{ value: "cash", label: "Cash" }] : []),
+        ...(methodCfg.ach ? [{ value: "ach", label: "Bank transfer (ACH)" }] : []),
+      ]
+    : [];
+  const showCashAppInstructions =
+    paymentsModuleOn && methodCfg.cashApp && !!settings.cashAppCashtag;
+  const showCashInstructions = paymentsModuleOn && methodCfg.cash;
 
   const [ledger, payments, receipts, documents, requests, noticeCount, pendingRenewals] = await Promise.all([
     activeLease
@@ -342,7 +361,7 @@ export default async function PortalHomePage({
               <Button type="submit">Pay now</Button>
             </form>
           )}
-          {settings.cashAppCashtag ? (
+          {showCashAppInstructions && settings.cashAppCashtag && (
             <p>
               Pay with Cash App:{" "}
               <a
@@ -355,10 +374,26 @@ export default async function PortalHomePage({
               </a>{" "}
               — include your unit number in the note.
             </p>
-          ) : (
+          )}
+          {showCashInstructions && (
+            <p>
+              Pay by cash: contact your property manager to arrange a drop-off or
+              pickup, then report it below so we can confirm it.
+            </p>
+          )}
+          {!payNowAvailable && !showCashAppInstructions && !showCashInstructions && (
             <p className="text-muted-foreground">
               Ask your property manager about payment options.
             </p>
+          )}
+          {/* Offline self-report → pending → staff confirm. Reporting NEVER
+              changes the balance; staff confirmation posts it to the ledger. */}
+          {activeLease && selfReportMethods.length > 0 && (
+            <SelfReportPaymentForm
+              leaseId={activeLease.id}
+              methods={selfReportMethods}
+              defaultAmount={defaultPayAmount}
+            />
           )}
           <PaymentPreferenceForm current={tenant.preferredPaymentMethod} />
           <div className="border-t pt-4">

@@ -19,6 +19,7 @@ export async function saveModulesAction(fd: FormData): Promise<void> {
       publicSite: fd.get("publicSite") === "on",
       mailbox: fd.get("mailbox") === "on",
       tenantLedgerExport: fd.get("tenantLedgerExport") === "on",
+      payments: fd.get("payments") === "on",
     },
     await auditActor(),
   );

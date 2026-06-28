@@ -73,6 +73,12 @@ const MODULE_INFO = [
     description:
       "Adds an Account ledger page in the resident portal (/portal/ledger) where a signed-in tenant can filter their OWN charge/payment history by date range and entry type and download it as a CSV. Strictly scoped to the logged-in tenant — they only ever see and export their own ledger. Requires the Tenant portal module to be on. Turning it off removes the ledger page, the filters, and the CSV download (the export endpoint also stops responding); nothing is deleted.",
   },
+  {
+    key: "payments" as const,
+    label: "Tenant payments (online pay & self-report)",
+    description:
+      "Turns on the TENANT-FACING ways to pay in the portal: online checkout (Stripe card / ACH bank debit, when a gateway is configured) and the offline pay-instructions + “I paid via CashApp/Cash/ACH” self-report. A self-report is recorded as PENDING and does NOT change the tenant's balance until staff confirm it from the pending queue (Payments → “Pending self-reports”) — confirming posts it to the ledger; rejecting discards it. Pick which offline methods to offer at Settings → Billing → How tenants pay. Requires the Tenant portal module to be on for the self-report surfaces. NOTE: staff manual payment recording is always available regardless of this toggle. Turning it off hides the tenant pay surfaces; recorded payments are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {
