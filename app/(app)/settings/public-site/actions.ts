@@ -66,10 +66,12 @@ export async function savePublicSiteAction(
       publicSiteHours: str(fd, "publicSiteHours") || null,
       publicSiteAmenities: str(fd, "publicSiteAmenities") || null,
       publicSiteShowAvailability: fd.get("publicSiteShowAvailability") === "on",
+      showVacancies: fd.get("showVacancies") === "on",
     },
     await auditActor(),
   );
   revalidatePath("/welcome");
+  revalidatePath("/vacancies");
   return { ok: true };
 }
 

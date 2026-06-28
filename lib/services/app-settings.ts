@@ -247,6 +247,8 @@ export interface ResolvedAppSettings {
   publicSiteGallery: PublicSiteGalleryItem[];
   /** Show the live current-availability (vacant units) section. */
   publicSiteShowAvailability: boolean;
+  /** Master switch for the dedicated public /vacancies browse page (default true). */
+  showVacancies: boolean;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
   /** Optional feature modules; disabling hides UI but never deletes data. */
@@ -416,6 +418,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     publicSiteHeroDocumentId: row?.publicSiteHeroDocumentId ?? null,
     publicSiteGallery: resolvePublicSiteGallery(row?.publicSiteGallery),
     publicSiteShowAvailability: row?.publicSiteShowAvailability ?? false,
+    showVacancies: row?.showVacancies ?? true,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
@@ -1305,6 +1308,8 @@ export interface PublicSiteSettingsInput {
   publicSiteHours: string | null;
   publicSiteAmenities: string | null;
   publicSiteShowAvailability: boolean;
+  /** Master switch for the dedicated public /vacancies browse page. */
+  showVacancies: boolean;
 }
 
 /**
