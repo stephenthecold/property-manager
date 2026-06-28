@@ -3,6 +3,7 @@ import { getDisplayRole } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability, type Capability } from "@/lib/auth/permissions";
 import { SettingsNav, type SettingsNavGroup } from "@/components/app/settings-nav";
+import { PageHeader } from "@/components/app/page-header";
 
 export const runtime = "nodejs";
 
@@ -101,15 +102,17 @@ export default async function SettingsLayout({
   if (groups.length === 0) redirect("/dashboard");
 
   return (
-    <div className="space-y-5">
-      <div className="border-b pb-3">
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You see only the sections your role can edit. Every change is audited.
-        </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Settings"
+        description="You see only the sections your role can edit. Every change is audited."
+      />
+      <div className="md:grid md:grid-cols-[200px_minmax(0,1fr)] md:gap-8 lg:gap-10">
+        <aside className="mb-6 border-b pb-6 md:mb-0 md:border-b-0 md:pb-0">
+          <SettingsNav groups={groups} />
+        </aside>
+        <div className="min-w-0">{children}</div>
       </div>
-      <SettingsNav groups={groups} />
-      {children}
     </div>
   );
 }

@@ -15,20 +15,24 @@ export interface SettingsNavGroup {
 }
 
 /**
- * Grouped top-tab settings nav: each logical group (Organization, Leasing,
- * Communications, Access, Platform) gets a small caps label with its sections
- * beneath, wrapping across the top so the content below can use the full width.
+ * Vertical settings sidebar: each logical group (Organization, Leasing,
+ * Communications, Access, Platform) is a small caps label with its sections
+ * stacked beneath. Sits in the left rail on md+ (sticky) and stacks above the
+ * content on mobile. The active section is marked with aria-current for AT.
  */
 export function SettingsNav({ groups }: { groups: SettingsNavGroup[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-wrap gap-x-6 gap-y-3 border-b pb-4">
+    <nav
+      aria-label="Settings sections"
+      className="flex flex-col gap-5 md:sticky md:top-6"
+    >
       {groups.map((group) => (
-        <div key={group.label} className="space-y-1.5">
-          <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div key={group.label} className="space-y-1">
+          <div className="px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {group.label}
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-col gap-0.5">
             {group.links.map((l) => {
               const active =
                 pathname === l.href || pathname.startsWith(`${l.href}/`);
@@ -36,6 +40,7 @@ export function SettingsNav({ groups }: { groups: SettingsNavGroup[] }) {
                 <Link
                   key={l.href}
                   href={l.href}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
                     "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     active
