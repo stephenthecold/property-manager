@@ -236,22 +236,42 @@ export async function completeJobAction(
       });
       // Mirror a real cost into the Financials expense log (cross-module seam).
       // The expense survives module toggles and job reopening — it is the
-      // financial record of money actually spent.
+      // financial record of money actually spent. Idempotent: exactly one
+      // expense per job (partial unique on sourceType+sourceId), so re-completing
+      // after a reopen UPDATES the mirror instead of stacking a duplicate that
+      // would double-count Financials.
       if (costCents != null && costCents > 0n) {
-        await tx.propertyExpense.create({
-          data: {
-            propertyId: job.propertyId,
-            unitId: job.unitId,
-            category: "maintenance",
-            amountCents: costCents,
-            incurredOn: new Date(),
-            description: `Maintenance: ${job.title}`,
-            vendorId: job.vendorId, // carry the job's vendor onto the expense
-            sourceType: "maintenance_job",
-            sourceId: job.id,
-            createdBy: dbUser.id,
-          },
+        const expenseData = {
+          propertyId: job.propertyId,
+          unitId: job.unitId,
+          category: "maintenance" as const,
+          amountCents: costCents,
+          incurredOn: new Date(),
+          description: `Maintenance: ${job.title}`,
+          vendorId: job.vendorId, // carry the job's vendor onto the expense
+        };
+        const existing = await tx.propertyExpense.findFirst({
+          where: { sourceType: "maintenance_job", sourceId: job.id },
+          select: { id: true },
         });
+        if (existing) {
+          // Refresh the cost/date/vendor but PRESERVE createdBy (who first
+          // logged the expense) — a later reopen→re-complete shouldn't
+          // re-attribute it to the re-completer.
+          await tx.propertyExpense.update({
+            where: { id: existing.id },
+            data: expenseData,
+          });
+        } else {
+          await tx.propertyExpense.create({
+            data: {
+              ...expenseData,
+              sourceType: "maintenance_job",
+              sourceId: job.id,
+              createdBy: dbUser.id,
+            },
+          });
+        }
       }
       return { result: updated, after: { status: "completed", costCents } };
     },
