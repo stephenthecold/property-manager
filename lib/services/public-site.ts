@@ -17,6 +17,13 @@ export interface PublicAvailabilityRow {
   availableOn: Date | null;
 }
 
+/** Display-only money format from integer cents — BigInt math, never a float. PURE. */
+export function formatRent(cents: bigint): string {
+  const dollars = (cents / 100n).toLocaleString("en-US");
+  const rem = Number(cents % 100n);
+  return rem === 0 ? `$${dollars}` : `$${dollars}.${String(rem).padStart(2, "0")}`;
+}
+
 /** "2 bd · 1 ba" (omits a missing side); "—" when neither is known. PURE. */
 export function formatBedsBaths(
   bedrooms: number | null,

@@ -329,6 +329,10 @@ model AppSettings {
   publicSiteHeroDocumentId String? // UploadedDocument.id (loose ref), uploadType "public_site"
   publicSiteGallery        Json    @default("[]") // [{ "id": "<UploadedDocument.id>" }, ...]
   publicSiteShowAvailability Boolean @default(false)
+  // Master switch for the dedicated public /vacancies browse page (gallery of
+  // available + upcoming-vacant units with filters + an Apply CTA). Defaults on;
+  // the page also requires the publicSite module to be enabled.
+  showVacancies            Boolean @default(true)
 
   // Email (SMTP). DB-only config — no env fallback. emailProvider null ->
   // not configured; "stub" logs only; "smtp" sends. Auth is either a password

@@ -36,6 +36,7 @@ export default async function PublicSiteSettingsPage() {
             publicSiteHours: s.publicSiteHours ?? "",
             publicSiteAmenities: s.publicSiteAmenities ?? "",
             showAvailability: s.publicSiteShowAvailability,
+            showVacancies: s.showVacancies,
             heroDocumentId: s.publicSiteHeroDocumentId,
             gallery: s.publicSiteGallery.map((g) => g.id),
             enabled: s.modules.publicSite,

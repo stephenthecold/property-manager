@@ -27,6 +27,7 @@ const PUBLIC_PREFIXES = [
   "/apply", // public rental-application intake — module-gated at the service layer
   "/sms-opt-in", // public SMS opt-in form — records consent only, no session
   "/welcome", // public marketing splash — module-gated, operator-authored copy, no data
+  "/vacancies", // public vacancies browse — module+setting-gated, marketing-safe vacant units only
 ];
 
 function isPublic(pathname: string): boolean {
