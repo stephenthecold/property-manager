@@ -256,6 +256,9 @@ export interface ResolvedAppSettings {
   showVacancies: boolean;
   /** Role→capability overrides vs. the default hierarchy ({} = defaults). */
   rolePermissions: PermissionMatrix;
+  /** Org-wide staff 2FA enforcement: when true, unenrolled staff are forced to
+   *  enroll TOTP at login (break-glass is exempt). Default false. */
+  require2fa: boolean;
   /** Optional feature modules; disabling hides UI but never deletes data. */
   modules: ModuleFlags;
   /** Public application form: per-field hidden/optional/required config. */
@@ -425,6 +428,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     publicSiteShowAvailability: row?.publicSiteShowAvailability ?? false,
     showVacancies: row?.showVacancies ?? true,
     rolePermissions: (row?.rolePermissions as PermissionMatrix) ?? {},
+    require2fa: row?.require2fa ?? false,
     modules: resolveModules(row?.modules),
     applicationFields: resolveFormConfig(row?.applicationFields),
     applicationCustomSections: resolveCustomSections(row?.applicationCustomSections),
@@ -771,6 +775,35 @@ export async function saveModules(
       entityId: "singleton",
       before: { modules: resolveModules(before?.modules) },
       after: { modules },
+    });
+  });
+  invalidateAppSettingsCache();
+}
+
+/**
+ * Persist the org-wide staff-2FA enforcement flag. Owner-only (enforced by the
+ * caller). When turned on, unenrolled staff are forced to enroll TOTP at login;
+ * break-glass remains exempt. Disabling never deletes anyone's enrollment.
+ */
+export async function saveRequire2fa(
+  require2fa: boolean,
+  actor: AuditContext,
+): Promise<void> {
+  const data = { require2fa, updatedBy: actor.actorId ?? null };
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.appSettings.findUnique({ where: { id: "singleton" } });
+    await tx.appSettings.upsert({
+      where: { id: "singleton" },
+      create: { id: "singleton", ...data },
+      update: data,
+    });
+    await writeAudit(tx, {
+      ...actor,
+      action: "settings.security.require2fa_updated",
+      entityType: "AppSettings",
+      entityId: "singleton",
+      before: before ? { require2fa: before.require2fa } : undefined,
+      after: { require2fa },
     });
   });
   invalidateAppSettingsCache();

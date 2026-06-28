@@ -17,5 +17,7 @@ export default async function SettingsIndexPage() {
   const { actingRole } = await getDisplayRole();
   const { rolePermissions } = await getAppSettings();
   const first = ORDER.find((s) => hasCapability(actingRole, s.cap, rolePermissions));
-  redirect(first?.href ?? "/dashboard");
+  // Security (2FA) is self-service for everyone, so it's the fallback landing
+  // for users with no editable settings capability (e.g. viewers).
+  redirect(first?.href ?? "/settings/security");
 }
