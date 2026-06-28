@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   requestCashPickupAction,
   savePaymentPreferenceAction,
+  saveReminderPrefAction,
   setSmsConsentAction,
   submitMaintenanceRequestAction,
   type PortalActionState,
@@ -98,6 +99,77 @@ export function SmsConsentForm({ current }: { current: boolean }) {
       <Button type="submit" size="sm" variant="outline" disabled={pending}>
         {pending ? "Saving…" : "Save preference"}
       </Button>
+    </form>
+  );
+}
+
+/**
+ * One per-reminder-type channel override row. The select offers SMS / Email /
+ * Off; SMS and Email are disabled when the tenant hasn't consented to that
+ * channel (the action enforces the same gate server-side). Saves on submit.
+ */
+export function ReminderPrefForm({
+  reminderType,
+  label,
+  description,
+  current,
+  smsAvailable,
+  emailAvailable,
+}: {
+  reminderType: string;
+  label: string;
+  description: string;
+  /** Effective stored channel: "sms" | "email" | "off" (defaults follow global). */
+  current: "sms" | "email" | "off";
+  smsAvailable: boolean;
+  emailAvailable: boolean;
+}) {
+  const [state, formAction, pending] = useActionState<PortalActionState, FormData>(
+    saveReminderPrefAction,
+    {},
+  );
+  return (
+    <form
+      action={formAction}
+      className="flex flex-wrap items-end justify-between gap-3 border-t py-3 first:border-t-0"
+    >
+      <input type="hidden" name="reminderType" value={reminderType} />
+      <div className="min-w-0 space-y-0.5">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground">{description}</div>
+        {state.error && (
+          <div className="text-xs text-red-600 dark:text-red-400">{state.error}</div>
+        )}
+        {state.ok && (
+          <div className="text-xs text-emerald-600 dark:text-emerald-400">
+            {state.message}
+          </div>
+        )}
+      </div>
+      <div className="flex items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`channel-${reminderType}`} className="sr-only">
+            {label} channel
+          </Label>
+          <select
+            id={`channel-${reminderType}`}
+            name="channel"
+            defaultValue={current}
+            className="h-9 w-28 rounded-md border px-3 text-sm"
+          >
+            <option value="sms" disabled={!smsAvailable}>
+              SMS{smsAvailable ? "" : " (off)"}
+            </option>
+            <option value="email" disabled={!emailAvailable}>
+              Email{emailAvailable ? "" : " (off)"}
+            </option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+          {pending ? "Saving…" : "Save"}
+        </Button>
+      </div>
     </form>
   );
 }

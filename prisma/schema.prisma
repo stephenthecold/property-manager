@@ -668,8 +668,29 @@ model Tenant {
   trialTokens   TenantPortalTrialToken[]
   inboundMessages InboundMessage[]
   inboundEmails   InboundEmail[]
+  reminderPrefs   TenantReminderPref[]
 
   @@index([lastName, firstName])
+}
+
+// Per-reminder-type channel override for a tenant (tenant self-serve in the
+// portal). The tenant's single global `reminderChannel` is the default; a row
+// here overrides ONE reminder type. `channel` is a plain string (NOT the
+// NotificationChannel enum) so it can also carry "off" — mute this type — in
+// addition to "sms"/"email". Effective-channel resolution + validation live in
+// the DB-free lib/reminders/pref.ts. Absent row = use the global channel.
+model TenantReminderPref {
+  id           String   @id @default(cuid())
+  tenantId     String
+  reminderType String // one of the ReminderType values (rent_due_soon, …)
+  channel      String // "sms" | "email" | "off"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, reminderType])
+  @@index([tenantId])
 }
 
 model Lease {
