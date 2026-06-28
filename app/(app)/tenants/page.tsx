@@ -8,6 +8,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import { StatusBadge } from "@/components/status-badge";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,10 +83,10 @@ export default async function TenantsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Tenants</h1>
-        <Button render={<Link href="/tenants/new" />}>Add tenant</Button>
-      </div>
+      <PageHeader
+        title="Tenants"
+        actions={<Button render={<Link href="/tenants/new" />}>Add tenant</Button>}
+      />
 
       {error && (
         <Alert variant="destructive">
