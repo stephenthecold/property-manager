@@ -506,6 +506,10 @@ model Property {
   state        String?
   zip          String?
   notes        String?
+  // Legal entity / LLC that owns this property (module "portfolio"). Optional
+  // free text; groups properties for per-entity financials. Stored regardless
+  // of the module flag; only surfaced when "portfolio" is on.
+  legalEntityName String?
   timezone     String   @default("America/New_York") // IANA tz for due-date / overdue math
   currency     String   @default("USD")
   // Financing (Financials module): fixed monthly mortgage payment and the date

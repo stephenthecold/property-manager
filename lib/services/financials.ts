@@ -20,6 +20,9 @@ function mortgageActive(maturity: Date | null, now: Date): boolean {
 export interface PropertyFinancialRow {
   propertyId: string;
   propertyName: string;
+  /** Owning legal entity / LLC (Portfolio module); null when unset. Used by the
+   *  Financials page to group rows by entity — see lib/accounting/portfolio. */
+  legalEntityName: string | null;
   currency: string;
   activeLeases: number;
   expectedMonthlyCents: bigint;
@@ -111,6 +114,7 @@ export async function getFinancialSummary(now: Date): Promise<FinancialSummary> 
     return {
       propertyId: p.id,
       propertyName: p.name,
+      legalEntityName: p.legalEntityName,
       currency: p.currency,
       activeLeases: propLeases.length,
       expectedMonthlyCents: expected,

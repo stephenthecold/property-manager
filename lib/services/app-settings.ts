@@ -66,6 +66,8 @@ export interface ModuleFlags {
   mailbox: boolean;
   /** Resident-portal ledger CSV export + date/type filters (/portal/ledger). */
   tenantLedgerExport: boolean;
+  /** Group properties by legal entity (LLC) for per-entity financials. */
+  portfolio: boolean;
 }
 
 /** Defaults when a module key has never been saved. */
@@ -81,6 +83,7 @@ const MODULE_DEFAULTS: ModuleFlags = {
   publicSite: false,
   mailbox: false,
   tenantLedgerExport: false,
+  portfolio: false,
 };
 
 function resolveModules(raw: unknown): ModuleFlags {
@@ -118,6 +121,8 @@ function resolveModules(raw: unknown): ModuleFlags {
       typeof obj.tenantLedgerExport === "boolean"
         ? obj.tenantLedgerExport
         : MODULE_DEFAULTS.tenantLedgerExport,
+    portfolio:
+      typeof obj.portfolio === "boolean" ? obj.portfolio : MODULE_DEFAULTS.portfolio,
   };
 }
 

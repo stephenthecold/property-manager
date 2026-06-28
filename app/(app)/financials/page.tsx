@@ -1,10 +1,19 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability } from "@/lib/auth/permissions";
-import { getFinancialSummary } from "@/lib/services/financials";
+import {
+  getFinancialSummary,
+  type PropertyFinancialRow,
+} from "@/lib/services/financials";
+import {
+  groupByEntity,
+  type PortfolioGroup,
+  type PortfolioSubtotal,
+} from "@/lib/accounting/portfolio";
 import { listActiveVendors } from "@/lib/services/vendors";
 import { formatCurrency } from "@/lib/money";
 import type { ExpenseCategory } from "@/lib/generated/prisma/enums";
@@ -17,6 +26,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -27,6 +44,58 @@ function netClass(cents: bigint): string {
   if (cents < 0n) return "text-red-600 dark:text-red-400";
   if (cents > 0n) return "text-emerald-600 dark:text-emerald-400";
   return "";
+}
+
+/** Net-income-by-property columns, shared by the flat DataTable and the
+ *  entity-grouped Table (Portfolio module) so they never drift apart. */
+const NET_INCOME_COLUMNS = [
+  { key: "property", label: "Property", align: "left" as const, className: "" },
+  { key: "leases", label: "Leases", align: "right" as const, numeric: true, className: "hidden sm:table-cell" },
+  { key: "expected", label: "Expected /mo", align: "right" as const, numeric: true, className: "hidden md:table-cell" },
+  { key: "collected", label: "Collected", align: "right" as const, numeric: true, className: "" },
+  { key: "mortgage", label: "Mortgage /mo", align: "right" as const, numeric: true, className: "" },
+  { key: "insurance", label: "Insurance /mo", align: "right" as const, numeric: true, className: "hidden lg:table-cell" },
+  { key: "taxes", label: "Taxes /mo", align: "right" as const, numeric: true, className: "hidden lg:table-cell" },
+  { key: "expenses", label: "Expenses", align: "right" as const, numeric: true, className: "" },
+  { key: "net", label: "Net", align: "right" as const, numeric: true, className: "" },
+];
+
+/** Sort values for one property row (money as String(cents) per convention). */
+function netRowSortValues(r: PropertyFinancialRow): (string | number)[] {
+  return [
+    r.propertyName,
+    r.activeLeases,
+    String(r.expectedMonthlyCents),
+    String(r.collectedMonthCents),
+    String(r.mortgageMonthlyCents),
+    String(r.insuranceMonthlyCents),
+    String(r.taxesMonthlyCents),
+    String(r.expensesMonthCents),
+    String(r.netMonthCents),
+  ];
+}
+
+/** The 9 rendered cells for one property row (currency-aware). */
+function netRowCells(r: PropertyFinancialRow): React.ReactNode[] {
+  return [
+    <Link
+      key="p"
+      href={`/properties/${r.propertyId}`}
+      className="font-medium hover:underline"
+    >
+      {r.propertyName}
+    </Link>,
+    r.activeLeases,
+    <span key="e" className="tabular-nums">{formatCurrency(r.expectedMonthlyCents, r.currency)}</span>,
+    <span key="c" className="tabular-nums">{formatCurrency(r.collectedMonthCents, r.currency)}</span>,
+    <span key="m" className="tabular-nums">{formatCurrency(r.mortgageMonthlyCents, r.currency)}</span>,
+    <span key="i" className="tabular-nums">{formatCurrency(r.insuranceMonthlyCents, r.currency)}</span>,
+    <span key="t" className="tabular-nums">{formatCurrency(r.taxesMonthlyCents, r.currency)}</span>,
+    <span key="x" className="tabular-nums">{formatCurrency(r.expensesMonthCents, r.currency)}</span>,
+    <span key="n" className={cn("font-medium tabular-nums", netClass(r.netMonthCents))}>
+      {formatCurrency(r.netMonthCents, r.currency)}
+    </span>,
+  ];
 }
 
 export default async function FinancialsPage({
@@ -92,6 +161,11 @@ export default async function FinancialsPage({
   ]);
 
   const t = summary.totals;
+  // Portfolio module: group the per-property rows by legal entity (subtotaled
+  // groups + a grand total). Off → the flat DataTable renders exactly as before.
+  const portfolio = settings.modules.portfolio
+    ? groupByEntity(summary.rows)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -221,65 +295,19 @@ export default async function FinancialsPage({
           <CardTitle>Net income by property (this month)</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable
-            emptyMessage="No properties yet."
-            columns={[
-              { key: "property", label: "Property" },
-              { key: "leases", label: "Leases", align: "right", numeric: true, className: "hidden sm:table-cell" },
-              { key: "expected", label: "Expected /mo", align: "right", numeric: true, className: "hidden md:table-cell" },
-              { key: "collected", label: "Collected", align: "right", numeric: true },
-              { key: "mortgage", label: "Mortgage /mo", align: "right", numeric: true },
-              { key: "insurance", label: "Insurance /mo", align: "right", numeric: true, className: "hidden lg:table-cell" },
-              { key: "taxes", label: "Taxes /mo", align: "right", numeric: true, className: "hidden lg:table-cell" },
-              { key: "expenses", label: "Expenses", align: "right", numeric: true },
-              { key: "net", label: "Net", align: "right", numeric: true },
-            ]}
-            rows={summary.rows.map((r) => ({
-              key: r.propertyId,
-              sortValues: [
-                r.propertyName,
-                r.activeLeases,
-                String(r.expectedMonthlyCents),
-                String(r.collectedMonthCents),
-                String(r.mortgageMonthlyCents),
-                String(r.insuranceMonthlyCents),
-                String(r.taxesMonthlyCents),
-                String(r.expensesMonthCents),
-                String(r.netMonthCents),
-              ],
-              cells: [
-                <Link
-                  key="p"
-                  href={`/properties/${r.propertyId}`}
-                  className="font-medium hover:underline"
-                >
-                  {r.propertyName}
-                </Link>,
-                r.activeLeases,
-                <span key="e" className="tabular-nums">
-                  {formatCurrency(r.expectedMonthlyCents, r.currency)}
-                </span>,
-                <span key="c" className="tabular-nums">
-                  {formatCurrency(r.collectedMonthCents, r.currency)}
-                </span>,
-                <span key="m" className="tabular-nums">
-                  {formatCurrency(r.mortgageMonthlyCents, r.currency)}
-                </span>,
-                <span key="i" className="tabular-nums">
-                  {formatCurrency(r.insuranceMonthlyCents, r.currency)}
-                </span>,
-                <span key="t" className="tabular-nums">
-                  {formatCurrency(r.taxesMonthlyCents, r.currency)}
-                </span>,
-                <span key="x" className="tabular-nums">
-                  {formatCurrency(r.expensesMonthCents, r.currency)}
-                </span>,
-                <span key="n" className={cn("font-medium tabular-nums", netClass(r.netMonthCents))}>
-                  {formatCurrency(r.netMonthCents, r.currency)}
-                </span>,
-              ],
-            }))}
-          />
+          {portfolio ? (
+            <EntityGroupedNetIncome groups={portfolio.groups} grandTotal={portfolio.grandTotal} />
+          ) : (
+            <DataTable
+              emptyMessage="No properties yet."
+              columns={NET_INCOME_COLUMNS}
+              rows={summary.rows.map((r) => ({
+                key: r.propertyId,
+                sortValues: netRowSortValues(r),
+                cells: netRowCells(r),
+              }))}
+            />
+          )}
           <p className="mt-3 text-sm text-muted-foreground">
             Portfolio: expected{" "}
             <span className="tabular-nums">{formatCurrency(t.expectedMonthlyCents)}</span>/mo ·
@@ -469,6 +497,128 @@ export default async function FinancialsPage({
           />
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/** A subtotal/grand-total row's money cells, in NET_INCOME_COLUMNS order and
+ *  honoring each column's responsive hiding so they line up with property rows.
+ *  Aggregates display in the org default currency (groups may mix currencies). */
+function subtotalCells(s: PortfolioSubtotal, emphasizeNet: boolean): React.ReactNode {
+  const cols: { value: bigint; className?: string }[] = [
+    { value: s.expectedMonthlyCents, className: "hidden md:table-cell" },
+    { value: s.collectedMonthCents },
+    { value: s.mortgageMonthlyCents },
+    { value: s.insuranceMonthlyCents, className: "hidden lg:table-cell" },
+    { value: s.taxesMonthlyCents, className: "hidden lg:table-cell" },
+    { value: s.expensesMonthCents },
+  ];
+  return (
+    <>
+      {/* Leases column (no subtotal) — hidden on small screens, like the header. */}
+      <TableCell className="hidden text-right sm:table-cell" />
+      {cols.map((c, i) => (
+        <TableCell key={i} className={cn("text-right tabular-nums", c.className)}>
+          {formatCurrency(c.value)}
+        </TableCell>
+      ))}
+      <TableCell
+        className={cn(
+          "text-right font-medium tabular-nums",
+          netClass(s.netMonthCents),
+          !emphasizeNet && "font-normal",
+        )}
+      >
+        {formatCurrency(s.netMonthCents)}
+      </TableCell>
+    </>
+  );
+}
+
+/**
+ * Net-income table grouped by legal entity (Portfolio module): each entity is a
+ * header row + its property rows + a subtotal row, followed by a portfolio
+ * grand-total row. Property rows reuse {@link netRowCells} so the figures match
+ * the flat (module-off) table exactly.
+ */
+function EntityGroupedNetIncome({
+  groups,
+  grandTotal,
+}: {
+  groups: PortfolioGroup<PropertyFinancialRow>[];
+  grandTotal: PortfolioSubtotal;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/60 hover:bg-muted/60">
+            {NET_INCOME_COLUMNS.map((c) => (
+              <TableHead
+                key={c.key}
+                className={cn(c.align === "right" && "text-right", c.className)}
+              >
+                {c.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={NET_INCOME_COLUMNS.length}
+                className="py-6 text-center text-muted-foreground"
+              >
+                No properties yet.
+              </TableCell>
+            </TableRow>
+          )}
+          {groups.map((g) => (
+            <Fragment key={g.entity}>
+              <TableRow className="border-l-2 border-l-sky-500 bg-sky-50/60 hover:bg-sky-50/60 dark:bg-sky-950/20 dark:hover:bg-sky-950/20">
+                <TableCell
+                  colSpan={NET_INCOME_COLUMNS.length}
+                  className="whitespace-normal font-semibold"
+                >
+                  {g.entity}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {g.rows.length} propert{g.rows.length === 1 ? "y" : "ies"}
+                  </span>
+                </TableCell>
+              </TableRow>
+              {g.rows.map((r) => {
+                const cells = netRowCells(r);
+                return (
+                  <TableRow key={r.propertyId}>
+                    {cells.map((cell, i) => (
+                      <TableCell
+                        key={NET_INCOME_COLUMNS[i].key}
+                        className={cn(
+                          NET_INCOME_COLUMNS[i].align === "right" && "text-right",
+                          NET_INCOME_COLUMNS[i].className,
+                        )}
+                      >
+                        {cell}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })}
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableCell className="font-medium">{g.entity} subtotal</TableCell>
+                {subtotalCells(g.subtotal, false)}
+              </TableRow>
+            </Fragment>
+          ))}
+          {groups.length > 0 && (
+            <TableRow className="border-t-2 bg-muted/60 hover:bg-muted/60">
+              <TableCell className="font-semibold">Portfolio total</TableCell>
+              {subtotalCells(grandTotal, true)}
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }
