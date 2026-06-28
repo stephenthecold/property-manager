@@ -134,6 +134,7 @@ export default async function TenantsPage({
       )}
 
       <DataTable
+        searchable={false}
         emptyState={
           <EmptyState
             icon={<UsersIcon />}

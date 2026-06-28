@@ -169,9 +169,9 @@ export default async function InspectionDetailPage({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">Condition photos</CardTitle>
-          <Link href={`/units/${unitId}`} className="text-sm font-medium hover:underline">
+          <Button variant="outline" size="sm" render={<Link href={`/units/${unitId}`} />}>
             Add / manage on unit
-          </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           {conditionLogs.length === 0 ? (

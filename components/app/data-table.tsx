@@ -7,8 +7,10 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsUpDownIcon,
+  SearchIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -56,6 +58,9 @@ export type DataTableRow = {
 };
 
 const PAGE_SIZE_OPTIONS = TABLE_PAGE_SIZE_OPTIONS;
+
+/** Show the in-table search box once a list is past a quick glance. */
+const SEARCH_MIN_ROWS = 6;
 
 /**
  * The org-configurable default page size (Settings → Organization), supplied
@@ -113,6 +118,8 @@ export function DataTable({
   emptyMessage = "No results.",
   emptyState,
   className,
+  searchable,
+  searchPlaceholder = "Search…",
 }: {
   columns: DataTableColumn[];
   rows: DataTableRow[];
@@ -123,6 +130,9 @@ export function DataTable({
   /** Rich empty content (e.g. <EmptyState/>); falls back to `emptyMessage` text. */
   emptyState?: React.ReactNode;
   className?: string;
+  /** Show the in-table search box. Defaults to on once the list is long enough. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }) {
   const orgDefault = React.useContext(TablePageSizeContext);
   const [sort, setSort] = React.useState<{ key: string; dir: "asc" | "desc" } | null>(
@@ -130,18 +140,31 @@ export function DataTable({
   );
   const [pageSize, setPageSize] = React.useState(defaultPageSize ?? orgDefault);
   const [page, setPage] = React.useState(0);
+  const [query, setQuery] = React.useState("");
+
+  const showSearch = searchable ?? rows.length > SEARCH_MIN_ROWS;
+
+  // Client-side text filter across each row's per-column sort values (the
+  // meaningful text/number behind each cell), case-insensitive substring.
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      r.sortValues.some((v) => v != null && String(v).toLowerCase().includes(q)),
+    );
+  }, [rows, query]);
 
   const sorted = React.useMemo(() => {
-    if (!sort) return rows;
+    if (!sort) return filtered;
     const idx = columns.findIndex((c) => c.key === sort.key);
-    if (idx < 0) return rows;
+    if (idx < 0) return filtered;
     const numeric = !!columns[idx].numeric;
     const dir = sort.dir === "asc" ? 1 : -1;
     const collator = new Intl.Collator(undefined, {
       numeric: true,
       sensitivity: "base",
     });
-    return [...rows].sort((ra, rb) => {
+    return [...filtered].sort((ra, rb) => {
       const a = ra.sortValues[idx];
       const b = rb.sortValues[idx];
       if (a == null && b == null) return 0;
@@ -150,7 +173,7 @@ export function DataTable({
       const c = numeric ? compareNumeric(a, b) : collator.compare(String(a), String(b));
       return c * dir;
     });
-  }, [rows, columns, sort]);
+  }, [filtered, columns, sort]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
   const current = Math.min(page, pageCount - 1);
@@ -171,6 +194,22 @@ export function DataTable({
 
   return (
     <div className={cn("space-y-3", className)}>
+      {showSearch && (
+        <div className="relative max-w-xs">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setPage(0);
+              setQuery(e.target.value);
+            }}
+            placeholder={searchPlaceholder}
+            aria-label="Search this list"
+            className="h-9 pl-8"
+          />
+        </div>
+      )}
       <div className="overflow-x-auto rounded-lg border bg-card text-card-foreground">
         <Table>
           <TableHeader>
@@ -234,10 +273,16 @@ export function DataTable({
             {visible.length === 0 && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columns.length} className="p-0">
-                  {emptyState ?? (
+                  {query.trim() ? (
                     <div className="py-6 text-center text-muted-foreground">
-                      {emptyMessage}
+                      No results match “{query.trim()}”.
                     </div>
+                  ) : (
+                    emptyState ?? (
+                      <div className="py-6 text-center text-muted-foreground">
+                        {emptyMessage}
+                      </div>
+                    )
                   )}
                 </TableCell>
               </TableRow>

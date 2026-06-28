@@ -520,9 +520,9 @@ export default async function UnitDetail({
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Open maintenance jobs</CardTitle>
-            <Link href="/maintenance" className="text-sm font-medium hover:underline">
+            <Button variant="outline" size="sm" render={<Link href="/maintenance" />}>
               View all
-            </Link>
+            </Button>
           </CardHeader>
           <CardContent>
             {openJobs.length === 0 ? (
