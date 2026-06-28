@@ -25,7 +25,7 @@ export interface VendorInput {
 export async function listVendors(view: "active" | "all" = "active") {
   return prisma.vendor.findMany({
     where: view === "all" ? {} : { isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
 }
 

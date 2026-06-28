@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { CheckIcon, ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +43,7 @@ export function StatusPanel({
   // Deterministic from `tone` → no SSR/client hydration mismatch.
   const [open, setOpen] = useState(!healthy);
   const hasDetail = Boolean(children);
+  const detailId = useId();
 
   return (
     <div className={cn("rounded-lg border p-4", TONE_BOX[tone], className)}>
@@ -50,6 +51,7 @@ export function StatusPanel({
         type="button"
         onClick={() => hasDetail && setOpen((o) => !o)}
         aria-expanded={hasDetail ? open : undefined}
+        aria-controls={hasDetail ? detailId : undefined}
         className={cn(
           "flex w-full items-center gap-2 text-left",
           hasDetail ? "cursor-pointer" : "cursor-default",
@@ -70,7 +72,11 @@ export function StatusPanel({
           />
         )}
       </button>
-      {hasDetail && open ? <div className="mt-3">{children}</div> : null}
+      {hasDetail && open ? (
+        <div id={detailId} className="mt-3">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

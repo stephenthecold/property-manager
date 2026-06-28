@@ -32,7 +32,7 @@ export interface AssetInput {
 export async function listAssets(view: "active" | "all" = "active") {
   return prisma.asset.findMany({
     where: view === "all" ? {} : { active: true },
-    orderBy: { name: "asc" },
+    orderBy: [{ active: "desc" }, { name: "asc" }],
     include: {
       // timezone drives date-only render + warranty math (property-tz, not UTC).
       property: { select: { id: true, name: true, timezone: true } },

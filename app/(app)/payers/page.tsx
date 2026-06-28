@@ -115,7 +115,7 @@ export default async function PayersPage({
   const [payers, expectations, settings] = await Promise.all([
     prisma.payer.findMany({
       where: view === "all" ? {} : { isActive: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
       include: {
         _count: { select: { payments: true } },
         portalAccount: { select: { isActive: true, passwordHash: true } },
