@@ -19,7 +19,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Label } from "@/components/ui/label";
 import { addMaintenancePhotosAction } from "./actions";
@@ -135,26 +135,27 @@ export default async function MaintenanceJobPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <BackLink href="/maintenance" label="Maintenance" />
-      </div>
+      <PageHeader
+        back={{ href: "/maintenance", label: "Maintenance" }}
+        title={job.title}
+        actions={
+          <>
+            <Badge
+              variant="outline"
+              className={`font-medium ${statusBadgeClass(job.status)}`}
+            >
+              {statusLabel(job.status)}
+            </Badge>
+            <Badge variant="outline" className="capitalize">
+              {priorityLabel(job.priority)}
+            </Badge>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>{job.title}</CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="outline"
-                className={`font-medium ${statusBadgeClass(job.status)}`}
-              >
-                {statusLabel(job.status)}
-              </Badge>
-              <Badge variant="outline" className="capitalize">
-                {priorityLabel(job.priority)}
-              </Badge>
-            </div>
-          </div>
+          <CardTitle>Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

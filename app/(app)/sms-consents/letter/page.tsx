@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { publicBaseUrl } from "@/lib/http/base-url";
+import { BackLink } from "@/components/app/back-link";
 import { PrintButton } from "@/components/app/print-button";
 
 export const runtime = "nodejs";
@@ -36,9 +37,7 @@ export default async function OptInLetterPage({
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-8 text-sm leading-6 print:p-0">
       <div className="flex items-center justify-between print:hidden">
-        <a href="/sms-consents" className="text-muted-foreground hover:underline">
-          ← Back
-        </a>
+        <BackLink href="/sms-consents" label="Back" />
         <PrintButton />
       </div>
 

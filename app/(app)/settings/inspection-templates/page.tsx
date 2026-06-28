@@ -111,7 +111,7 @@ export default async function InspectionTemplatesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Inspection templates</h1>
+          <h2 className="text-lg font-semibold">Inspection templates</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Reusable condition checklists (Move-in, Move-out, Routine…). When you
             schedule an inspection you can pick a template to pre-populate its

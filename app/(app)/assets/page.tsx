@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
+import { PackageIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { prisma } from "@/lib/db";
@@ -16,6 +17,8 @@ import {
   statusLabel,
 } from "@/lib/maintenance/status";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,28 +216,41 @@ export default async function AssetsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Assets</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Your registry of physical equipment (water heaters, HVAC,
-            appliances) with warranty awareness. An operating record only —
-            assets never affect tenant balances.
-          </p>
-        </div>
-        <FormDialog
-          trigger="Add asset"
-          triggerVariant="default"
-          title="Add asset"
-          action={createAssetAction}
-          submitLabel="Add asset"
-        >
-          <AssetFields properties={properties} units={units} />
-        </FormDialog>
-      </div>
+      <PageHeader
+        title="Assets"
+        description="Your registry of physical equipment (water heaters, HVAC, appliances) with warranty awareness. An operating record only — assets never affect tenant balances."
+        actions={
+          <FormDialog
+            trigger="Add asset"
+            triggerVariant="default"
+            title="Add asset"
+            action={createAssetAction}
+            submitLabel="Add asset"
+          >
+            <AssetFields properties={properties} units={units} />
+          </FormDialog>
+        }
+      />
 
       <DataTable
-        emptyMessage="No assets yet — register equipment like water heaters, HVAC units, or appliances."
+        emptyState={
+          <EmptyState
+            icon={<PackageIcon />}
+            title="No assets yet"
+            description="Register equipment like water heaters, HVAC units, or appliances to track warranties and link maintenance jobs."
+            action={
+              <FormDialog
+                trigger="Add asset"
+                triggerVariant="default"
+                title="Add asset"
+                action={createAssetAction}
+                submitLabel="Add asset"
+              >
+                <AssetFields properties={properties} units={units} />
+              </FormDialog>
+            }
+          />
+        }
         columns={[
           { key: "name", label: "Name" },
           { key: "category", label: "Category", className: "hidden sm:table-cell" },

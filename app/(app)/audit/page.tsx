@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ScrollTextIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { buildAuditWhere } from "@/lib/services/audit-export";
@@ -8,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 
 export const runtime = "nodejs";
 
@@ -41,6 +44,7 @@ export default async function AuditPage({
   };
   const pageRaw = Number.parseInt(first("page"), 10);
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
+  const hasFilters = Object.values(filters).some(Boolean);
 
   const where = buildAuditWhere(filters);
 
@@ -72,17 +76,15 @@ export default async function AuditPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Audit log</h1>
-          <p className="text-sm text-muted-foreground">
-            Append-only record of every mutation. Newest first.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" render={<Link href={exportHref} />}>
-          Export CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Audit log"
+        description="Append-only record of every mutation. Newest first."
+        actions={
+          <Button variant="outline" size="sm" render={<Link href={exportHref} />}>
+            Export CSV
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -148,7 +150,24 @@ export default async function AuditPage({
       </p>
 
       <DataTable
-        emptyMessage="No audit entries yet."
+        emptyState={
+          <EmptyState
+            icon={<ScrollTextIcon />}
+            title={hasFilters ? "No matching audit entries" : "No audit entries yet"}
+            description={
+              hasFilters
+                ? "No entries match these filters — widen the date range or clear them."
+                : "Mutations across the app are recorded here as they happen."
+            }
+            action={
+              hasFilters ? (
+                <Button variant="outline" size="sm" render={<Link href="/audit" />}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          />
+        }
         defaultPageSize={50}
         columns={[
           { key: "time", label: "Time" },

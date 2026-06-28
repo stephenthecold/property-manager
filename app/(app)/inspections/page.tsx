@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ClipboardCheckIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
@@ -14,6 +15,8 @@ import type { InspectionStatus } from "@/lib/generated/prisma/enums";
 import { cancelInspectionAction, createInspectionAction } from "./actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +28,106 @@ function statusClass(s: InspectionStatus): string {
   if (s === "completed") return "text-emerald-600 dark:text-emerald-400";
   if (s === "canceled") return "text-muted-foreground line-through";
   return "text-amber-600 dark:text-amber-400";
+}
+
+type ScheduleLease = {
+  id: string;
+  tenant: { firstName: string; lastName: string };
+  unit: { unitNumber: string; property: { name: string } };
+};
+
+/**
+ * The "Schedule inspection" dialog, shared by the page header and the empty
+ * state so both offer the same primary action. `idSuffix` keeps field ids
+ * unique when two instances render at once (header + empty state).
+ */
+function ScheduleInspectionDialog({
+  activeLeases,
+  templates,
+  idSuffix = "header",
+}: {
+  activeLeases: ScheduleLease[];
+  templates: Awaited<ReturnType<typeof listActiveTemplatesWithItems>>;
+  idSuffix?: string;
+}) {
+  return (
+    <FormDialog
+      trigger="Schedule inspection"
+      triggerVariant="default"
+      title="Schedule inspection"
+      action={createInspectionAction}
+      submitLabel="Schedule"
+    >
+      <div className="space-y-2">
+        <Label htmlFor={`iLease-${idSuffix}`}>Lease</Label>
+        <select
+          id={`iLease-${idSuffix}`}
+          name="leaseId"
+          required
+          defaultValue=""
+          className="h-9 w-full rounded-md border px-3 text-sm"
+        >
+          <option value="" disabled>
+            Select a lease…
+          </option>
+          {activeLeases.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.unit.property.name} · {l.unit.unitNumber} — {l.tenant.lastName}, {l.tenant.firstName}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`iType-${idSuffix}`}>Type</Label>
+        <select
+          id={`iType-${idSuffix}`}
+          name="type"
+          defaultValue="move_out"
+          className="h-9 w-full rounded-md border px-3 text-sm"
+        >
+          {INSPECTION_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {inspectionTypeLabel(t)}
+            </option>
+          ))}
+        </select>
+      </div>
+      {templates.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor={`iTemplate-${idSuffix}`}>Checklist template (optional)</Label>
+          <select
+            id={`iTemplate-${idSuffix}`}
+            name="templateId"
+            defaultValue=""
+            className="h-9 w-full rounded-md border px-3 text-sm"
+          >
+            <option value="">— no checklist —</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} ({t.items.length} item{t.items.length === 1 ? "" : "s"})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Pre-populates the inspection&apos;s condition checklist. Manage
+            templates in Settings → Inspection templates.
+          </p>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor={`iDate-${idSuffix}`}>Scheduled date (optional)</Label>
+        <Input id={`iDate-${idSuffix}`} name="scheduledFor" type="date" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`iInspector-${idSuffix}`}>Inspector (optional)</Label>
+        <Input
+          id={`iInspector-${idSuffix}`}
+          name="inspector"
+          placeholder="Name of the person inspecting"
+        />
+      </div>
+    </FormDialog>
+  );
 }
 
 export default async function InspectionsPage() {
@@ -51,80 +154,29 @@ export default async function InspectionsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Inspections</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Schedule and record property-condition inspections. Open a move-out
-            inspection to itemize deposit deductions and compute the refund.
-            Inspections never touch tenant ledger balances.
-          </p>
-        </div>
-        <FormDialog
-          trigger="Schedule inspection"
-          triggerVariant="default"
-          title="Schedule inspection"
-          action={createInspectionAction}
-          submitLabel="Schedule"
-        >
-          <div className="space-y-2">
-            <Label htmlFor="iLease">Lease</Label>
-            <select id="iLease" name="leaseId" required defaultValue="" className="h-9 w-full rounded-md border px-3 text-sm">
-              <option value="" disabled>
-                Select a lease…
-              </option>
-              {activeLeases.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.unit.property.name} · {l.unit.unitNumber} — {l.tenant.lastName}, {l.tenant.firstName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="iType">Type</Label>
-            <select id="iType" name="type" defaultValue="move_out" className="h-9 w-full rounded-md border px-3 text-sm">
-              {INSPECTION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {inspectionTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </div>
-          {templates.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="iTemplate">Checklist template (optional)</Label>
-              <select
-                id="iTemplate"
-                name="templateId"
-                defaultValue=""
-                className="h-9 w-full rounded-md border px-3 text-sm"
-              >
-                <option value="">— no checklist —</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.items.length} item{t.items.length === 1 ? "" : "s"})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Pre-populates the inspection&apos;s condition checklist. Manage
-                templates in Settings → Inspection templates.
-              </p>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="iDate">Scheduled date (optional)</Label>
-            <Input id="iDate" name="scheduledFor" type="date" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="iInspector">Inspector (optional)</Label>
-            <Input id="iInspector" name="inspector" placeholder="Name of the person inspecting" />
-          </div>
-        </FormDialog>
-      </div>
+      <PageHeader
+        title="Inspections"
+        description="Schedule and record property-condition inspections. Open a move-out inspection to itemize deposit deductions and compute the refund. Inspections never touch tenant ledger balances."
+        actions={
+          <ScheduleInspectionDialog activeLeases={activeLeases} templates={templates} />
+        }
+      />
 
       <DataTable
-        emptyMessage="No inspections yet."
+        emptyState={
+          <EmptyState
+            icon={<ClipboardCheckIcon />}
+            title="No inspections yet"
+            description="Schedule your first inspection to record property condition and itemize move-out deductions."
+            action={
+              <ScheduleInspectionDialog
+                idSuffix="empty"
+                activeLeases={activeLeases}
+                templates={templates}
+              />
+            }
+          />
+        }
         columns={[
           { key: "scheduled", label: "Scheduled" },
           { key: "tenant", label: "Tenant / unit" },

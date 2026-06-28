@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MessageSquareIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import { listTenantConsentStatuses } from "@/lib/services/sms-consent";
@@ -7,7 +8,9 @@ import {
   type SmsConsentStatus,
 } from "@/lib/sms/consent-status";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
 import { FormDialog } from "@/components/app/form-dialog";
+import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
 import { Button } from "@/components/ui/button";
@@ -54,24 +57,21 @@ export default async function SmsConsentsPage({
 
   return (
     <div className="w-full space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">SMS consent</h2>
-        <p className="text-sm text-muted-foreground">
-          SMS opt-in status for every active tenant. Invite tenants to opt in by
-          email or a printable letter — never by SMS.
-        </p>
-        <p className="mt-1 text-sm">
-          Public opt-in page:{" "}
-          <a
-            href={optInUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="font-mono text-primary underline underline-offset-2"
-          >
-            {optInUrl}
-          </a>
-        </p>
-      </div>
+      <PageHeader
+        title="SMS consent"
+        description="SMS opt-in status for every active tenant. Invite tenants to opt in by email or a printable letter — never by SMS."
+      />
+      <p className="text-sm">
+        Public opt-in page:{" "}
+        <a
+          href={optInUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono text-primary underline underline-offset-2"
+        >
+          {optInUrl}
+        </a>
+      </p>
 
       <Card>
         <CardHeader>
@@ -106,7 +106,28 @@ export default async function SmsConsentsPage({
           </form>
 
           <DataTable
-            emptyMessage="No tenants match this filter."
+            emptyState={
+              <EmptyState
+                icon={<MessageSquareIcon />}
+                title={filter ? "No tenants match this filter" : "No tenants yet"}
+                description={
+                  filter
+                    ? "No active tenants have this consent status — try a different filter."
+                    : "Add active tenants to track their SMS opt-in status here."
+                }
+                action={
+                  filter ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href="/sms-consents" />}
+                    >
+                      Clear filter
+                    </Button>
+                  ) : undefined
+                }
+              />
+            }
             columns={[
               { key: "name", label: "Tenant" },
               { key: "phone", label: "Mobile" },

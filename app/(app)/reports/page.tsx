@@ -15,6 +15,7 @@ import { getCollectedTrend } from "@/lib/services/kpis";
 import { formatCurrency } from "@/lib/money";
 import type { PeriodDelta } from "@/lib/accounting/kpis";
 import { DataTable } from "@/components/app/data-table";
+import { PageHeader } from "@/components/app/page-header";
 import { ReportExportButtons } from "@/components/app/report-export-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -149,18 +150,20 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Reports</h1>
-        {canSchedule && (
-          <Button
-            render={<Link href="/settings/report-schedules" />}
-            variant="outline"
-            size="sm"
-          >
-            Scheduled delivery
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Reports"
+        actions={
+          canSchedule && (
+            <Button
+              render={<Link href="/settings/report-schedules" />}
+              variant="outline"
+              size="sm"
+            >
+              Scheduled delivery
+            </Button>
+          )
+        }
+      />
       {app.reportHeaderText && (
         <p className="whitespace-pre-line text-sm text-muted-foreground">
           {app.reportHeaderText}

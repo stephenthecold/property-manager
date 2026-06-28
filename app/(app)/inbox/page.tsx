@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { MailIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import {
@@ -8,6 +9,8 @@ import {
   type InboxStatus,
 } from "@/lib/services/inbound-email";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
 import { Button } from "@/components/ui/button";
@@ -60,10 +63,10 @@ export default async function InboxPage({
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Email inbox</h2>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        title="Email inbox"
+        description={
+          <>
             Mail captured from your configured mailbox, newest first. Open a
             message to review attachments and post an invoice/receipt as an
             expense. Configure the mailbox under{" "}
@@ -71,19 +74,21 @@ export default async function InboxPage({
               Settings → Email inbox
             </Link>
             .
-          </p>
-        </div>
-        {deletableCount > 0 && (
-          <form action={clearInboxAction}>
-            <ConfirmSubmitButton
-              size="sm"
-              confirmMessage="Permanently delete ALL non-posted inbox messages and their attachments? Posted items (already saved as expenses) are kept. This can't be undone."
-            >
-              Clear inbox
-            </ConfirmSubmitButton>
-          </form>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          deletableCount > 0 ? (
+            <form action={clearInboxAction}>
+              <ConfirmSubmitButton
+                size="sm"
+                confirmMessage="Permanently delete ALL non-posted inbox messages and their attachments? Posted items (already saved as expenses) are kept. This can't be undone."
+              >
+                Clear inbox
+              </ConfirmSubmitButton>
+            </form>
+          ) : undefined
+        }
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -110,8 +115,16 @@ export default async function InboxPage({
         </CardHeader>
         <CardContent>
           <DataTable
-            emptyMessage={
-              view === "new" ? "No new mail." : `No ${view} messages.`
+            emptyState={
+              <EmptyState
+                icon={<MailIcon />}
+                title={view === "new" ? "No new mail" : `No ${view} messages`}
+                description={
+                  view === "new"
+                    ? "Captured invoices and receipts from your configured mailbox will appear here."
+                    : "Nothing in this view yet — try a different tab."
+                }
+              />
             }
             columns={[
               { key: "received", label: "Received" },

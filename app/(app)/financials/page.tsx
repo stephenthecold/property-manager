@@ -22,6 +22,7 @@ import { createExpenseAction, deleteExpenseAction } from "./actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
 import { FormDialog } from "@/components/app/form-dialog";
+import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -169,16 +170,11 @@ export default async function FinancialsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Financials</h1>
-          <p className="text-sm text-muted-foreground">
-            Cash-basis month-to-date: net = collected − mortgage − insurance −
-            taxes − expenses (yearly insurance/taxes spread as /12 monthly). The
-            tenant ledger stays the source of truth for tenant balances.
-          </p>
-        </div>
-        {canManage && (
+      <PageHeader
+        title="Financials"
+        description="Cash-basis month-to-date: net = collected − mortgage − insurance − taxes − expenses (yearly insurance/taxes spread as /12 monthly). The tenant ledger stays the source of truth for tenant balances."
+        actions={
+          canManage && (
           <FormDialog
             trigger="Log expense"
             triggerVariant="default"
@@ -287,8 +283,9 @@ export default async function FinancialsPage({
               <Input id="exDesc" name="description" placeholder="June water bill" />
             </div>
           </FormDialog>
-        )}
-      </div>
+          )
+        }
+      />
 
       <Card className="border-t-4 border-t-emerald-500">
         <CardHeader>

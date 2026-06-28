@@ -2,7 +2,8 @@ import { requireCapability } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { fromCents } from "@/lib/money";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/app/page-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { LeaseForm } from "./lease-form";
 
 export const runtime = "nodejs";
@@ -67,12 +68,10 @@ export default async function NewLeasePage({
     billing.lateFeeMaxCents != null ? fromCents(billing.lateFeeMaxCents) : "";
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-xl space-y-6">
+      <PageHeader title="Create lease" back={{ href: "/leases", label: "Leases" }} />
       <Card>
-        <CardHeader>
-          <CardTitle>Create lease</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <LeaseForm
             tenants={tenantOptions}
             units={unitOptions}

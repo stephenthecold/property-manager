@@ -9,6 +9,7 @@ import { hasCapability } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/money";
 import { markSentAction } from "@/app/(app)/receipts/actions";
 import { EmailReceiptButton } from "./email-receipt-button";
+import { BackLink } from "@/components/app/back-link";
 import { PrintButton } from "@/components/app/print-button";
 import { ChangeHistory } from "@/components/app/change-history";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -94,6 +95,7 @@ export default async function ReceiptPage({
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="print-hidden flex flex-wrap items-center gap-2">
+        <BackLink href="/payments" label="Back to payments" />
         <PrintButton />
         <EmailReceiptButton
           receiptId={receipt.id}
@@ -103,6 +105,7 @@ export default async function ReceiptPage({
           <input type="hidden" name="receiptId" value={receipt.id} />
           <select
             name="method"
+            aria-label="Mark sent via"
             defaultValue="sms"
             className="h-9 rounded-md border px-3 text-sm capitalize"
           >
@@ -114,9 +117,6 @@ export default async function ReceiptPage({
             Mark sent
           </Button>
         </form>
-        <Button variant="ghost" render={<Link href="/payments" />}>
-          Back to payments
-        </Button>
         {receipt.sentAt && (
           <span className="text-sm text-muted-foreground">
             Sent via {receipt.sentMethod} on {receipt.sentAt.toLocaleDateString()}

@@ -14,7 +14,7 @@ import {
   createPaymentFromDocumentAction,
   runOcrAction,
 } from "@/app/(app)/documents/actions";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -104,28 +104,26 @@ export default async function DocumentDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <BackLink href="/documents" label="Documents" />
-          <h1 className="text-2xl font-semibold break-words">
-            {doc.fileName ?? "Untitled file"}
-          </h1>
-        </div>
-        {download ? (
-          <Button
-            variant="outline"
-            render={
-              <a href={download.url} target="_blank" rel="noopener noreferrer" />
-            }
-          >
-            Download / view file
-          </Button>
-        ) : (
-          <span className="text-sm text-muted-foreground">
-            File storage is not configured — download unavailable.
-          </span>
-        )}
-      </div>
+      <PageHeader
+        back={{ href: "/documents", label: "Documents" }}
+        title={<span className="break-words">{doc.fileName ?? "Untitled file"}</span>}
+        actions={
+          download ? (
+            <Button
+              variant="outline"
+              render={
+                <a href={download.url} target="_blank" rel="noopener noreferrer" />
+              }
+            >
+              Download / view file
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              File storage is not configured — download unavailable.
+            </span>
+          )
+        }
+      />
 
       <Card>
         <CardHeader>

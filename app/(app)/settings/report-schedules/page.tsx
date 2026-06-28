@@ -83,7 +83,7 @@ export default async function ReportSchedulesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Scheduled report delivery</h1>
+          <h2 className="text-lg font-semibold">Scheduled report delivery</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Email a report automatically on a weekly or monthly cadence. The
             background worker renders the report in the chosen format (CSV, PDF,

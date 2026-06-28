@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { Building2Icon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 
 export const runtime = "nodejs";
 export const metadata = { title: "Properties" };
@@ -30,13 +33,24 @@ export default async function PropertiesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Properties</h1>
-        <Button render={<Link href="/properties/new" />}>Add property</Button>
-      </div>
+      <PageHeader
+        title="Properties"
+        actions={<Button render={<Link href="/properties/new" />}>Add property</Button>}
+      />
 
       <DataTable
-        emptyMessage="No properties yet. Add one to get started."
+        emptyState={
+          <EmptyState
+            icon={<Building2Icon />}
+            title="No properties yet"
+            description="Add your first property to start tracking buildings, units, and leases."
+            action={
+              <Button size="sm" render={<Link href="/properties/new" />}>
+                Add property
+              </Button>
+            }
+          />
+        }
         defaultSort={{ key: "name", dir: "asc" }}
         columns={[
           { key: "name", label: "Name" },

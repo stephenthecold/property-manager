@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FileSignatureIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency, sumCents } from "@/lib/money";
@@ -12,6 +13,8 @@ import {
 } from "./actions";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -83,10 +86,10 @@ export default async function LeasesPage({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Leases</h1>
-        <Button render={<Link href="/leases/new" />}>Create lease</Button>
-      </div>
+      <PageHeader
+        title="Leases"
+        actions={<Button render={<Link href="/leases/new" />}>Create lease</Button>}
+      />
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">
@@ -133,7 +136,34 @@ export default async function LeasesPage({
       </form>
 
       <DataTable
-        emptyMessage={showArchived ? "No archived leases." : "No leases yet."}
+        emptyState={
+          <EmptyState
+            icon={<FileSignatureIcon />}
+            title={
+              filtering
+                ? showArchived
+                  ? "No archived leases"
+                  : "No matching leases"
+                : "No leases yet"
+            }
+            description={
+              filtering
+                ? "Try a different status or property — or clear the filters."
+                : "Create your first lease to start billing rent and tracking balances."
+            }
+            action={
+              filtering ? (
+                <Button variant="outline" size="sm" render={<Link href="/leases" />}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button size="sm" render={<Link href="/leases/new" />}>
+                  Create lease
+                </Button>
+              )
+            }
+          />
+        }
         columns={[
           { key: "tenant", label: "Tenant" },
           { key: "unit", label: "Unit" },

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
@@ -17,7 +16,7 @@ import {
 } from "@/lib/inspections/checklist";
 import { formatCurrency } from "@/lib/money";
 import { PrintButton } from "@/components/app/print-button";
-import { Button } from "@/components/ui/button";
+import { BackLink } from "@/components/app/back-link";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
@@ -65,9 +64,7 @@ export default async function InspectionReportPage({
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="print-hidden flex flex-wrap items-center gap-2">
         <PrintButton />
-        <Button variant="ghost" render={<Link href={`/inspections/${inspection.id}`} />}>
-          Back to inspection
-        </Button>
+        <BackLink href={`/inspections/${inspection.id}`} label="Back to inspection" />
       </div>
 
       <Card>

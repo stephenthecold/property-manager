@@ -27,6 +27,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
+import { PageHeader } from "@/components/app/page-header";
 import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -633,7 +634,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <PageHeader title="Dashboard" />
       <DashboardCustomizer bubbles={bubbles} sections={sections} initial={layout} />
     </div>
   );
