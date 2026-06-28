@@ -46,6 +46,11 @@ export interface MailTransport {
     to: string;
     subject: string;
     text: string;
+    attachments?: {
+      filename: string;
+      content: Buffer;
+      contentType?: string;
+    }[];
   }): Promise<{ messageId?: string }>;
 }
 
@@ -118,6 +123,9 @@ export class SmtpEmailProvider implements EmailProvider {
         to: input.to,
         subject: input.subject,
         text: input.text,
+        ...(input.attachments && input.attachments.length > 0
+          ? { attachments: input.attachments }
+          : {}),
       });
       return {
         provider: this.name,

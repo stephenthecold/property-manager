@@ -15,11 +15,14 @@ import { getCollectedTrend } from "@/lib/services/kpis";
 import { formatCurrency } from "@/lib/money";
 import type { PeriodDelta } from "@/lib/accounting/kpis";
 import { DataTable } from "@/components/app/data-table";
+import { ReportExportButtons } from "@/components/app/report-export-buttons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { hasCapability } from "@/lib/auth/permissions";
+import { getDisplayRole } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 export const metadata = { title: "Reports" };
@@ -90,6 +93,9 @@ export default async function ReportsPage({
 }) {
   await requireCapability("reports.view");
   const app = await getAppSettings();
+  // Show the "Scheduled delivery" link only to roles that can manage schedules.
+  const { actingRole } = await getDisplayRole();
+  const canSchedule = hasCapability(actingRole, "reports.schedule", app.rolePermissions);
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v) ?? "";
@@ -143,7 +149,18 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Reports</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Reports</h1>
+        {canSchedule && (
+          <Button
+            render={<Link href="/settings/report-schedules" />}
+            variant="outline"
+            size="sm"
+          >
+            Scheduled delivery
+          </Button>
+        )}
+      </div>
       {app.reportHeaderText && (
         <p className="whitespace-pre-line text-sm text-muted-foreground">
           {app.reportHeaderText}
@@ -204,9 +221,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-sky-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Rent roll</CardTitle>
-          <Button render={<Link href="/api/reports/rent-roll" />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href="/api/reports/rent-roll" />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -262,9 +277,7 @@ export default async function ReportsPage({
                 SMS all overdue
               </Button>
             </form>
-            <Button render={<Link href="/api/reports/overdue" />} variant="outline" size="sm">
-              Export CSV
-            </Button>
+            <ReportExportButtons href="/api/reports/overdue" />
           </div>
         </CardHeader>
         <CardContent>
@@ -313,9 +326,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-orange-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Back rent (terminated leases)</CardTitle>
-          <Button render={<Link href="/api/reports/back-rent" />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href="/api/reports/back-rent" />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -406,9 +417,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-emerald-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Income summary</CardTitle>
-          <Button render={<Link href={incomeHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={incomeHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -478,9 +487,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-amber-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Lease expirations (next {windowDays} days)</CardTitle>
-          <Button render={<Link href={expirationsHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={expirationsHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -534,9 +541,7 @@ export default async function ReportsPage({
       <Card className="border-t-4 border-t-violet-500">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Payments by method</CardTitle>
-          <Button render={<Link href={methodsHref} />} variant="outline" size="sm">
-            Export CSV
-          </Button>
+          <ReportExportButtons href={methodsHref} />
         </CardHeader>
         <CardContent>
           <DataTable
@@ -591,8 +596,18 @@ export default async function ReportsPage({
                     </option>
                   ))}
                 </select>
+                <select
+                  name="format"
+                  defaultValue="csv"
+                  aria-label="Tenant ledger format"
+                  className="h-9 rounded-md border px-2 text-sm"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                  <option value="xlsx">Excel</option>
+                </select>
                 <Button type="submit" variant="outline">
-                  Download CSV
+                  Download
                 </Button>
               </div>
             </form>
@@ -607,8 +622,18 @@ export default async function ReportsPage({
                     </option>
                   ))}
                 </select>
+                <select
+                  name="format"
+                  defaultValue="csv"
+                  aria-label="Unit ledger format"
+                  className="h-9 rounded-md border px-2 text-sm"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                  <option value="xlsx">Excel</option>
+                </select>
                 <Button type="submit" variant="outline">
-                  Download CSV
+                  Download
                 </Button>
               </div>
             </form>

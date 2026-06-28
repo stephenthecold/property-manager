@@ -463,6 +463,27 @@ model AppSettings {
   updatedAt DateTime @updatedAt
 }
 
+/// A standing request to email a portfolio report on a cadence. The worker's
+/// weekly/monthly sweep renders the named report in the chosen format and emails
+/// it to `recipientEmails`, then stamps `lastSentAt`. Pure config / delivery
+/// metadata — it never touches the ledger. `reportType` is one of the registry
+/// slugs (lib/services/report-registry.ts); `format` is csv|pdf|xlsx; `cadence`
+/// is weekly|monthly. Recipients are stored as a comma-separated string (parsed
+/// + validated on save) to keep the table portable.
+model ReportSchedule {
+  id              String    @id @default(cuid())
+  reportType      String
+  format          String // csv | pdf | xlsx
+  cadence         String // weekly | monthly
+  recipientEmails String // comma-separated, validated on write
+  lastSentAt      DateTime?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([cadence])
+}
+
 /// Single-row break-glass emergency credential. Off unless AuthSettings.breakGlassEnabled.
 model BreakGlassCredential {
   id                  String    @id @default("singleton")

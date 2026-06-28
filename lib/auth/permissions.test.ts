@@ -24,6 +24,9 @@ const LEGACY_MIN: Record<Capability, Role> = {
   "documents.manage": "manager",
   "reminders.send": "manager",
   "reports.view": "manager",
+  // reports.schedule is new (no legacy gate); admin floor — it configures
+  // automated outbound email, like messaging.settings.
+  "reports.schedule": "admin",
   "financials.view": "finance",
   "financials.manage": "finance",
   "maintenance.manage": "manager",

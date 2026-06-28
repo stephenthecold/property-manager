@@ -49,6 +49,7 @@ const SETTINGS_GROUPS: { label: string; links: SettingsLink[] }[] = [
       { href: "/settings/notifications", label: "Notifications", cap: null },
       { href: "/settings/messaging", label: "Messaging", cap: "messaging.settings" },
       { href: "/settings/inbox", label: "Email inbox", cap: "messaging.settings" },
+      { href: "/settings/report-schedules", label: "Scheduled reports", cap: "reports.schedule" },
     ],
   },
   {
