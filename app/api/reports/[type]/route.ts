@@ -21,6 +21,15 @@ import {
   UNIT_LEDGER_HEADERS,
   toCsv,
 } from "@/lib/services/reports";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { reportTitle } from "@/lib/services/report-registry";
+import {
+  FORMAT_META,
+  isExportFormat,
+  renderReportPdf,
+  renderReportXlsx,
+  type ExportFormat,
+} from "@/lib/services/report-render";
 
 export const runtime = "nodejs";
 
@@ -67,6 +76,15 @@ export async function GET(
   const { type } = await params;
   const q = new URL(req.url).searchParams;
   const now = new Date();
+
+  // ?format=csv|pdf|xlsx (default csv keeps every existing export link working).
+  const formatRaw = q.get("format") ?? "csv";
+  if (!isExportFormat(formatRaw)) {
+    return new NextResponse("Invalid format (expected csv, pdf, or xlsx)", {
+      status: 400,
+    });
+  }
+  const format: ExportFormat = formatRaw;
 
   let rows: Record<string, string>[];
   let headers: readonly string[];
@@ -147,11 +165,39 @@ export async function GET(
     return new NextResponse("Unknown report", { status: 404 });
   }
 
-  const csv = toCsv([...headers], rows);
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${type}.csv"`,
-    },
-  });
+  // CSV is byte-for-byte what it always was (formula-injection guard included);
+  // PDF/Excel reuse the same { headers, rows } through the shared renderers, so
+  // money formatting is identical across formats.
+  const meta = FORMAT_META[format];
+  const responseHeaders = {
+    "Content-Type": meta.mime,
+    "Content-Disposition": `attachment; filename="${type}.${meta.ext}"`,
+  };
+
+  if (format === "csv") {
+    return new NextResponse(toCsv([...headers], rows), { headers: responseHeaders });
+  }
+
+  // Human title: registry titles for the 6 portfolio reports; a friendly label
+  // for the two ledger exports (not in the registry).
+  const title =
+    type === "tenant-ledger"
+      ? "Tenant ledger"
+      : type === "unit-ledger"
+        ? "Unit ledger"
+        : reportTitle(type);
+  const settings = await getAppSettings();
+  const opts = {
+    title,
+    businessName: settings.businessName,
+    headerText: settings.reportHeaderText,
+    now,
+  };
+  const buf =
+    format === "pdf"
+      ? await renderReportPdf({ headers, rows }, opts)
+      : await renderReportXlsx({ headers, rows }, opts);
+  // Copy into a fresh ArrayBuffer-backed Uint8Array — matches how the file/photo
+  // routes hand binary bodies to NextResponse.
+  return new NextResponse(new Uint8Array(buf), { headers: responseHeaders });
 }

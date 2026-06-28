@@ -14,8 +14,11 @@ export class StubEmailProvider implements EmailProvider {
   readonly name = "stub";
 
   async send(input: SendEmailInput): Promise<SendEmailResult> {
+    const attach = input.attachments?.length
+      ? ` (+${input.attachments.length} attachment${input.attachments.length === 1 ? "" : "s"})`
+      : "";
     console.info(
-      `[email:stub] would send to ${input.to}: ${JSON.stringify(input.subject)}`,
+      `[email:stub] would send to ${input.to}: ${JSON.stringify(input.subject)}${attach}`,
     );
     return {
       provider: this.name,
