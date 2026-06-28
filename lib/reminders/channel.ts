@@ -19,12 +19,17 @@ export interface ReminderDeliveryInput {
   smsEnabled: boolean;
   /** Master email switch (AppSettings.emailEnabled). */
   emailEnabled: boolean;
+  /** Email deliverability suppression (hard bounce / spam complaint). When true,
+   *  the email channel is skipped even with consent + an address — the mailbox
+   *  is known-bad until staff clear it. SMS is unaffected. */
+  emailSuppressed?: boolean;
 }
 
 export type ReminderSkipReason =
   | "channel disabled"
   | "no consent"
-  | "no contact";
+  | "no contact"
+  | "email suppressed";
 
 export type ReminderDelivery =
   | { ok: true; channel: NotificationChannel; destination: string }
@@ -42,6 +47,8 @@ export function resolveReminderDelivery(
     if (!i.emailConsent) return { ok: false, reason: "no consent" };
     const email = clean(i.email);
     if (!email) return { ok: false, reason: "no contact" };
+    // Known-bad mailbox (hard bounce / spam complaint): don't keep emailing it.
+    if (i.emailSuppressed) return { ok: false, reason: "email suppressed" };
     return { ok: true, channel: "email", destination: email };
   }
   // Default / "sms".

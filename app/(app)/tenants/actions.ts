@@ -15,6 +15,7 @@ import {
 import { createTrialToken, startImpersonation } from "@/lib/services/impersonation";
 import { assertModuleEnabled } from "@/lib/services/app-settings";
 import { recordStaffConsentChange } from "@/lib/services/sms-consent";
+import { clearEmailSuppression } from "@/lib/services/email-suppression";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { publicBaseUrl } from "@/lib/http/base-url";
 import { getFormString as str, type FormState } from "@/lib/forms";
@@ -252,6 +253,20 @@ export async function unarchiveTenantAction(fd: FormData): Promise<void> {
     },
   );
   revalidatePath("/tenants");
+  revalidatePath(`/tenants/${tenantId}`);
+}
+
+/**
+ * Clear a tenant's email suppression (after a hard bounce / spam complaint) once
+ * they've fixed their address, so reminder sends resume on the email channel.
+ * Gated by tenants.manage and audited (in the service). Does NOT change email
+ * consent — that's a separate flag. A non-suppressed tenant is a no-op.
+ */
+export async function clearEmailSuppressionAction(fd: FormData): Promise<void> {
+  await requireCapability("tenants.manage");
+  const tenantId = str(fd, "tenantId");
+  if (!tenantId) failToTenants("Missing tenant id.");
+  await clearEmailSuppression(tenantId, await auditActor());
   revalidatePath(`/tenants/${tenantId}`);
 }
 

@@ -17,6 +17,7 @@ const PUBLIC_PREFIXES = [
   "/api/sms/status", // provider webhook — authenticated by HMAC signature, not session
   "/api/sms/inbound", // inbound STOP/START/HELP webhook — HMAC-verified, not session
   "/api/payments/webhook", // payment-gateway webhook — verified by provider signature, not session
+  "/api/email/bounce", // email bounce/complaint webhook — HMAC-verified shared secret, not session
   "/api/health", // container healthcheck — returns only {ok}, no data
   "/sign", // tenant e-sign pages — gated by a single-use token hash, not a session
   "/portal", // tenant portal — its own local session (lib/portal/session.ts), never staff auth
