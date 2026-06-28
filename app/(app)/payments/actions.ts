@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { fromCents, toCents } from "@/lib/money";
 import { auditActor, requireCapability } from "@/lib/auth/session";
-import { postPayment, voidPayment } from "@/lib/services/payments";
+import {
+  confirmSelfReportedPayment,
+  postPayment,
+  rejectSelfReportedPayment,
+  voidPayment,
+} from "@/lib/services/payments";
 import { waiveCharge, writeOffLeaseBalance } from "@/lib/services/charges";
 import { parseDateOnlyInZone } from "@/lib/accounting/periods";
 import type { PaymentMethod } from "@/lib/generated/prisma/enums";
@@ -109,6 +114,37 @@ export async function voidPaymentAction(fd: FormData): Promise<void> {
   revalidatePath("/tenants", "layout");
   // Receipt pages render the payment's voided state.
   revalidatePath("/receipts", "layout");
+}
+
+/**
+ * Confirm a tenant self-reported payment: the ONLY step that posts it to the
+ * ledger (status→posted, FIFO allocation via the shared posting path). Idempotent
+ * — a double-confirm is a no-op (guarded on status in the service). Same
+ * capability as recording a payment.
+ */
+export async function confirmSelfReportedPaymentAction(fd: FormData): Promise<void> {
+  await requireCapability("payments.manage");
+  const paymentId = String(fd.get("paymentId") ?? "");
+  if (!paymentId) throw new Error("Missing payment id.");
+  await confirmSelfReportedPayment({ paymentId, actor: await auditActor() });
+  revalidatePath("/dashboard");
+  revalidatePath("/payments");
+  revalidatePath("/payments/pending");
+  revalidatePath("/tenants", "layout");
+}
+
+/**
+ * Reject a tenant self-reported payment: marks it voided WITHOUT any ledger
+ * touch (it never had a ledger entry). Idempotent on status. Same capability.
+ */
+export async function rejectSelfReportedPaymentAction(fd: FormData): Promise<void> {
+  await requireCapability("payments.manage");
+  const paymentId = String(fd.get("paymentId") ?? "");
+  const reason = String(fd.get("reason") ?? "").trim() || "Rejected by staff";
+  if (!paymentId) throw new Error("Missing payment id.");
+  await rejectSelfReportedPayment({ paymentId, reason, actor: await auditActor() });
+  revalidatePath("/payments");
+  revalidatePath("/payments/pending");
 }
 
 export interface WaiveChargeState {

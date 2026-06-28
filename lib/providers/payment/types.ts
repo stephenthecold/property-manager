@@ -42,6 +42,10 @@ export interface CheckoutInput {
   returnUrl: string;
   /** ISO currency code (e.g. "usd"); defaults to USD when omitted. */
   currency?: string;
+  /** Also offer ACH bank debit (Stripe us_bank_account) alongside card. Off by
+   *  default so existing card-only checkouts are unchanged. Ignored by gateways
+   *  that don't support ACH (e.g. the stub). */
+  allowAch?: boolean;
 }
 
 export interface CheckoutResult {

@@ -11,18 +11,34 @@ import type {
 /**
  * Real Stripe adapter behind the same gateway seam (no SDK — REST via fetch,
  * like the Twilio provider). Inbound: verify the `Stripe-Signature` header
- * (PAYMENT_WEBHOOK_SECRET = the endpoint's `whsec_...`) and normalize a paid
- * `checkout.session.completed` into a GatewayPaymentEvent — the service layer
- * posts it through the EXISTING payment service (FIFO, audit, receipt; idempotent
- * on the Stripe event id). Outbound: createCheckout creates a Checkout Session
- * with STRIPE_SECRET_KEY and returns the hosted-checkout URL. No new ledger math.
+ * (PAYMENT_WEBHOOK_SECRET = the endpoint's `whsec_...`) and normalize a PAID
+ * Checkout Session into a GatewayPaymentEvent — the service layer posts it
+ * through the EXISTING payment service (FIFO, audit, receipt; idempotent on the
+ * Stripe event id). Two session events are honored, both carrying a session
+ * object: `checkout.session.completed` (synchronous methods like card settle
+ * immediately, payment_status="paid") and `checkout.session.async_payment_succeeded`
+ * (ACH/us_bank_account debits settle days later — the original `completed` event
+ * arrives unpaid and is intentionally ignored, then THIS event fires "paid").
+ * Idempotency is keyed by the Stripe event id, so card and ACH each post exactly
+ * once. Outbound: createCheckout creates a Checkout Session with STRIPE_SECRET_KEY
+ * and returns the hosted-checkout URL. No new ledger math.
  *
  * Setup: PAYMENT_GATEWAY=stripe, STRIPE_SECRET_KEY=sk_..., and point a Stripe
- * webhook for `checkout.session.completed` at /api/payments/webhook with its
- * signing secret in PAYMENT_WEBHOOK_SECRET.
+ * webhook at /api/payments/webhook (signing secret in PAYMENT_WEBHOOK_SECRET)
+ * subscribed to `checkout.session.completed` AND — if ACH is offered —
+ * `checkout.session.async_payment_succeeded` (a failed ACH debit surfaces as
+ * `checkout.session.async_payment_failed`, which is ignored: nothing posted, so
+ * nothing to reverse).
  */
 
 const STRIPE_API = "https://api.stripe.com/v1";
+
+/** Stripe session events we treat as "a Checkout Session may have collected
+ *  payment". The payment_status guard below still requires it to be paid. */
+const RECORDABLE_SESSION_EVENTS = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+]);
 
 /**
  * Normalize a verified Stripe event into a GatewayPaymentEvent, or null when it
@@ -31,14 +47,18 @@ const STRIPE_API = "https://api.stripe.com/v1";
 export function parseStripeEvent(json: unknown): GatewayPaymentEvent | null {
   if (!json || typeof json !== "object") return null;
   const ev = json as Record<string, unknown>;
-  if (ev.type !== "checkout.session.completed") return null;
+  if (typeof ev.type !== "string" || !RECORDABLE_SESSION_EVENTS.has(ev.type)) {
+    return null;
+  }
   const eventId = typeof ev.id === "string" ? ev.id : "";
   if (!eventId) return null;
 
   const data = ev.data as Record<string, unknown> | undefined;
   const obj = data?.object as Record<string, unknown> | undefined;
   if (!obj) return null;
-  // Only a session that actually collected payment.
+  // Only a session that actually collected payment. For ACH the `completed`
+  // event is "unpaid"/"processing" and is dropped here; the later
+  // async_payment_succeeded event arrives "paid" and posts.
   if (obj.payment_status != null && obj.payment_status !== "paid") return null;
 
   const metadata = (obj.metadata as Record<string, unknown> | undefined) ?? {};
@@ -67,12 +87,25 @@ export function parseStripeEvent(json: unknown): GatewayPaymentEvent | null {
         : eventId;
   const createdSec = typeof ev.created === "number" ? ev.created : null;
 
+  // Attribution only (never affects allocation/balance): a bank-debit-only
+  // session is recorded as "ach"; anything else (incl. a card+ACH session where
+  // the bare event can't tell which was used) stays "card".
+  const methodTypes = Array.isArray(obj.payment_method_types)
+    ? (obj.payment_method_types as unknown[]).filter(
+        (t): t is string => typeof t === "string",
+      )
+    : [];
+  const method: GatewayPaymentEvent["method"] =
+    methodTypes.includes("us_bank_account") && !methodTypes.includes("card")
+      ? "ach"
+      : "card";
+
   return {
     eventId,
     leaseId,
     amountCents,
     reference,
-    method: "card", // Stripe Checkout default; ACH would be a future refinement
+    method,
     occurredAt: createdSec ? new Date(createdSec * 1000) : new Date(),
   };
 }
@@ -106,6 +139,14 @@ export class StripePaymentGateway implements PaymentGateway {
     params.set("client_reference_id", input.leaseId);
     params.set("metadata[leaseId]", input.leaseId);
     params.set("payment_intent_data[metadata][leaseId]", input.leaseId);
+    // ACH bank debit alongside card when requested. Stripe collects it and
+    // POSTs the SAME checkout.session.completed webhook → existing ledger path;
+    // no new posting logic. Without this flag we leave payment_method_types
+    // unset so the account's dashboard default (card) is unchanged.
+    if (input.allowAch) {
+      params.set("payment_method_types[0]", "card");
+      params.set("payment_method_types[1]", "us_bank_account");
+    }
     params.set("line_items[0][quantity]", "1");
     params.set("line_items[0][price_data][currency]", currency);
     params.set("line_items[0][price_data][unit_amount]", input.amountCents.toString());

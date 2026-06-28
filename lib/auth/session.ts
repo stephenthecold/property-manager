@@ -22,10 +22,51 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return u;
 }
 
-/** Require a logged-in user (redirects to /login otherwise). Coarse check. */
+/**
+ * Whether a session still owes a 2FA step before it may use the app. Two cases:
+ *  - `pending`: the user is enrolled and primary auth succeeded but the TOTP
+ *    challenge hasn't been passed (token.twoFactorPending). → /2fa
+ *  - `enroll`: org enforcement (require2fa) is ON and this user is NOT enrolled.
+ *    → /2fa/enroll
+ * Break-glass is ALWAYS exempt (recovery lane). Returns the path to send the
+ * user to, or null when the session is fully cleared for app use.
+ *
+ * Fails OPEN only for the require2fa lookup (a settings read error must not lock
+ * everyone out of an app that wasn't enforcing 2FA); the `pending` gate, which
+ * is the real second factor, always fails CLOSED.
+ */
+export async function twoFactorRedirect(u: SessionUser): Promise<string | null> {
+  if (u.viaBreakGlass) return null; // recovery lane — never gated
+  // Enrolled user mid-login who hasn't passed the challenge: hard gate.
+  if (u.twoFactorPending) return "/2fa";
+  // Org-enforced enrollment for users who haven't set up 2FA yet.
+  try {
+    const { require2fa } = await getAppSettings();
+    if (require2fa) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: u.id },
+        select: { totpConfirmedAt: true },
+      });
+      if (!dbUser?.totpConfirmedAt) return "/2fa/enroll";
+    }
+  } catch {
+    // Settings unreadable — do not invent an enforcement that wasn't configured.
+  }
+  return null;
+}
+
+/**
+ * Require a logged-in user (redirects to /login otherwise). Also enforces the
+ * 2FA gate: a session that still owes a TOTP challenge or forced enrollment is
+ * redirected to /2fa(/enroll) before it can reach any app page. Break-glass is
+ * exempt. This is the universal app-page chokepoint (the (app) layout calls it
+ * via getDisplayRole), so the gate covers every protected page in one place.
+ */
 export async function requireUser(): Promise<SessionUser> {
   const u = await getSessionUser();
   if (!u) redirect("/login");
+  const to = await twoFactorRedirect(u);
+  if (to) redirect(to);
   return u;
 }
 
@@ -130,6 +171,9 @@ export async function authorizeApiRole(min: Role): Promise<
 > {
   const user = await getSessionUser();
   if (!user) return { ok: false, status: 401 };
+  // A session still owing its 2FA challenge is not authorized for the API
+  // (fail closed). Break-glass is exempt (twoFactorPending is never set for it).
+  if (user.twoFactorPending) return { ok: false, status: 401 };
   const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
   if (!dbUser || !dbUser.isActive || !roleAtLeast(dbUser.role as Role, min)) {
     return { ok: false, status: 403 };

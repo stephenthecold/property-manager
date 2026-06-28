@@ -79,6 +79,12 @@ const MODULE_INFO = [
     description:
       "Group properties by legal entity for per-entity financials. Adds an optional \"Legal entity / LLC\" field to each property; when on, Financials subtotals the net-income table by entity (with a portfolio grand total) and the Reports income summary gains an entity column. Properties with no entity set roll up under \"Unassigned\". Turning it off just hides the grouping and the field — the saved entity names are kept.",
   },
+  {
+    key: "payments" as const,
+    label: "Tenant payments (online pay & self-report)",
+    description:
+      "Turns on the TENANT-FACING ways to pay in the portal: online checkout (Stripe card / ACH bank debit, when a gateway is configured) and the offline pay-instructions + “I paid via CashApp/Cash/ACH” self-report. A self-report is recorded as PENDING and does NOT change the tenant's balance until staff confirm it from the pending queue (Payments → “Pending self-reports”) — confirming posts it to the ledger; rejecting discards it. Pick which offline methods to offer at Settings → Billing → How tenants pay. Requires the Tenant portal module to be on for the self-report surfaces. NOTE: staff manual payment recording is always available regardless of this toggle. Turning it off hides the tenant pay surfaces; recorded payments are kept.",
+  },
 ];
 
 export default async function ModulesSettingsPage() {

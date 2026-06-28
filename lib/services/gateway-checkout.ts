@@ -24,6 +24,8 @@ export async function startCheckout(input: {
   leaseId: string;
   amountCents: bigint;
   returnUrl: string;
+  /** Offer ACH bank debit alongside card (Stripe only; ignored by the stub). */
+  allowAch?: boolean;
 }): Promise<string | null> {
   const res = await getPaymentGateway().createCheckout(input);
   return res?.url ?? null;

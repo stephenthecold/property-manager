@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { roleRank } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/generated/prisma/enums";
-import { setUserRole, setUserActive, setUserNotifications, startViewAs } from "./actions";
+import { setUserRole, setUserActive, setUserNotifications, startViewAs, resetUserTotp } from "./actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -109,19 +109,28 @@ export default async function UsersSettingsPage({
                       </Button>
                     </form>
                   ),
-                  u.isActive ? (
-                    <Badge
-                      key="s"
-                      variant="outline"
-                      className="border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                    >
-                      Active
-                    </Badge>
-                  ) : (
-                    <Badge key="s" variant="outline" className="text-muted-foreground">
-                      Disabled
-                    </Badge>
-                  ),
+                  <span key="s" className="flex flex-wrap items-center gap-1.5">
+                    {u.isActive ? (
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                      >
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Disabled
+                      </Badge>
+                    )}
+                    {u.totpConfirmedAt && (
+                      <Badge
+                        variant="outline"
+                        className="border-sky-200 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300"
+                      >
+                        2FA
+                      </Badge>
+                    )}
+                  </span>,
                   <FormDialog
                     key="n"
                     trigger="Notifications"
@@ -163,23 +172,39 @@ export default async function UsersSettingsPage({
                       </Button>
                     </form>
                   </FormDialog>,
-                  locked ? (
-                    <span key="a" className="text-xs text-muted-foreground">
-                      —
-                    </span>
-                  ) : (
-                    <form key="a" action={setUserActive} className="inline">
-                      <input type="hidden" name="userId" value={u.id} />
-                      <input
-                        type="hidden"
-                        name="isActive"
-                        value={u.isActive ? "false" : "true"}
-                      />
-                      <Button type="submit" variant="outline" size="sm">
-                        {u.isActive ? "Deactivate" : "Activate"}
-                      </Button>
-                    </form>
-                  ),
+                  <span key="a" className="flex items-center justify-end gap-2">
+                    {/* Admin/recovery reset of a user's 2FA. Available for your
+                        OWN row too (e.g. a break-glass owner who lost their
+                        authenticator + backup codes) — you are already
+                        authenticated this session, so no code is required.
+                        Owner protection mirrors role/active: only the owner may
+                        reset the owner. */}
+                    {u.totpConfirmedAt && !isOwnerRow && (
+                      <form action={resetUserTotp} className="inline">
+                        <input type="hidden" name="userId" value={u.id} />
+                        <Button type="submit" variant="outline" size="sm">
+                          Reset 2FA
+                        </Button>
+                      </form>
+                    )}
+                    {locked ? (
+                      !u.totpConfirmedAt && (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )
+                    ) : (
+                      <form action={setUserActive} className="inline">
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input
+                          type="hidden"
+                          name="isActive"
+                          value={u.isActive ? "false" : "true"}
+                        />
+                        <Button type="submit" variant="outline" size="sm">
+                          {u.isActive ? "Deactivate" : "Activate"}
+                        </Button>
+                      </form>
+                    )}
+                  </span>,
                 ],
               };
             })}
