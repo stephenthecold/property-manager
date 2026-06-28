@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { MessageSquareIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import {
   listInboundMessages,
   type InboundMessageRow,
 } from "@/lib/services/inbound-messages";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,14 +39,10 @@ export default async function MessagesPage({
 
   return (
     <div className="w-full space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Messages</h2>
-        <p className="text-sm text-muted-foreground">
-          Inbound SMS replies from tenants, newest first. STOP/START/HELP keywords
-          are handled automatically and never appear here. Replies are read-only —
-          send outbound messages from Reminders.
-        </p>
-      </div>
+      <PageHeader
+        title="Messages"
+        description="Inbound SMS replies from tenants, newest first. STOP/START/HELP keywords are handled automatically and never appear here. Replies are read-only — send outbound messages from Reminders."
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -77,8 +76,27 @@ export default async function MessagesPage({
         </CardHeader>
         <CardContent>
           <DataTable
-            emptyMessage={
-              unreadOnly ? "No unread messages." : "No inbound messages yet."
+            emptyState={
+              <EmptyState
+                icon={<MessageSquareIcon />}
+                title={unreadOnly ? "No unread messages" : "No messages yet"}
+                description={
+                  unreadOnly
+                    ? "Every reply has been read. Switch to All to see the full thread history."
+                    : "Inbound SMS replies from tenants will show up here."
+                }
+                action={
+                  unreadOnly ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href="/messages" />}
+                    >
+                      View all
+                    </Button>
+                  ) : undefined
+                }
+              />
             }
             columns={[
               { key: "received", label: "Received" },

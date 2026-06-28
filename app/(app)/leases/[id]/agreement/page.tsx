@@ -23,6 +23,7 @@ import {
 import { AgreementText, SIGNATURE_FONT } from "@/components/app/agreement-text";
 import { leaseAgreementTemplate } from "@/lib/lease/agreement-format";
 import { getFileStorage } from "@/lib/providers/storage";
+import { PageHeader } from "@/components/app/page-header";
 import { PrintButton } from "@/components/app/print-button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -281,19 +282,23 @@ export default async function LeaseAgreementPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="print-hidden flex flex-wrap items-center gap-2">
-        <PrintButton />
-        <Button
-          variant="ghost"
-          render={<Link href={`/leases/${lease.id}/abstract`} />}
-        >
-          Lease abstract
-        </Button>
-        <Button variant="ghost" render={<Link href="/leases" />}>
-          Back to leases
-        </Button>
-        <GenerateDocxForm leaseId={lease.id} hasTemplate={templates.length > 0} />
-      </div>
+      <PageHeader
+        className="print-hidden"
+        title="Lease agreement"
+        back={{ href: "/leases", label: "Leases" }}
+        actions={
+          <>
+            <PrintButton />
+            <Button
+              variant="ghost"
+              render={<Link href={`/leases/${lease.id}/abstract`} />}
+            >
+              Lease abstract
+            </Button>
+            <GenerateDocxForm leaseId={lease.id} hasTemplate={templates.length > 0} />
+          </>
+        }
+      />
 
       {canEsign && esign && (
         <Card className="print-hidden">
@@ -772,9 +777,9 @@ export default async function LeaseAgreementPage({
           </div>
 
           <div className="space-y-1 text-center">
-            <h1 className="text-2xl font-semibold tracking-wide">
+            <div className="text-2xl font-semibold tracking-wide">
               RESIDENTIAL LEASE AGREEMENT
-            </h1>
+            </div>
             <p className="text-sm text-muted-foreground">Prepared {vars.today}</p>
           </div>
 

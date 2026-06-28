@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HandCoinsIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { PAYER_TYPES, payerTypeLabel } from "@/lib/payers/payer-type";
@@ -14,7 +15,9 @@ import {
   updatePayerAction,
 } from "./actions";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
 import { FormDialog } from "@/components/app/form-dialog";
+import { PageHeader } from "@/components/app/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -131,26 +134,28 @@ export default async function PayersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Payers</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+      <PageHeader
+        title="Payers"
+        description={
+          <>
             Third parties who pay on a tenant&apos;s behalf — e.g. a HUD/Section 8
             housing authority paying the subsidy (HAP) portion of rent. Recording
             a payment, pick the payer under &ldquo;Paid by.&rdquo; Payers are an
             attribution directory only; they never affect tenant balances.
-          </p>
-        </div>
-        <FormDialog
-          trigger="Add payer"
-          triggerVariant="default"
-          title="Add payer"
-          action={createPayerAction}
-          submitLabel="Add payer"
-        >
-          <PayerFields />
-        </FormDialog>
-      </div>
+          </>
+        }
+        actions={
+          <FormDialog
+            trigger="Add payer"
+            triggerVariant="default"
+            title="Add payer"
+            action={createPayerAction}
+            submitLabel="Add payer"
+          >
+            <PayerFields />
+          </FormDialog>
+        }
+      />
 
       {portalError && (
         <Alert variant="destructive">
@@ -256,7 +261,24 @@ export default async function PayersPage({
 
       <h2 className="text-lg font-semibold">Payer directory</h2>
       <DataTable
-        emptyMessage="No payers yet. Add a housing authority or other third-party payer."
+        emptyState={
+          <EmptyState
+            icon={<HandCoinsIcon />}
+            title="No payers yet"
+            description="Add a housing authority or other third-party payer to attribute payments made on a tenant's behalf."
+            action={
+              <FormDialog
+                trigger="Add payer"
+                triggerVariant="default"
+                title="Add payer"
+                action={createPayerAction}
+                submitLabel="Add payer"
+              >
+                <PayerFields />
+              </FormDialog>
+            }
+          />
+        }
         columns={[
           { key: "name", label: "Name" },
           { key: "type", label: "Type" },

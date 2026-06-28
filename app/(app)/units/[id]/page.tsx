@@ -27,7 +27,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { TurnoverSection } from "./turnover-section";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -179,23 +179,27 @@ export default async function UnitDetail({
 
   return (
     <div className="space-y-6">
-      <div>
-        <BackLink href={`/properties/${unit.propertyId}`} label="Property" />
-        <h1 className="text-2xl font-semibold">
-          <Link href={`/properties/${unit.propertyId}`} className="hover:underline">
-            {unit.property.name}
-          </Link>{" "}
-          · {unit.unitNumber}
-        </h1>
-        <p className="text-muted-foreground capitalize">
-          {unit.building?.name ? `${unit.building.name} · ` : ""}
-          {unit.unitType} · {subtitleState} ·{" "}
-          {formatCurrency(unit.defaultRentAmountCents, currency)} default rent
-          {unit.internetEnabled
-            ? ` · internet default +${formatCurrency(unit.internetFeeCents, currency)}/mo`
-            : ""}
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: `/properties/${unit.propertyId}`, label: "Property" }}
+        title={
+          <>
+            <Link href={`/properties/${unit.propertyId}`} className="hover:underline">
+              {unit.property.name}
+            </Link>{" "}
+            · {unit.unitNumber}
+          </>
+        }
+        description={
+          <span className="capitalize">
+            {unit.building?.name ? `${unit.building.name} · ` : ""}
+            {unit.unitType} · {subtitleState} ·{" "}
+            {formatCurrency(unit.defaultRentAmountCents, currency)} default rent
+            {unit.internetEnabled
+              ? ` · internet default +${formatCurrency(unit.internetFeeCents, currency)}/mo`
+              : ""}
+          </span>
+        }
+      />
 
       <Card>
         <CardHeader>

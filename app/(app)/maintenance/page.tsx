@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
+import { CalendarClockIcon, WrenchIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
@@ -40,6 +41,8 @@ import { slaState } from "@/lib/maintenance/sla";
 import type { MaintenancePriority } from "@/lib/generated/prisma/enums";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -249,6 +252,7 @@ export default async function MaintenancePage({
     );
 
   const openJobs = jobs.filter((j) => isOpenStatus(j.status)).length;
+  const filtering = Boolean(filterPropertyId || filterStatus);
 
   return (
     <div className="space-y-6">
@@ -257,15 +261,16 @@ export default async function MaintenancePage({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Maintenance</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        title="Maintenance"
+        description={
+          <>
             {openJobs} open job{openJobs === 1 ? "" : "s"} · completed jobs with a
             cost are logged to Financials automatically.
-          </p>
-        </div>
-        <FormDialog trigger="Add job" triggerVariant="default" title="Add maintenance job">
+          </>
+        }
+        actions={
+          <FormDialog trigger="Add job" triggerVariant="default" title="Add maintenance job">
           <form action={createJobAction} className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="mjTitle">Title</Label>
@@ -395,8 +400,9 @@ export default async function MaintenancePage({
               Add job
             </Button>
           </form>
-        </FormDialog>
-      </div>
+          </FormDialog>
+        }
+      />
 
       <Card className="border-t-4 border-t-sky-500">
         <CardHeader>
@@ -448,7 +454,24 @@ export default async function MaintenancePage({
           </form>
 
           <DataTable
-            emptyMessage="No maintenance jobs yet."
+            emptyState={
+              <EmptyState
+                icon={<WrenchIcon />}
+                title={filtering ? "No matching jobs" : "No maintenance jobs yet"}
+                description={
+                  filtering
+                    ? "Try a different property or status — or clear the filters."
+                    : "Add a maintenance job to track repairs, vendors, and costs."
+                }
+                action={
+                  filtering ? (
+                    <Button variant="outline" size="sm" render={<Link href="/maintenance" />}>
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
+            }
             columns={[
               { key: "created", label: "Created", className: "hidden md:table-cell" },
               { key: "property", label: "Property", className: "hidden sm:table-cell" },
@@ -912,7 +935,13 @@ export default async function MaintenancePage({
         </CardHeader>
         <CardContent>
           <DataTable
-            emptyMessage="No monthly tasks yet — add recurring upkeep like mowing or pest spraying."
+            emptyState={
+              <EmptyState
+                icon={<CalendarClockIcon />}
+                title="No monthly tasks yet"
+                description="Add recurring upkeep like mowing or pest spraying to keep it on schedule."
+              />
+            }
             columns={[
               { key: "property", label: "Property" },
               { key: "task", label: "Task" },

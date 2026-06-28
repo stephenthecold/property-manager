@@ -58,7 +58,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { ChangeHistory } from "@/components/app/change-history";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { ActivityTimeline } from "@/components/app/activity-timeline";
 import { tenantActivity } from "@/lib/services/activity";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -347,13 +347,11 @@ export default async function TenantDetail({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <BackLink href="/tenants" label="Tenants" />
-          <h1 className="text-2xl font-semibold">
-            {tenant.firstName} {tenant.lastName}
-          </h1>
-          <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
+      <PageHeader
+        back={{ href: "/tenants", label: "Tenants" }}
+        title={`${tenant.firstName} ${tenant.lastName}`}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
             <span>
               {[tenant.phone, tenant.email].filter(Boolean).join(" · ") ||
                 "No contact info"}
@@ -395,17 +393,18 @@ export default async function TenantDetail({
                 — suppressed
               </Badge>
             )}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SendReminderDialog
-            tenantId={tenant.id}
-            leaseId={activeLease?.id}
-            tenantName={`${tenant.firstName} ${tenant.lastName}`}
-            hasConsent={tenant.smsConsent}
-            hasPhone={!!tenant.phone?.trim()}
-            defaultBodies={defaultBodies}
-          />
+          </span>
+        }
+        actions={
+          <>
+            <SendReminderDialog
+              tenantId={tenant.id}
+              leaseId={activeLease?.id}
+              tenantName={`${tenant.firstName} ${tenant.lastName}`}
+              hasConsent={tenant.smsConsent}
+              hasPhone={!!tenant.phone?.trim()}
+              defaultBodies={defaultBodies}
+            />
           {activeLease && (
             <>
               <Button
@@ -454,8 +453,9 @@ export default async function TenantDetail({
               </ConfirmSubmitButton>
             </form>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {activeLease && snap ? (
         <>

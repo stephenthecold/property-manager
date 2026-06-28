@@ -5,7 +5,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
 import { updateBuilding } from "../../properties/actions";
 import { ActionForm } from "@/components/app/action-form";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,19 +57,21 @@ export default async function BuildingDetail({
 
   return (
     <div className="space-y-6">
-      <div>
-        <BackLink href={`/properties/${building.propertyId}`} label="Property" />
-        <h1 className="text-2xl font-semibold">{building.name}</h1>
-        <p className="text-muted-foreground">
-          <Link
-            href={`/properties/${building.propertyId}`}
-            className="hover:underline"
-          >
-            {building.property.name}
-          </Link>{" "}
-          · {unitCount} unit{unitCount === 1 ? "" : "s"}
-        </p>
-      </div>
+      <PageHeader
+        title={building.name}
+        back={{ href: `/properties/${building.propertyId}`, label: "Property" }}
+        description={
+          <>
+            <Link
+              href={`/properties/${building.propertyId}`}
+              className="hover:underline"
+            >
+              {building.property.name}
+            </Link>{" "}
+            · {unitCount} unit{unitCount === 1 ? "" : "s"}
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

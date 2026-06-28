@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ContactIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listVendors } from "@/lib/services/vendors";
@@ -10,6 +11,8 @@ import {
   updateVendorAction,
 } from "./actions";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,27 +91,41 @@ export default async function VendorsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Vendors</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Your directory of contractors and service providers. A reference list
-            only — vendors never affect tenant balances.
-          </p>
-        </div>
-        <FormDialog
-          trigger="Add vendor"
-          triggerVariant="default"
-          title="Add vendor"
-          action={createVendorAction}
-          submitLabel="Add vendor"
-        >
-          <VendorFields />
-        </FormDialog>
-      </div>
+      <PageHeader
+        title="Vendors"
+        description="Your directory of contractors and service providers. A reference list only — vendors never affect tenant balances."
+        actions={
+          <FormDialog
+            trigger="Add vendor"
+            triggerVariant="default"
+            title="Add vendor"
+            action={createVendorAction}
+            submitLabel="Add vendor"
+          >
+            <VendorFields />
+          </FormDialog>
+        }
+      />
 
       <DataTable
-        emptyMessage="No vendors yet."
+        emptyState={
+          <EmptyState
+            icon={<ContactIcon />}
+            title="No vendors yet"
+            description="Add contractors and service providers so you can assign them to maintenance jobs."
+            action={
+              <FormDialog
+                trigger="Add vendor"
+                triggerVariant="default"
+                title="Add vendor"
+                action={createVendorAction}
+                submitLabel="Add vendor"
+              >
+                <VendorFields />
+              </FormDialog>
+            }
+          />
+        }
         columns={[
           { key: "name", label: "Name" },
           { key: "trade", label: "Trade" },

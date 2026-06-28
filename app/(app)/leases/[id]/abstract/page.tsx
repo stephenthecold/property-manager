@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { buildAgreementVars } from "@/lib/services/lease-agreement";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
 import { formatCurrency } from "@/lib/money";
+import { PageHeader } from "@/components/app/page-header";
 import { PrintButton } from "@/components/app/print-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,18 +92,22 @@ export default async function LeaseAbstractPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div className="print-hidden flex flex-wrap items-center gap-2">
-        <PrintButton />
-        <Button
-          variant="ghost"
-          render={<Link href={`/leases/${lease.id}/agreement`} />}
-        >
-          Full agreement
-        </Button>
-        <Button variant="ghost" render={<Link href="/leases" />}>
-          Back to leases
-        </Button>
-      </div>
+      <PageHeader
+        className="print-hidden"
+        title="Lease abstract"
+        back={{ href: "/leases", label: "Leases" }}
+        actions={
+          <>
+            <PrintButton />
+            <Button
+              variant="ghost"
+              render={<Link href={`/leases/${lease.id}/agreement`} />}
+            >
+              Full agreement
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardContent className="space-y-6 py-6">
@@ -129,7 +134,7 @@ export default async function LeaseAbstractPage({
 
           {/* Title + property · unit · status */}
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold tracking-wide">LEASE ABSTRACT</h1>
+            <div className="text-2xl font-semibold tracking-wide">LEASE ABSTRACT</div>
             <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
                 {property.name} · Unit {lease.unit.unitNumber}

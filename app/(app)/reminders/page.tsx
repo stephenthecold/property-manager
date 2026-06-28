@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BellIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import type {
@@ -9,6 +10,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
 
@@ -95,11 +98,10 @@ export default async function RemindersPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Reminders</h1>
-      <p className="text-sm text-muted-foreground">
-        SMS reminder log. Send reminders from a tenant&apos;s page. Showing the
-        100 most recent.
-      </p>
+      <PageHeader
+        title="Reminders"
+        description="SMS reminder log. Send reminders from a tenant's page. Showing the 100 most recent."
+      />
 
       {bulk && (
         <Alert>
@@ -152,7 +154,28 @@ export default async function RemindersPage({
       </form>
 
       <DataTable
-        emptyMessage="No reminders yet."
+        emptyState={
+          <EmptyState
+            icon={<BellIcon />}
+            title={status || type ? "No matching reminders" : "No reminders yet"}
+            description={
+              status || type
+                ? "No reminders match this filter — try a different status or type, or clear the filter."
+                : "Send a reminder from a tenant's page and it will be logged here."
+            }
+            action={
+              status || type ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/reminders" />}
+                >
+                  Clear filter
+                </Button>
+              ) : undefined
+            }
+          />
+        }
         columns={[
           { key: "created", label: "Created" },
           { key: "tenant", label: "Tenant" },

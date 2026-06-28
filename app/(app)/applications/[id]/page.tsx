@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { StatusForm, SendLinkForm } from "../applications-forms";
 import {
@@ -109,20 +109,20 @@ export default async function ApplicationDetail({
 
   return (
     <div className="space-y-6">
-      <div>
-        <BackLink href="/applications" label="All applications" />
-        <h1 className="mt-1 text-2xl font-semibold">
-          {app.firstName} {app.lastName}
-        </h1>
-        <p className="text-sm text-muted-foreground capitalize">
-          {app.status} · submitted{" "}
-          {app.createdAt.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: "/applications", label: "All applications" }}
+        title={`${app.firstName} ${app.lastName}`}
+        description={
+          <span className="capitalize">
+            {app.status} · submitted{" "}
+            {app.createdAt.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </span>
+        }
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">

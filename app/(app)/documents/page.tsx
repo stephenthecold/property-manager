@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { FileTextIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { listDocuments } from "@/lib/services/documents";
 import type { UploadType } from "@/lib/generated/prisma/enums";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -54,10 +57,10 @@ export default async function DocumentsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <h1 className="text-2xl font-semibold">Documents</h1>
-        <UploadDocumentDialog tenantId={tenantId} trigger="Upload document" />
-      </div>
+      <PageHeader
+        title="Documents"
+        actions={<UploadDocumentDialog tenantId={tenantId} trigger="Upload document" />}
+      />
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">
@@ -83,7 +86,26 @@ export default async function DocumentsPage({
       </form>
 
       <DataTable
-        emptyMessage="No documents yet."
+        emptyState={
+          <EmptyState
+            icon={<FileTextIcon />}
+            title={uploadType ? "No matching documents" : "No documents yet"}
+            description={
+              uploadType
+                ? "Try a different document type — or clear the filter."
+                : "Upload a lease, receipt, or tenant document to keep it on file."
+            }
+            action={
+              uploadType ? (
+                <Button variant="outline" size="sm" render={<Link href="/documents" />}>
+                  Clear filter
+                </Button>
+              ) : (
+                <UploadDocumentDialog tenantId={tenantId} trigger="Upload document" />
+              )
+            }
+          />
+        }
         columns={[
           { key: "uploaded", label: "Uploaded" },
           { key: "file", label: "File" },

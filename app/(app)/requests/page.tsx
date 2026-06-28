@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { InboxIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
@@ -8,6 +9,8 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
 import { convertRequestToJobAction, setRequestStatusAction } from "./actions";
@@ -92,21 +95,19 @@ export default async function RequestsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Tenant requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Portal submissions: maintenance issues and cash-rent pickups.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          render={<Link href={showAll ? "/requests" : "/requests?all=1"} />}
-        >
-          {showAll ? "Show open only" : "Show all (incl. closed)"}
-        </Button>
-      </div>
+      <PageHeader
+        title="Tenant requests"
+        description="Portal submissions: maintenance issues and cash-rent pickups."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            render={<Link href={showAll ? "/requests" : "/requests?all=1"} />}
+          >
+            {showAll ? "Show open only" : "Show all (incl. closed)"}
+          </Button>
+        }
+      />
 
       {error && (
         <Alert variant="destructive">
@@ -115,7 +116,24 @@ export default async function RequestsPage({
       )}
 
       <DataTable
-        emptyMessage={showAll ? "No requests yet." : "No open requests — all caught up."}
+        emptyState={
+          <EmptyState
+            icon={<InboxIcon />}
+            title={showAll ? "No requests yet" : "No open requests"}
+            description={
+              showAll
+                ? "Tenant maintenance issues and cash-rent pickups submitted from the portal land here."
+                : "You're all caught up — no open tenant requests right now."
+            }
+            action={
+              showAll ? undefined : (
+                <Button variant="outline" size="sm" render={<Link href="/requests?all=1" />}>
+                  Show all (incl. closed)
+                </Button>
+              )
+            }
+          />
+        }
         columns={[
           { key: "created", label: "Submitted" },
           { key: "tenant", label: "Tenant" },

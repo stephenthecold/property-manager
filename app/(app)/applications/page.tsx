@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ClipboardListIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listApplications } from "@/lib/services/applications";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToneBadge } from "@/components/status-badge";
 import type { Tone } from "@/lib/ui/status-tone";
@@ -31,13 +34,15 @@ export default async function ApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Rental applications</h1>
-        <p className="text-sm text-muted-foreground">
-          {apps.length} total · {open} awaiting review. The public form lives at{" "}
-          <span className="font-mono">/apply</span>.
-        </p>
-      </div>
+      <PageHeader
+        title="Rental applications"
+        description={
+          <>
+            {apps.length} total · {open} awaiting review. The public form lives at{" "}
+            <span className="font-mono">/apply</span>.
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -45,7 +50,13 @@ export default async function ApplicationsPage() {
         </CardHeader>
         <CardContent>
           <DataTable
-            emptyMessage="No applications yet."
+            emptyState={
+              <EmptyState
+                icon={<ClipboardListIcon />}
+                title="No applications yet"
+                description="Submissions from the public apply form show up here. Share the apply link below to get started."
+              />
+            }
             columns={[
               { key: "name", label: "Applicant" },
               { key: "contact", label: "Contact", className: "hidden sm:table-cell" },

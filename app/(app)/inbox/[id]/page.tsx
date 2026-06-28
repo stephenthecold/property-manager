@@ -31,7 +31,7 @@ import {
   postInboxExpenseAction,
   recordInboxPaymentAction,
 } from "../actions";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { FormDialog } from "@/components/app/form-dialog";
@@ -184,56 +184,56 @@ export default async function InboxDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <BackLink href="/inbox" label="Email inbox" />
-          <h1 className="text-2xl font-semibold">
-            {email.subject || "(no subject)"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        back={{ href: "/inbox", label: "Email inbox" }}
+        title={email.subject || "(no subject)"}
+        description={
+          <>
             From{" "}
             <span className="font-medium text-foreground">
               {email.fromName ? `${email.fromName} · ` : ""}
               {email.fromEmail}
             </span>{" "}
             · {email.receivedAt.toLocaleString()}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {!email.readAt && (
-            <form action={markInboxReadAction}>
-              <input type="hidden" name="id" value={email.id} />
-              <Button type="submit" variant="outline" size="sm">
-                Mark read
-              </Button>
-            </form>
-          )}
-          {!posted && (
-            <form action={archiveInboxAction}>
-              <input type="hidden" name="id" value={email.id} />
-              <input
-                type="hidden"
-                name="archived"
-                value={email.status === "archived" ? "false" : "true"}
-              />
-              <Button type="submit" variant="outline" size="sm">
-                {email.status === "archived" ? "Unarchive" : "Archive"}
-              </Button>
-            </form>
-          )}
-          {!posted && (
-            <form action={deleteInboxAction}>
-              <input type="hidden" name="id" value={email.id} />
-              <ConfirmSubmitButton
-                size="sm"
-                confirmMessage="Delete this message and its attachments permanently? This can't be undone."
-              >
-                Delete
-              </ConfirmSubmitButton>
-            </form>
-          )}
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            {!email.readAt && (
+              <form action={markInboxReadAction}>
+                <input type="hidden" name="id" value={email.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  Mark read
+                </Button>
+              </form>
+            )}
+            {!posted && (
+              <form action={archiveInboxAction}>
+                <input type="hidden" name="id" value={email.id} />
+                <input
+                  type="hidden"
+                  name="archived"
+                  value={email.status === "archived" ? "false" : "true"}
+                />
+                <Button type="submit" variant="outline" size="sm">
+                  {email.status === "archived" ? "Unarchive" : "Archive"}
+                </Button>
+              </form>
+            )}
+            {!posted && (
+              <form action={deleteInboxAction}>
+                <input type="hidden" name="id" value={email.id} />
+                <ConfirmSubmitButton
+                  size="sm"
+                  confirmMessage="Delete this message and its attachments permanently? This can't be undone."
+                >
+                  Delete
+                </ConfirmSubmitButton>
+              </form>
+            )}
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

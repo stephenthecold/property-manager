@@ -3,10 +3,11 @@ import { requireCapability } from "@/lib/auth/session";
 import { getEnv } from "@/lib/config/env";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { ActionForm } from "@/components/app/action-form";
+import { PageHeader } from "@/components/app/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
@@ -15,11 +16,9 @@ export default async function NewPropertyPage() {
   const env = getEnv();
   const { modules } = await getAppSettings();
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-xl space-y-6">
+      <PageHeader title="Add property" back={{ href: "/properties", label: "Properties" }} />
       <Card>
-        <CardHeader>
-          <CardTitle>Add property</CardTitle>
-        </CardHeader>
         <CardContent>
           <ActionForm
             action={createProperty}

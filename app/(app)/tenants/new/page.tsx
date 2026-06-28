@@ -1,21 +1,20 @@
 import { createTenant } from "../actions";
 import { requireCapability } from "@/lib/auth/session";
 import { ActionForm } from "@/components/app/action-form";
+import { PageHeader } from "@/components/app/page-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const runtime = "nodejs";
 
 export default async function NewTenantPage() {
   await requireCapability("tenants.manage");
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-xl space-y-6">
+      <PageHeader title="Add tenant" back={{ href: "/tenants", label: "Tenants" }} />
       <Card>
-        <CardHeader>
-          <CardTitle>Add tenant</CardTitle>
-        </CardHeader>
         <CardContent>
           <ActionForm
             action={createTenant}

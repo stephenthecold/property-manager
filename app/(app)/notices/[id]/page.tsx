@@ -5,7 +5,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { getNoticeForPrint } from "@/lib/services/notices";
 import { noticeTypeLabel } from "@/lib/notices/templates";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,21 +30,27 @@ export default async function NoticePrintPage({
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 bg-white p-8 text-black print:p-0 dark:bg-white">
-      <div className="print-hidden flex flex-wrap items-center gap-4 text-sm">
-        <BackLink href="/notices" label="Notices" />
-        <Link
-          href={`/tenants/${notice.tenantId}`}
-          className="text-muted-foreground hover:text-foreground hover:underline"
-        >
-          {notice.lease.tenant.firstName} {notice.lease.tenant.lastName}
-        </Link>
-        <Link
-          href={`/leases/${notice.lease.id}/agreement`}
-          className="text-muted-foreground hover:text-foreground hover:underline"
-        >
-          Lease agreement
-        </Link>
-      </div>
+      <PageHeader
+        className="print-hidden"
+        title="Notice"
+        back={{ href: "/notices", label: "Notices" }}
+        actions={
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Link
+              href={`/tenants/${notice.tenantId}`}
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {notice.lease.tenant.firstName} {notice.lease.tenant.lastName}
+            </Link>
+            <Link
+              href={`/leases/${notice.lease.id}/agreement`}
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Lease agreement
+            </Link>
+          </div>
+        }
+      />
 
       <header className="border-b pb-4">
         <div className="text-lg font-semibold">{settings.businessName}</div>
@@ -71,7 +77,7 @@ export default async function NoticePrintPage({
         </div>
       </div>
 
-      <h1 className="text-center text-xl font-bold uppercase">{notice.subject}</h1>
+      <div className="text-center text-xl font-bold uppercase">{notice.subject}</div>
 
       <div className="whitespace-pre-wrap text-[15px] leading-relaxed">
         {notice.body}

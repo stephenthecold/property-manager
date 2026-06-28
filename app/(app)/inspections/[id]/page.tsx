@@ -16,7 +16,7 @@ import {
 import { formatCurrency } from "@/lib/money";
 import { completeInspectionAction } from "../actions";
 import { InspectionChecklistCard } from "@/components/app/inspection-checklist-card";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { FormDialog } from "@/components/app/form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,13 +52,11 @@ export default async function InspectionDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <BackLink href="/inspections" label="All inspections" />
-          <h1 className="mt-1 text-2xl font-semibold">
-            {inspectionTypeLabel(inspection.type)} inspection
-          </h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        back={{ href: "/inspections", label: "All inspections" }}
+        title={`${inspectionTypeLabel(inspection.type)} inspection`}
+        description={
+          <>
             <Link href={`/tenants/${inspection.lease.tenantId}`} className="hover:underline">
               {inspection.lease.tenant.firstName} {inspection.lease.tenant.lastName}
             </Link>{" "}
@@ -66,12 +64,14 @@ export default async function InspectionDetailPage({
             <Link href={`/units/${unitId}`} className="hover:underline">
               {inspection.lease.unit.property.name} · {inspection.lease.unit.unitNumber}
             </Link>
-          </p>
-        </div>
-        <Button variant="outline" render={<Link href={`/inspections/${inspection.id}/report`} />}>
-          Printable report
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button variant="outline" render={<Link href={`/inspections/${inspection.id}/report`} />}>
+            Printable report
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

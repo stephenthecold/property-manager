@@ -15,9 +15,12 @@ import {
   updateNoticeAction,
   voidNoticeAction,
 } from "./actions";
+import { BellIcon } from "lucide-react";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
+import { EmptyState } from "@/components/app/empty-state";
 import { FormDialog } from "@/components/app/form-dialog";
+import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,53 +96,48 @@ export default async function NoticesPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Notices</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Formal landlord notices. Generate from a per-type template prefilled
-            with the lease details, edit while it&apos;s a draft, then mark served
-            and print. The text is snapshotted. The default templates are starting
-            points — review them against your local requirements before serving.
-          </p>
-        </div>
-        <FormDialog
-          trigger="Create notice"
-          triggerVariant="default"
-          title="Create notice"
-          description="Leave subject/body blank to use the type's default template (filled with the lease's details). You can edit the draft afterward."
-          action={createNoticeAction}
-          submitLabel="Create draft"
-          wide
-        >
-          <div className="space-y-2">
-            <Label htmlFor="nLease">Lease</Label>
-            <select id="nLease" name="leaseId" required defaultValue="" className="h-9 w-full rounded-md border px-3 text-sm">
-              <option value="" disabled>
-                Select a lease…
-              </option>
-              {leaseOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
+      <PageHeader
+        title="Notices"
+        description="Formal landlord notices. Generate from a per-type template prefilled with the lease details, edit while it's a draft, then mark served and print. The text is snapshotted. The default templates are starting points — review them against your local requirements before serving."
+        actions={
+          <FormDialog
+            trigger="Create notice"
+            triggerVariant="default"
+            title="Create notice"
+            description="Leave subject/body blank to use the type's default template (filled with the lease's details). You can edit the draft afterward."
+            action={createNoticeAction}
+            submitLabel="Create draft"
+            wide
+          >
+            <div className="space-y-2">
+              <Label htmlFor="nLease">Lease</Label>
+              <select id="nLease" name="leaseId" required defaultValue="" className="h-9 w-full rounded-md border px-3 text-sm">
+                <option value="" disabled>
+                  Select a lease…
                 </option>
-              ))}
-            </select>
-          </div>
-          {typeField}
-          <div className="space-y-2">
-            <Label htmlFor="nEff">Effective date (pay-by / move-out / increase date)</Label>
-            <Input id="nEff" name="effectiveDate" type="date" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="nSubject">Subject (optional — blank uses the template)</Label>
-            <Input id="nSubject" name="subject" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="nBody">Body (optional — blank uses the template)</Label>
-            <Textarea id="nBody" name="body" rows={6} />
-          </div>
-        </FormDialog>
-      </div>
+                {leaseOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {typeField}
+            <div className="space-y-2">
+              <Label htmlFor="nEff">Effective date (pay-by / move-out / increase date)</Label>
+              <Input id="nEff" name="effectiveDate" type="date" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nSubject">Subject (optional — blank uses the template)</Label>
+              <Input id="nSubject" name="subject" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nBody">Body (optional — blank uses the template)</Label>
+              <Textarea id="nBody" name="body" rows={6} />
+            </div>
+          </FormDialog>
+        }
+      />
 
       <form method="GET" className="flex flex-wrap items-end gap-3">
         <div className="space-y-2">
@@ -175,7 +173,24 @@ export default async function NoticesPage({
       </form>
 
       <DataTable
-        emptyMessage="No notices yet."
+        emptyState={
+          <EmptyState
+            icon={<BellIcon />}
+            title={status || type ? "No matching notices" : "No notices yet"}
+            description={
+              status || type
+                ? "Try a different status or type — or clear the filters."
+                : "Create a notice from a per-type template prefilled with the lease details."
+            }
+            action={
+              status || type ? (
+                <Button variant="outline" size="sm" render={<Link href="/notices" />}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          />
+        }
         columns={[
           { key: "date", label: "Created" },
           { key: "tenant", label: "Tenant" },

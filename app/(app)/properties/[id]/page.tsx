@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FormDialog } from "@/components/app/form-dialog";
-import { BackLink } from "@/components/app/back-link";
+import { PageHeader } from "@/components/app/page-header";
 import { ChangeHistory } from "@/components/app/change-history";
 
 export const runtime = "nodejs";
@@ -163,16 +163,15 @@ export default async function PropertyDetail({
 
   return (
     <div className="space-y-6">
-      <div>
-        <BackLink href="/properties" label="Properties" />
-        <h1 className="text-2xl font-semibold">{property.name}</h1>
-        <p className="text-muted-foreground">
-          {[property.addressLine1, property.city, property.state, property.zip]
+      <PageHeader
+        title={property.name}
+        back={{ href: "/properties", label: "Properties" }}
+        description={`${
+          [property.addressLine1, property.city, property.state, property.zip]
             .filter(Boolean)
-            .join(", ") || "No address"}{" "}
-          · {property.timezone} · {property.currency}
-        </p>
-      </div>
+            .join(", ") || "No address"
+        } · ${property.timezone} · ${property.currency}`}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
