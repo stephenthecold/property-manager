@@ -5,6 +5,7 @@ import { auditActor, requireCapability } from "@/lib/auth/session";
 import { getAppSettings, saveInboxSettings } from "@/lib/services/app-settings";
 import { requestInboxPollNow } from "@/lib/services/inbox-poll-signal";
 import { isInboxOauthProvider } from "@/lib/providers/inbound-email/oauth-connect";
+import { unsafeOutboundUrlReason } from "@/lib/http/safe-url";
 import {
   disconnectInboxOauth,
   saveInboxOauthClientConfig,
@@ -63,8 +64,12 @@ export async function saveInboxAction(
     }
     port = n;
   }
-  if (tokenUrl && !/^https:\/\//.test(tokenUrl)) {
-    return { error: "The OAuth2 token URL must be an https:// URL." };
+  if (tokenUrl) {
+    // SSRF/exfil guard: the worker POSTs the client secret + refresh token to
+    // this URL, so it must be a public https endpoint — never an internal/
+    // metadata host.
+    const reason = unsafeOutboundUrlReason(tokenUrl);
+    if (reason) return { error: `The OAuth2 token URL ${reason}` };
   }
 
   if (inboxProvider === "imap") {
@@ -79,6 +84,16 @@ export async function saveInboxAction(
       if (!tokenUrl) return { error: "OAuth2 requires a token URL." };
       if (!clientSecret && !current.inboxHasOauthClientSecret) {
         return { error: "OAuth2 requires a client secret." };
+      }
+      // Bind the stored secret to its destination: a write-only "blank = keep
+      // stored secret" submission must NOT be carried to a NEW token URL — that
+      // would let an operator who doesn't know the secret exfiltrate it by
+      // repointing the URL at a host they control. Changing the URL therefore
+      // requires re-entering the secret.
+      if (!clientSecret && tokenUrl !== current.inboxOauthTokenUrl) {
+        return {
+          error: "Re-enter the OAuth2 client secret when you change the token URL.",
+        };
       }
       // No refresh token => client-credentials (app-only) grant, which is the
       // recommended O365 service path; so a refresh token is NOT required here.
