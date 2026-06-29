@@ -8,6 +8,8 @@ import {
   hashBackupCodes,
   consumeBackupCode,
   unusedBackupCodeCount,
+  isTotpLocked,
+  totpLockUntil,
   type StoredBackupCode,
 } from "@/lib/auth/totp";
 
@@ -378,10 +380,51 @@ export async function verifyLoginChallenge(
   code: string,
   actor: AuditContext,
   now: Date = new Date(),
-): Promise<{ ok: true; via: ChallengeVia } | { ok: false }> {
+): Promise<{ ok: true; via: ChallengeVia } | { ok: false; locked?: boolean }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { ok: false };
+
+  // Brute-force lockout (mirrors break-glass): a 6-digit login TOTP is narrow,
+  // so an attacker who already has the user's primary password could grind the
+  // second factor. While locked, reject WITHOUT checking the code; each failure
+  // atomically increments the counter (correct under a concurrent guess burst,
+  // unlike read-then-write) and trips a timed lock at TOTP_MAX_ATTEMPTS; a
+  // successful verify clears it.
+  if (isTotpLocked(user.totpLockedUntil, now)) {
+    await writeAudit(prisma, {
+      ...actor,
+      action: "user.totp.login_locked",
+      entityType: "User",
+      entityId: userId,
+    });
+    return { ok: false, locked: true };
+  }
+
   const result = await verifyChallengeForUser(user, code, now);
+
+  if (result.ok) {
+    // Good code — clear any accumulated failures / lock.
+    if (user.totpFailedAttempts !== 0 || user.totpLockedUntil) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { totpFailedAttempts: 0, totpLockedUntil: null },
+      });
+    }
+  } else {
+    const { totpFailedAttempts } = await prisma.user.update({
+      where: { id: userId },
+      data: { totpFailedAttempts: { increment: 1 } },
+      select: { totpFailedAttempts: true },
+    });
+    const lockedUntil = totpLockUntil(totpFailedAttempts, now);
+    if (lockedUntil) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { totpLockedUntil: lockedUntil },
+      });
+    }
+  }
+
   await writeAudit(prisma, {
     ...actor,
     action: result.ok ? "user.totp.login_verified" : "user.totp.login_failed",

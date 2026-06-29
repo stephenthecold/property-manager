@@ -11,6 +11,10 @@ import {
   consumeBackupCode,
   normalizeBackupCode,
   unusedBackupCodeCount,
+  isTotpLocked,
+  totpLockUntil,
+  TOTP_MAX_ATTEMPTS,
+  TOTP_LOCK_MINUTES,
 } from "./totp";
 
 /**
@@ -200,3 +204,25 @@ describe("backup codes", () => {
     expect(unusedBackupCodeCount([null, { usedAt: null }, { usedAt: "x" }])).toBe(1);
   });
 });
+
+describe("login-challenge lockout helpers", () => {
+  const now = new Date("2026-06-29T12:00:00Z");
+
+  it("isTotpLocked is true only while lockedUntil is in the future", () => {
+    expect(isTotpLocked(null, now)).toBe(false);
+    expect(isTotpLocked(undefined, now)).toBe(false);
+    expect(isTotpLocked(new Date(now.getTime() + 60_000), now)).toBe(true);
+    expect(isTotpLocked(new Date(now.getTime() - 1), now)).toBe(false); // expired
+    expect(isTotpLocked(now, now)).toBe(false); // exactly now → not locked
+  });
+
+  it("totpLockUntil returns null below the cap and a cooldown at/over it", () => {
+    expect(totpLockUntil(TOTP_MAX_ATTEMPTS - 1, now)).toBeNull();
+    const locked = totpLockUntil(TOTP_MAX_ATTEMPTS, now);
+    expect(locked).toEqual(new Date(now.getTime() + TOTP_LOCK_MINUTES * 60_000));
+    // Still locks past the cap (every further failure re-arms the cooldown).
+    expect(totpLockUntil(TOTP_MAX_ATTEMPTS + 3, now)).toEqual(
+      new Date(now.getTime() + TOTP_LOCK_MINUTES * 60_000),
+    );
+  });
+})

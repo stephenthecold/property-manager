@@ -59,7 +59,11 @@ export async function submitTwoFactorChallenge(
     await pendingActor(u.id, u.email ?? null),
   );
   if (!result.ok) {
-    return { error: "That code is incorrect or expired. Try again." };
+    return {
+      error: result.locked
+        ? "Too many incorrect codes. Try again in a few minutes, or use a backup code once the lock clears."
+        : "That code is incorrect or expired. Try again.",
+    };
   }
 
   // Clear the pending flag by handing the jwt callback an UNFORGEABLE proof
