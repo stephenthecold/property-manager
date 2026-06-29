@@ -281,6 +281,22 @@ export async function voidPayment(input: {
       throw new Error(`Cannot void a payment with status ${payment.status}`);
     }
 
+    // CRITICAL double-reversal guard (mirrors confirmSelfReportedPayment). The
+    // findUnique above is a lock-free read, so at READ COMMITTED two concurrent
+    // voids (double-click / two staff / two tabs) could BOTH see status="posted"
+    // and each append a reversal entry — double-reversing the payment and
+    // corrupting the lease balance. This compare-and-swap takes the row lock and
+    // only matches a still-posted row, so the loser updates 0 rows and bails
+    // BEFORE any ledger write. It also performs the posted->voided flip, so the
+    // trailing payment.update is no longer needed.
+    const claimed = await tx.payment.updateMany({
+      where: { id: payment.id, status: "posted" },
+      data: { status: "voided" },
+    });
+    if (claimed.count === 0) {
+      throw new Error("Cannot void a payment that is already being voided.");
+    }
+
     const paymentEntry = await tx.ledgerEntry.findFirst({
       where: { sourceType: "payment", sourceId: payment.id, entryType: "payment" },
     });
@@ -317,11 +333,6 @@ export async function voidPayment(input: {
         },
       });
     }
-
-    await tx.payment.update({
-      where: { id: payment.id },
-      data: { status: "voided" },
-    });
 
     await writeAudit(tx, {
       ...input.actor,
