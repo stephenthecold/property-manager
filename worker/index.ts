@@ -16,6 +16,7 @@ import {
   runWeeklyWarrantyDigest,
 } from "@/lib/services/staff-digest";
 import { runReportScheduleDelivery } from "@/lib/services/report-schedules";
+import { cleanupRateLimits } from "@/lib/services/rate-limit";
 
 /**
  * Dedicated billing worker: a daily idempotent run that generates due rent
@@ -227,6 +228,21 @@ async function runReportDeliveryOnce(): Promise<void> {
   }
 }
 
+async function runRateLimitCleanupOnce(): Promise<void> {
+  // Prune expired rate-limit windows so the RateLimit table doesn't grow
+  // unbounded. Isolated from billing; current windows are keyed by their own
+  // windowStart, so deleting anything older than a day is always safe.
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const removed = await cleanupRateLimits(cutoff);
+    if (removed > 0) {
+      console.log(`[worker] rate-limit cleanup: removed ${removed} stale window(s)`);
+    }
+  } catch (e) {
+    console.error("[worker] rate-limit cleanup failed:", e);
+  }
+}
+
 async function main(): Promise<void> {
   // DB-over-env: the saved send hour wins over REMINDER_CRON. Read once at
   // startup; changing it in Settings takes effect on the next worker restart.
@@ -249,8 +265,12 @@ async function main(): Promise<void> {
   await runRemindersOnce(); // startup catch-up (idempotent, duplicates skip)
   await runInboxOnce(); // startup catch-up (idempotent on messageId)
   await runReportDeliveryOnce(); // startup catch-up (cadence-bounded, no double-send)
+  await runRateLimitCleanupOnce(); // startup prune of stale rate-limit windows
   cron.schedule(SCHEDULE, () => {
     void runOnce();
+  });
+  cron.schedule(SCHEDULE, () => {
+    void runRateLimitCleanupOnce();
   });
   cron.schedule(reminderSchedule, () => {
     void runRemindersOnce();

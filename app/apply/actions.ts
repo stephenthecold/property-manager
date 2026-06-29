@@ -1,5 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
+import { clientIpFromXff } from "@/lib/http/client-ip";
+import { rateLimitHit, RATE_LIMITS } from "@/lib/services/rate-limit";
 import { submitApplication } from "@/lib/services/applications";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { validateSubmission } from "@/lib/applications/form-config";
@@ -38,6 +41,14 @@ export async function submitApplicationAction(
   _prev: ApplyState,
   fd: FormData,
 ): Promise<ApplyState> {
+  // Public, unauthenticated form — throttle submissions per client IP to blunt
+  // automated spam (on top of the per-field length caps below).
+  const ip = clientIpFromXff((await headers()).get("x-forwarded-for"));
+  if (!(await rateLimitHit(RATE_LIMITS.applySubmit, ip)).allowed) {
+    return {
+      error: "Too many submissions — please wait a little while and try again.",
+    };
+  }
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");
   if (!firstName || !lastName) {
