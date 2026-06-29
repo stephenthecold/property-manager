@@ -229,3 +229,33 @@ export function unusedBackupCodeCount(stored: StoredBackupCode[] | null | undefi
   if (!Array.isArray(stored)) return 0;
   return stored.filter((c) => c && typeof c === "object" && !c.usedAt).length;
 }
+
+// --- Login-challenge brute-force lockout --------------------------------------
+// A login TOTP is only 6 digits (~1e6 wide), so an attacker who already holds
+// the user's primary password could otherwise grind the second factor. These
+// pure helpers drive the lockout enforced in lib/services/totp.ts
+// verifyLoginChallenge, mirroring the break-glass credential lockout
+// (lib/auth/breakglass.ts: same cap + cooldown).
+
+/** Failed login-challenge attempts before the account is temporarily locked. */
+export const TOTP_MAX_ATTEMPTS = 5;
+/** How long the login 2FA challenge stays locked once the cap is hit (minutes). */
+export const TOTP_LOCK_MINUTES = 15;
+
+/** Pure: is the login 2FA challenge currently locked at `now`? */
+export function isTotpLocked(
+  lockedUntil: Date | null | undefined,
+  now: Date,
+): boolean {
+  return lockedUntil != null && lockedUntil.getTime() > now.getTime();
+}
+
+/**
+ * Pure: the lockout expiry once failed attempts reach the cap, else null (still
+ * under the cap → not yet locked). `failedAttempts` is the POST-increment count
+ * for the attempt that just failed.
+ */
+export function totpLockUntil(failedAttempts: number, now: Date): Date | null {
+  if (failedAttempts < TOTP_MAX_ATTEMPTS) return null;
+  return new Date(now.getTime() + TOTP_LOCK_MINUTES * 60_000);
+}
