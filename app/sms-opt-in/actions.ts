@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { recordSmsConsent } from "@/lib/services/sms-consent";
 import { clientIpFromXff } from "@/lib/http/client-ip";
+import { rateLimitHit, RATE_LIMITS } from "@/lib/services/rate-limit";
 import { phoneKey } from "@/lib/portal/identity";
 import {
   SMS_CONSENT_TEXT,
@@ -19,6 +20,10 @@ export interface OptInState {
 const str = (fd: FormData, key: string): string =>
   String(fd.get(key) ?? "").trim();
 
+// Length caps for this PUBLIC, unauthenticated form so a malicious client can't
+// push unbounded blobs into the (unbounded) text columns. Mirrors /apply.
+const MAX = { fullName: 100, phone: 40, email: 254, propertyUnit: 120 } as const;
+
 /**
  * Public SMS opt-in submission (no session). Records consent ONLY when the
  * separate, un-prechecked consent box is ticked; the record stores the exact
@@ -28,6 +33,13 @@ export async function submitSmsOptInAction(
   _prev: OptInState,
   fd: FormData,
 ): Promise<OptInState> {
+  const ip = clientIpFromXff((await headers()).get("x-forwarded-for"));
+  if (!(await rateLimitHit(RATE_LIMITS.smsOptIn, ip)).allowed) {
+    return {
+      error: "Too many submissions — please wait a little while and try again.",
+    };
+  }
+
   const fullName = str(fd, "fullName");
   const phoneRaw = str(fd, "phone");
   const email = str(fd, "email") || null;
@@ -35,6 +47,14 @@ export async function submitSmsOptInAction(
   const consent = fd.get("smsConsent") === "on";
 
   if (!fullName) return { error: "Please enter your full name." };
+  if (
+    fullName.length > MAX.fullName ||
+    phoneRaw.length > MAX.phone ||
+    (email?.length ?? 0) > MAX.email ||
+    (propertyUnit?.length ?? 0) > MAX.propertyUnit
+  ) {
+    return { error: "One of your entries is too long. Please shorten it and try again." };
+  }
   if (!phoneKey(phoneRaw)) {
     return { error: "Please enter a valid mobile phone number." };
   }
@@ -63,7 +83,7 @@ export async function submitSmsOptInAction(
         propertyUnit,
         consentText: SMS_CONSENT_TEXT,
         consentVersion: SMS_CONSENT_VERSION,
-        ipAddress: clientIpFromXff(h.get("x-forwarded-for")),
+        ipAddress: ip,
         userAgent: h.get("user-agent"),
       },
     );
