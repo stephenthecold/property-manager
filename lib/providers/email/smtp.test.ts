@@ -86,6 +86,23 @@ describe("smtpTransportOptions", () => {
       },
     });
   });
+
+  it("refuses an internal/non-public token URL (SSRF/exfil sink guard)", () => {
+    const build = (tokenUrl: string) =>
+      smtpTransportOptions({
+        ...BASE,
+        auth: {
+          method: "oauth2",
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          refreshToken: "refresh-token",
+          tokenUrl,
+        },
+      });
+    expect(() => build("https://169.254.169.254/token")).toThrow(/token URL/);
+    expect(() => build("https://localhost/token")).toThrow(/token URL/);
+    expect(() => build("http://login.microsoftonline.com/token")).toThrow(/token URL/);
+  });
 });
 
 describe("formatFromHeader", () => {

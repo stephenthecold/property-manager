@@ -13,6 +13,7 @@ import {
   saveMessagingSettings,
 } from "@/lib/services/app-settings";
 import { isValidComplianceUrl } from "@/lib/config/compliance";
+import { unsafeOutboundUrlReason } from "@/lib/http/safe-url";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 
 export interface MessagingState {
@@ -194,8 +195,11 @@ export async function saveEmailAction(
   if (fromAddress && !EMAIL_RE.test(fromAddress)) {
     return { error: "Enter a valid from address." };
   }
-  if (tokenUrl && !/^https:\/\//.test(tokenUrl)) {
-    return { error: "The OAuth2 token URL must be an https:// URL." };
+  if (tokenUrl) {
+    // SSRF/exfil guard: SMTP OAuth POSTs the client secret + refresh token to
+    // this URL (nodemailer accessUrl), so it must be a public https endpoint.
+    const reason = unsafeOutboundUrlReason(tokenUrl);
+    if (reason) return { error: `The OAuth2 token URL ${reason}` };
   }
 
   if (emailProvider === "smtp") {
@@ -212,6 +216,15 @@ export async function saveEmailAction(
       }
       if (!clientSecret && !settings.emailHasOauthClientSecret) {
         return { error: "OAuth2 requires a client secret." };
+      }
+      // Bind the stored secret to its destination: a blank "keep stored" secret
+      // must NOT be carried to a CHANGED token URL — that would let an operator
+      // who doesn't know the secret exfiltrate it by repointing the URL at a
+      // host they control. Changing the URL requires re-entering the secret.
+      if (!clientSecret && tokenUrl !== settings.emailOauthTokenUrl) {
+        return {
+          error: "Re-enter the OAuth2 client secret when you change the token URL.",
+        };
       }
       if (!refreshToken && !settings.emailHasOauthRefreshToken) {
         return { error: "OAuth2 requires a refresh token." };

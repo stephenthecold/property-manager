@@ -4,6 +4,7 @@ import type {
   SendEmailInput,
   SendEmailResult,
 } from "@/lib/providers/email/types";
+import { unsafeOutboundUrlReason } from "@/lib/http/safe-url";
 
 /**
  * SMTP sender. Auth is either a plain password (app passwords included) or
@@ -65,6 +66,12 @@ export function smtpTransportOptions(o: SmtpConnectionOptions) {
       secure: o.secure,
       auth: { user: o.user, pass: o.auth.password },
     };
+  }
+  // Sink-side SSRF/exfil guard: never hand a non-public token endpoint to
+  // nodemailer, which POSTs the client secret + refresh token to it.
+  if (o.auth.tokenUrl) {
+    const reason = unsafeOutboundUrlReason(o.auth.tokenUrl);
+    if (reason) throw new Error(`OAuth2 token URL ${reason}`);
   }
   return {
     host: o.host,
