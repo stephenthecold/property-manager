@@ -75,4 +75,6 @@ export const RATE_LIMITS = {
   authSend: { bucket: "auth-send", limit: 5, windowMs: 15 * 60_000 },
   /** Public application submissions. */
   applySubmit: { bucket: "apply", limit: 10, windowMs: 60 * 60_000 },
+  /** Public SMS opt-in submissions. */
+  smsOptIn: { bucket: "sms-opt-in", limit: 10, windowMs: 60 * 60_000 },
 } as const satisfies Record<string, RateLimitRule>;
