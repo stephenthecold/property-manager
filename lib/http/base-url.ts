@@ -1,6 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { getEnv } from "@/lib/config/env";
+import { shouldSecureCookie } from "@/lib/http/secure-cookie";
 
 /**
  * Public base URL for links the app GENERATES and shares (trial-login, apply,
@@ -27,4 +28,23 @@ export async function publicBaseUrl(): Promise<string> {
     // Not in a request scope (e.g. the worker) — fall through to the env default.
   }
   return getEnv().APP_URL.replace(/\/+$/, "");
+}
+
+/**
+ * Whether a session cookie set during THIS request should carry the Secure flag.
+ * Derived from the actual client scheme (x-forwarded-proto) so a TLS-terminating
+ * proxy gets Secure cookies even when NODE_ENV is unset; see shouldSecureCookie.
+ */
+export async function secureCookie(): Promise<boolean> {
+  try {
+    const h = await headers();
+    return shouldSecureCookie({
+      forwardedProto: h.get("x-forwarded-proto"),
+      host: h.get("x-forwarded-host") ?? h.get("host"),
+      isProduction: process.env.NODE_ENV === "production",
+    });
+  } catch {
+    // Outside a request scope — be safe by default.
+    return process.env.NODE_ENV === "production";
+  }
 }

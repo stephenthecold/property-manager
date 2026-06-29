@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { sha256 } from "@/lib/auth/crypto";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { secureCookie } from "@/lib/http/base-url";
 import type {
   Tenant,
   TenantPortalAccount,
@@ -55,7 +56,7 @@ export async function createPortalSession(
   store.set(PORTAL_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await secureCookie(),
     path: "/",
     expires: expiresAt,
   });
