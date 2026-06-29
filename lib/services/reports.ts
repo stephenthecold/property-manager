@@ -9,6 +9,7 @@ import {
   type IncomeEntry,
 } from "@/lib/accounting/income";
 import type { LedgerEntryType } from "@/lib/generated/prisma/enums";
+import { neutralizeSpreadsheetValue } from "@/lib/reports/spreadsheet-safety";
 
 export interface RentRollRow {
   property: string;
@@ -115,16 +116,12 @@ export async function getBackRent(now: Date): Promise<BackRentRow[]> {
 
 /** Minimal, dependency-free CSV serializer (RFC-4180 quoting). */
 export function toCsv(headers: string[], rows: Record<string, string>[]): string {
-  // Formula-injection guard: a cell starting with =, +, @ (or a non-numeric -)
-  // would execute when the CSV is opened in a spreadsheet. Tenant names and
-  // descriptions are user-controlled, so neutralize with a leading apostrophe.
-  // Plain negative numbers (e.g. "-50.00") are legitimate values and exempt.
-  const guard = (v: string) =>
-    /^[=+@]/.test(v) || (/^-/.test(v) && !/^-\d+(\.\d+)?$/.test(v))
-      ? `'${v}`
-      : v;
+  // Formula-injection guard (shared with the .xlsx renderer): a cell starting
+  // with =, +, @, a non-numeric -, or a TAB/CR would execute when opened in a
+  // spreadsheet. Tenant names/descriptions are user-controlled, so neutralize
+  // with a leading apostrophe; plain negative numbers ("-50.00") stay exempt.
   const esc = (raw: string) => {
-    const v = guard(raw);
+    const v = neutralizeSpreadsheetValue(raw);
     return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   };
   const lines = [headers.map(esc).join(",")];
