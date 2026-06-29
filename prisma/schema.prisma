@@ -2067,3 +2067,19 @@ model BackgroundCheck {
 
   @@index([applicationId, createdAt])
 }
+
+/// Best-effort fixed-window IP rate-limit counters for the UNAUTHENTICATED POST
+/// lanes (portal/payer login, SMS-code sends, public application submit). One
+/// row per (bucket, key, windowStart); `count` is incremented atomically via
+/// INSERT ... ON CONFLICT in lib/services/rate-limit.ts. NOT a security-of-record
+/// store — purely a throttle; rows are disposable and a daily worker sweep prunes
+/// expired windows. See docs: the key is the client IP (clientIpFromXff).
+model RateLimit {
+  bucket      String
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([bucket, key, windowStart])
+  @@index([windowStart])
+}

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { createPayerSession } from "@/lib/payer-portal/session";
+import { rateLimitHit, RATE_LIMITS } from "@/lib/services/rate-limit";
 import {
   loginPayerWithPassword,
   type PayerAuthFailure,
@@ -30,6 +31,11 @@ export async function payerPasswordLoginAction(
   _prev: PayerLoginState,
   fd: FormData,
 ): Promise<PayerLoginState> {
+  const h = await headers();
+  const ip = clientIpFromXff(h.get("x-forwarded-for"));
+  if (!(await rateLimitHit(RATE_LIMITS.authLogin, ip)).allowed) {
+    return { error: "Too many attempts — please wait a few minutes and try again." };
+  }
   const email = String(fd.get("email") ?? "").trim();
   const password = String(fd.get("password") ?? "");
   if (!email || !password) {
@@ -45,11 +51,6 @@ export async function payerPasswordLoginAction(
   }
   if (!result.ok) return { error: FAILURE_MESSAGES[result.code] };
 
-  const h = await headers();
-  await createPayerSession(
-    result.accountId,
-    clientIpFromXff(h.get("x-forwarded-for")),
-    h.get("user-agent"),
-  );
+  await createPayerSession(result.accountId, ip, h.get("user-agent"));
   redirect("/payer-portal");
 }

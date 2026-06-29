@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { createPortalSession } from "@/lib/portal/session";
 import {
+  rateLimitHit,
+  RATE_LIMITS,
+  type RateLimitRule,
+} from "@/lib/services/rate-limit";
+import {
   loginWithCode,
   loginWithPassword,
   requestLoginCode,
@@ -46,10 +51,20 @@ async function requestMeta(): Promise<{ ip: string | null; userAgent: string | n
   };
 }
 
+const TOO_MANY = "Too many attempts — please wait a few minutes and try again.";
+
+/** True when this client IP has exceeded `rule` for the current window. */
+async function rateLimited(rule: RateLimitRule): Promise<boolean> {
+  const h = await headers();
+  const ip = clientIpFromXff(h.get("x-forwarded-for"));
+  return !(await rateLimitHit(rule, ip)).allowed;
+}
+
 export async function portalPasswordLoginAction(
   _prev: PortalLoginState,
   fd: FormData,
 ): Promise<PortalLoginState> {
+  if (await rateLimited(RATE_LIMITS.authLogin)) return { error: TOO_MANY };
   const identifier = String(fd.get("identifier") ?? "").trim();
   const password = String(fd.get("password") ?? "");
   if (!identifier || !password) {
@@ -72,6 +87,8 @@ export async function portalRequestCodeAction(
   _prev: PortalLoginState,
   fd: FormData,
 ): Promise<PortalLoginState> {
+  // SMS toll-fraud guard: this sends a text. Limit sends per IP.
+  if (await rateLimited(RATE_LIMITS.authSend)) return { error: TOO_MANY };
   const phone = String(fd.get("phone") ?? "").trim();
   if (!phone) return { error: "Enter your phone number." };
   try {
@@ -91,6 +108,9 @@ export async function portalCodeLoginAction(
   _prev: PortalLoginState,
   fd: FormData,
 ): Promise<PortalLoginState> {
+  if (await rateLimited(RATE_LIMITS.authLogin)) {
+    return { codeSent: true, error: TOO_MANY };
+  }
   const phone = String(fd.get("phone") ?? "").trim();
   const code = String(fd.get("code") ?? "").trim();
   if (!phone || !code) {
@@ -113,6 +133,8 @@ export async function portalForgotPasswordAction(
   _prev: PortalLoginState,
   fd: FormData,
 ): Promise<PortalLoginState> {
+  // Sends a reset link by SMS + email — limit sends per IP (toll/spam guard).
+  if (await rateLimited(RATE_LIMITS.authSend)) return { error: TOO_MANY };
   const identifier = String(fd.get("identifier") ?? "").trim();
   if (!identifier) return { error: "Enter your email or phone number." };
   try {
