@@ -138,6 +138,46 @@ describe("void/reversal is atomic and append-only", () => {
   });
 });
 
+describe("concurrent void writes exactly ONE reversal (CAS guard)", () => {
+  it("two simultaneous voids of the same payment do not double-reverse", async () => {
+    const before = await loadLeaseAccounting(leaseId);
+    const balBefore = netBalanceCents(before.entries);
+
+    const pay = await postPayment({
+      leaseId,
+      amountCents: 30000n,
+      paymentDate: new Date("2026-01-07T06:00:00Z"),
+      method: "cash",
+      idempotencyKey: `${P}-cvoid`,
+      actor: ACTOR,
+    });
+
+    // Fire both voids concurrently: the lock-free findUnique means both can read
+    // status="posted"; the compare-and-swap must let exactly one win. Without it
+    // (the pre-fix code) BOTH would append a reversal and the balance would be
+    // over-corrected by one payment.
+    const results = await Promise.allSettled([
+      voidPayment({ paymentId: pay.paymentId, reason: "race-a", actor: ACTOR }),
+      voidPayment({ paymentId: pay.paymentId, reason: "race-b", actor: ACTOR }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+
+    // Exactly one reversal for this payment — never two.
+    const reversals = await prisma.ledgerEntry.count({
+      where: { sourceType: "payment", sourceId: pay.paymentId, entryType: "reversal" },
+    });
+    expect(reversals).toBe(1);
+
+    // Net balance returns to pre-payment (payment -30000 + one reversal +30000).
+    const after = await loadLeaseAccounting(leaseId);
+    expect(netBalanceCents(after.entries)).toBe(balBefore);
+
+    const voided = await prisma.payment.findUnique({ where: { id: pay.paymentId } });
+    expect(voided?.status).toBe("voided");
+  });
+});
+
 describe("AuditLog is append-only", () => {
   it("blocks UPDATE via the DB trigger", async () => {
     await writeAudit(prisma, {
