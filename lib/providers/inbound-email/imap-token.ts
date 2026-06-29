@@ -7,6 +7,8 @@
  * The default scope targets Outlook IMAP; other IdPs can override it.
  */
 
+import { unsafeOutboundUrlReason } from "@/lib/http/safe-url";
+
 export const DEFAULT_IMAP_OAUTH_SCOPE = "https://outlook.office365.com/.default";
 
 export interface ImapOauthConfig {
@@ -48,6 +50,12 @@ export async function fetchImapAccessToken(
 ): Promise<ImapTokenResult> {
   if (!cfg.tokenUrl) {
     throw new Error("OAuth2 token URL is not set.");
+  }
+  // Defense-in-depth SSRF/exfil guard at the sink: never POST the client secret
+  // to a non-public host, even if a bad value was stored by some other path.
+  const unsafe = unsafeOutboundUrlReason(cfg.tokenUrl);
+  if (unsafe) {
+    throw new Error(`OAuth2 token URL ${unsafe}`);
   }
   const res = await fetch(cfg.tokenUrl, {
     method: "POST",
