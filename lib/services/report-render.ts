@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { asOfStamp, columnLabel, isMoneyColumn } from "@/lib/services/report-registry";
 import type { ReportData } from "@/lib/services/report-registry";
+import { neutralizeSpreadsheetValue } from "@/lib/reports/spreadsheet-safety";
 
 /**
  * Format renderers for a portfolio report: HTML (the print view), PDF (headless
@@ -265,7 +266,10 @@ export async function renderReportXlsx(
         const n = raw === "" ? NaN : Number(raw);
         values[h] = Number.isFinite(n) ? n : raw;
       } else {
-        values[h] = raw;
+        // Text cells can be user-controlled (tenant/property names, refs), so
+        // neutralize spreadsheet formula injection — the same guard the CSV path
+        // applies. Money cells above are real numbers and need no guarding.
+        values[h] = neutralizeSpreadsheetValue(raw);
       }
     }
     ws.addRow(values);
