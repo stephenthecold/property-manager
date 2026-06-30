@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/db";
 import { formatCurrency, fromCents } from "@/lib/money";
-import { expectedMonthlyChargeCents } from "@/lib/accounting/rent";
+import { expectedMonthlyChargeCents, prorationForStart } from "@/lib/accounting/rent";
 import { getLeaseRentShares } from "@/lib/services/rent-shares";
 import { computeOpenCharges } from "@/lib/accounting/allocation";
 import {
@@ -54,6 +54,8 @@ import { RecordPaymentDialog } from "@/components/app/record-payment-dialog";
 import { WaiveChargeDialog } from "@/components/app/waive-charge-dialog";
 import { WriteOffBalanceDialog } from "@/components/app/write-off-balance-dialog";
 import { MoveOutDispositionDialog } from "@/components/app/move-out-disposition-dialog";
+import { ManualChargeDialog } from "@/components/app/manual-charge-dialog";
+import { ReverseManualEntryDialog } from "@/components/app/reverse-manual-entry-dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { SendReminderDialog } from "@/components/app/send-reminder-dialog";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
@@ -230,6 +232,41 @@ export default async function TenantDetail({
       batchLeaseSnapshots(terminatedLeases, now),
     ]);
   const recentInbound = inboundMessages.slice(0, 5);
+
+  // Manual charge/credit affordances. The "Add charge or credit" dialog prefills
+  // the security deposit + the computed move-in prorate; manual entries (not yet
+  // reversed) get a per-row Reverse control in the ledger below.
+  const reversedEntryIds = new Set(
+    ledger
+      .filter((e) => e.entryType === "reversal" && e.reversesEntryId)
+      .map((e) => e.reversesEntryId as string),
+  );
+  const depositSuggestion =
+    activeLease && activeLease.securityDepositCents > 0n
+      ? fromCents(activeLease.securityDepositCents)
+      : null;
+  const proration = activeLease
+    ? prorationForStart({
+        startDate: activeLease.startDate,
+        dueDay: activeLease.dueDay,
+        tz: activeLease.unit.property.timezone,
+        terms: {
+          rentAmountCents: activeLease.rentAmountCents,
+          scheduledRentAmountCents: activeLease.scheduledRentAmountCents,
+          scheduledRentEffectiveDate: activeLease.scheduledRentEffectiveDate,
+          internetEnabled: activeLease.internetEnabled,
+          internetFeeCents: activeLease.internetFeeCents,
+        },
+        endDate: activeLease.endDate,
+      })
+    : null;
+  const prorateSuggestion =
+    proration && proration.amountCents > 0n ? fromCents(proration.amountCents) : null;
+  const todayForCharge = activeLease
+    ? new Intl.DateTimeFormat("en-CA", {
+        timeZone: activeLease.unit.property.timezone,
+      }).format(new Date())
+    : new Date().toISOString().slice(0, 10);
   // Terminated leases still owing money (a credit balance is excluded).
   const backRent = terminatedLeases
     .map((l) => ({ lease: l, snap: backRentSnaps.get(l.id)! }))
@@ -417,6 +454,13 @@ export default async function TenantDetail({
                 leaseId={activeLease.id}
                 payerOptions={payerOptions}
                 defaultAmount={fromCents(expectedMonthlyChargeCents(activeLease))}
+              />
+              <ManualChargeDialog
+                leaseId={activeLease.id}
+                tenantId={tenant.id}
+                depositSuggestion={depositSuggestion}
+                prorateSuggestion={prorateSuggestion}
+                today={todayForCharge}
               />
             </>
           )}
@@ -1159,6 +1203,13 @@ export default async function TenantDetail({
                   const waivable =
                     (e.entryType === "rent_charge" || e.entryType === "late_fee") &&
                     outstandingCents > 0n;
+                  // Manually-posted entries (not yet reversed) get a Reverse
+                  // control; it takes precedence so a manual prorate rent_charge
+                  // offers "Reverse" (undo my post) rather than "Waive".
+                  const reversible =
+                    e.sourceType === "manual_charge" &&
+                    e.entryType !== "reversal" &&
+                    !reversedEntryIds.has(e.id);
                   return {
                     key: e.id,
                     sortValues: [
@@ -1187,7 +1238,15 @@ export default async function TenantDetail({
                       >
                         {formatCurrency(e.amountCents, currency)}
                       </span>,
-                      waivable ? (
+                      reversible ? (
+                        <ReverseManualEntryDialog
+                          key="r"
+                          entryId={e.id}
+                          tenantId={tenant.id}
+                          entryLabel={e.description ?? e.entryType.replace("_", " ")}
+                          amountFormatted={formatCurrency(e.amountCents, currency)}
+                        />
+                      ) : waivable ? (
                         <WaiveChargeDialog
                           key="w"
                           entryId={e.id}
