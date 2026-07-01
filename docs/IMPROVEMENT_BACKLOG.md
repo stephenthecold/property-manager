@@ -90,7 +90,10 @@ portfolio**.
 - **Comms** — two-way SMS inbox (#75), SMS+email reminders with delivery tracking (#86), consent
   audit (STOP/START), inbound email, **email bounce + auto-suppression** (#130), **per-event
   reminder preferences + portal self-service toggles** (#130), per-tenant activity timeline
-  (#73/#78), staff digests.
+  (#73/#78), staff digests, **E.164 normalization + auto-consent-on-first-contact** (#150),
+  **timezone-resilient billing worker** (#151), **two-way Telnyx hardening** (#152/153), and
+  **granular staff alerts** (payment recorded / maintenance request) + a self-cleaning
+  consent-flow test command (#154).
 - **Portal** — tenant portal (balance/ledger/receipts/documents, notices #82, maintenance requests +
   photos #71, renewal acceptance #119, ledger CSV + filters #121), payer portal.
 - **Reporting** — 8 CSV report types (`/api/reports/[type]`), audit-log CSV (#83), per-property
@@ -102,8 +105,8 @@ portfolio**.
   browse page (#130).
 - **Platform** — capability/RBAC matrix (Settings → Permissions), break-glass, OIDC, **staff
   2FA/TOTP** optional + org-enforceable (#132), ⌘K search (#74), in-list DataTable search +
-  history-aware back-links (#127), **app-wide UI consistency harden** (#134–#136), mobile nav,
-  two themes.
+  history-aware back-links (#127), **app-wide UI consistency harden** (#134–#136), **org-timezone
+  timestamp rendering** across every staff page (#155), mobile nav, two themes.
 
 > **Live-DB verification debt (still open).** Most PRs cleared types+tests+lint+review. Render- or
 > live-verified this session: amendments (#128), deposits (#123), the payment balance-safety

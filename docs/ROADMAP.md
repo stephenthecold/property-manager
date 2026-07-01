@@ -208,6 +208,18 @@ existing seams (`sourceType/sourceId`, provider interfaces, `AuditLog`, the capa
 - **DB-overridable storage config** (workstream E) — provider + non-secret S3 params
   (bucket/region/endpoint/path-style) editable at Settings → Organization (DB-over-env), taking
   effect without a redeploy; secrets, the local dir, and the encrypt flag stay env-only.
+- **Comms & billing reliability hardening** (workstream I, incident-driven) — tenant phone numbers
+  normalized to **E.164**, with an automatic one-time consent request ("reply YES") + a 7-day
+  hold/release worker sweep the first time the app would text a non-consented number; **two-way
+  Telnyx SMS** with signature-verified inbound/delivery webhooks and inbound idempotency; the
+  **billing worker now defaults to hourly** (`BILLING_CRON`) so a behind-UTC property's midnight
+  rollover charges the same day, with an `AppSettings.lastBillingRunAt` heartbeat and a dashboard
+  warning if a run goes stale (>26h); **granular staff alerts** — per-user toggles for
+  payment-recorded and new-maintenance-request notifications (email + SMS) alongside the existing
+  digests, plus a self-cleaning `npm run demo:consent` command to exercise the SMS-consent flow
+  without touching the ledger or leaving permanent rows; and **instant timestamps** (created/
+  received/sent/delivered/etc.) now render in the org's timezone instead of the server's UTC
+  (`lib/ui/datetime.ts`) — civil dates were already correct.
 - **Backlog**: reminder-worker accounting batching + `Reminder(tenantId, createdAt)` index (F),
   256-bit break-glass (G), and settings-driven **receipt prefix** + **portal/apply copy** (H).
 
