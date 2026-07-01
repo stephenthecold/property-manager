@@ -14,6 +14,7 @@ import {
 } from "@/lib/applications/custom-questions";
 import { toCents } from "@/lib/money";
 import { phoneKey } from "@/lib/portal/identity";
+import { toE164 } from "@/lib/sms/phone";
 
 export interface ApplyState {
   ok?: boolean;
@@ -55,7 +56,11 @@ export async function submitApplicationAction(
     return { error: "Please enter your first and last name." };
   }
   const email = str(fd, "email") || null;
-  const phone = str(fd, "phone") || null;
+  // Normalize to E.164 when confident so the stored application — and the tenant
+  // created from it on approval — carries a provider-ready number; an
+  // unparseable value is validated below and kept as typed.
+  const phoneRaw = str(fd, "phone");
+  const phone = phoneRaw ? (toE164(phoneRaw) ?? phoneRaw) : null;
   const currentAddress = str(fd, "currentAddress") || null;
   const employer = str(fd, "employer") || null;
   const message = str(fd, "message") || null;

@@ -5,7 +5,10 @@ import { runBilling } from "@/lib/services/billing";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { reminderCron } from "@/lib/reminders/schedule";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
-import { runScheduledReminders } from "@/lib/services/reminders";
+import {
+  runHeldConsentReminders,
+  runScheduledReminders,
+} from "@/lib/services/reminders";
 import { runInboxPollOnce } from "@/lib/services/inbox-poll";
 import { INBOX_POLL_CHANNEL } from "@/lib/services/inbox-poll-signal";
 import {
@@ -29,6 +32,9 @@ import { cleanupRateLimits } from "@/lib/services/rate-limit";
 const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
 const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
 const INBOX_POLL_SCHEDULE = process.env.INBOX_POLL_CRON ?? "*/5 * * * *"; // every 5 min
+// Auto-consent held-message sweep runs every 5 min so a message deferred pending
+// SMS opt-in is released within ~5 minutes of the tenant replying YES.
+const HELD_CONSENT_SCHEDULE = process.env.HELD_CONSENT_CRON ?? "*/5 * * * *";
 // Scheduled report email delivery runs DAILY (07:00) so monthly schedules can
 // fire on the 1st; the pure cadence math (ISO week / calendar month) makes a
 // daily check — and restart catch-up — safe from double-sends within a period.
@@ -70,6 +76,30 @@ async function runRemindersOnce(): Promise<void> {
     );
   } catch (e) {
     console.error("[worker] maintenance reminder run failed:", e);
+  }
+}
+
+// Serialize the held-consent sweep in-process (like the inbox poll): node-cron
+// does not, and overlapping sweeps could double-send a just-released message.
+let heldConsentSweeping = false;
+
+async function runHeldConsentOnce(): Promise<void> {
+  if (heldConsentSweeping) {
+    console.log("[worker] held-consent sweep still running — skipping this tick");
+    return;
+  }
+  heldConsentSweeping = true;
+  try {
+    const res = await runHeldConsentReminders(new Date());
+    if (res.released || res.failed || res.expired) {
+      console.log(
+        `[worker] held-consent sweep: released=${res.released} failed=${res.failed} expired=${res.expired} skipped=${res.skipped}`,
+      );
+    }
+  } catch (e) {
+    console.error("[worker] held-consent sweep failed:", e);
+  } finally {
+    heldConsentSweeping = false;
   }
 }
 
@@ -266,6 +296,7 @@ async function main(): Promise<void> {
   await runInboxOnce(); // startup catch-up (idempotent on messageId)
   await runReportDeliveryOnce(); // startup catch-up (cadence-bounded, no double-send)
   await runRateLimitCleanupOnce(); // startup prune of stale rate-limit windows
+  await runHeldConsentOnce(); // startup release/expire of consent-held messages
   cron.schedule(SCHEDULE, () => {
     void runOnce();
   });
@@ -277,6 +308,9 @@ async function main(): Promise<void> {
   });
   cron.schedule(INBOX_POLL_SCHEDULE, () => {
     void runInboxOnce();
+  });
+  cron.schedule(HELD_CONSENT_SCHEDULE, () => {
+    void runHeldConsentOnce();
   });
   listenForInboxPolls(); // on-demand polls from the Settings "Poll now" button
   // Cron-only (no startup run): the digest has no per-send idempotency row,

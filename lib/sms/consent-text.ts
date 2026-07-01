@@ -41,10 +41,27 @@ export const SMS_START_REPLY =
   "You are now opted in to tenant SMS notifications. Reply HELP for help, " +
   "STOP to opt out.";
 
+/**
+ * One-time outbound solicitation sent to a tenant who hasn't opted in, the first
+ * time the app would text them (when Settings → auto-request SMS consent is on).
+ * Identifies the sender + purpose, states frequency + rates, and offers the
+ * standard opt-in (YES) / opt-out (STOP) / help keywords. A YES/START reply is
+ * classified by lib/sms/keywords and recorded as consent.
+ */
+export function smsConsentRequestText(businessName: string): string {
+  const who = businessName?.trim() || "Your property manager";
+  return (
+    `${who}: reply YES to get text updates about your tenancy — rent reminders, ` +
+    `notices, portal links, and maintenance updates. Msg frequency varies; msg & ` +
+    `data rates may apply. Reply STOP to opt out, HELP for help.`
+  );
+}
+
 /** The valid sources for an SMS ConsentRecord. */
 export type SmsConsentSource =
   | "public_sms_opt_in_form"
   | "rental_application"
   | "portal"
   | "inbound_sms_keyword"
+  | "auto_consent_request"
   | "staff";

@@ -24,6 +24,7 @@ export interface MessagingInitial {
   envProvider: string;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
+  autoRequestSmsConsent: boolean;
   templates: Array<{
     type: string;
     label: string;
@@ -67,6 +68,24 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
             defaultChecked={initial.smsEnabled}
           />
           Enable SMS sending (master switch for manual, bulk, and scheduled)
+        </label>
+
+        <label className="flex items-start gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            name="autoRequestSmsConsent"
+            defaultChecked={initial.autoRequestSmsConsent}
+            className="mt-0.5"
+          />
+          <span>
+            Auto-request SMS consent on first contact
+            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+              The first time we’d text a tenant who hasn’t opted in, send a
+              one-time “reply YES” request and hold that message until they opt
+              in (released within ~5 minutes of opt-in; dropped after 7 days).
+              Tenants who never opt in are still never texted.
+            </span>
+          </span>
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2">

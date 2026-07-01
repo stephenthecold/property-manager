@@ -210,6 +210,9 @@ export interface ResolvedAppSettings {
   reminderSendHour: number | null;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
+  /** When on, the first SMS to a not-yet-consented tenant sends a one-time
+   *  consent request and holds the triggering message until they opt in. */
+  autoRequestSmsConsent: boolean;
   /** Days-ahead window for the lease-expiration dashboard section + weekly
    *  digest; clamped to 1..365, default 60. */
   leaseExpirationAlertDays: number;
@@ -394,6 +397,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     reminderSendHour: sanitizeReminderSendHour(row?.reminderSendHour ?? null),
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+    autoRequestSmsConsent: row?.autoRequestSmsConsent ?? true,
     leaseExpirationAlertDays: sanitizeAlertWindowDays(
       row?.leaseExpirationAlertDays ?? null,
     ),
@@ -1096,6 +1100,8 @@ export interface MessagingSettingsInput {
   reminderSendHour: number | null;
   dueSoonRemindersEnabled: boolean;
   overdueRemindersEnabled: boolean;
+  /** First-contact SMS consent auto-request (holds the message until opt-in). */
+  autoRequestSmsConsent: boolean;
   /** Per-type overrides; empty/missing values fall back to defaults. */
   smsTemplates: Partial<Record<ReminderType, string>>;
 }
@@ -1131,6 +1137,7 @@ export async function saveMessagingSettings(
     reminderSendHour: input.reminderSendHour,
     dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
     overdueRemindersEnabled: input.overdueRemindersEnabled,
+    autoRequestSmsConsent: input.autoRequestSmsConsent,
     smsTemplates: input.smsTemplates,
     ...tokenFields,
     updatedBy: actor.actorId ?? null,
@@ -1155,6 +1162,7 @@ export async function saveMessagingSettings(
         reminderSendHour: input.reminderSendHour,
         dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
         overdueRemindersEnabled: input.overdueRemindersEnabled,
+        autoRequestSmsConsent: input.autoRequestSmsConsent,
         tokenChanged: input.smsAuthToken !== undefined,
       },
     });
