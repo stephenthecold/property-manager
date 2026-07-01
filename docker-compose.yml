@@ -128,7 +128,10 @@ services:
         condition: service_healthy
     environment:
       <<: *app-env
-      BILLING_CRON: "${BILLING_CRON:-0 1 * * *}"
+      # Hourly so rent charges mint within ~1h of midnight in each property's
+      # timezone (a daily UTC cron delays the 1st's charges for behind-UTC tz).
+      # Idempotent, so hourly is safe. Override to taste (e.g. "0 1 * * *").
+      BILLING_CRON: "${BILLING_CRON:-0 * * * *}"
       REMINDER_CRON: "${REMINDER_CRON:-0 9 * * *}"
       STAFF_DIGEST_CRON: "${STAFF_DIGEST_CRON:-0 9 * * 1}"
     volumes:

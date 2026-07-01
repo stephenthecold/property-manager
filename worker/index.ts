@@ -2,7 +2,7 @@ import "dotenv/config";
 import cron from "node-cron";
 import pg from "pg";
 import { runBilling } from "@/lib/services/billing";
-import { getAppSettings } from "@/lib/services/app-settings";
+import { getAppSettings, recordBillingRun } from "@/lib/services/app-settings";
 import { reminderCron } from "@/lib/reminders/schedule";
 import { runMaintenanceReminders } from "@/lib/services/maintenance-reminders";
 import {
@@ -22,14 +22,17 @@ import { runReportScheduleDelivery } from "@/lib/services/report-schedules";
 import { cleanupRateLimits } from "@/lib/services/rate-limit";
 
 /**
- * Dedicated billing worker: a daily idempotent run that generates due rent
- * charges and assesses late fees. Runs once at startup to back-fill any periods
- * missed during downtime (the partial unique indexes make this safe to repeat).
- * A second daily run sends scheduled SMS reminders (due-soon + overdue), also
+ * Dedicated billing worker: an HOURLY idempotent run that generates due rent
+ * charges and assesses late fees. Hourly (not daily) so a period mints within
+ * ~1h of midnight IN EACH PROPERTY'S TIMEZONE — a daily UTC cron fires while it
+ * is still the previous day in a behind-UTC (US) property tz, delaying the 1st's
+ * charges by up to a day. The partial unique indexes make repeated runs safe.
+ * Runs once at startup to back-fill any periods missed during downtime. A
+ * separate daily run sends scheduled SMS reminders (due-soon + overdue), also
  * idempotent via the partial unique on (leaseId, reminderType, periodKey).
  */
 
-const SCHEDULE = process.env.BILLING_CRON ?? "0 1 * * *"; // 01:00 daily
+const SCHEDULE = process.env.BILLING_CRON ?? "0 * * * *"; // hourly (see above)
 const STAFF_DIGEST_SCHEDULE = process.env.STAFF_DIGEST_CRON ?? "0 9 * * 1"; // Mondays 09:00
 const INBOX_POLL_SCHEDULE = process.env.INBOX_POLL_CRON ?? "*/5 * * * *"; // every 5 min
 // Auto-consent held-message sweep runs every 5 min so a message deferred pending
@@ -43,8 +46,10 @@ const REPORT_DELIVERY_SCHEDULE = process.env.REPORT_DELIVERY_CRON ?? "0 7 * * *"
 // (DB) wins, else REMINDER_CRON env, else 09:00 daily (lib/reminders/schedule).
 
 async function runOnce(): Promise<void> {
+  let completed = false;
   try {
     const res = await runBilling(new Date());
+    completed = true;
     console.log(
       `[worker] billing run: leases=${res.leasesProcessed} charges=${res.chargesCreated} lateFees=${res.lateFeesCreated} failed=${res.failed} rentIncreases=${res.rentIncreasesApplied}`,
     );
@@ -55,6 +60,16 @@ async function runOnce(): Promise<void> {
     }
   } catch (e) {
     console.error("[worker] billing run failed:", e);
+  }
+  // Heartbeat: record that a billing run completed (dashboard liveness signal).
+  // Isolated so a settings-write hiccup never masks a successful billing run,
+  // and only on completion so a crashed run doesn't reset the staleness clock.
+  if (completed) {
+    try {
+      await recordBillingRun(new Date());
+    } catch (e) {
+      console.error("[worker] could not record billing heartbeat:", e);
+    }
   }
 }
 

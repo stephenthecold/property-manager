@@ -17,6 +17,8 @@ import { getAppSettings } from "@/lib/services/app-settings";
 import { getDisplayRole, getSessionUser } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { resolveLayout } from "@/lib/dashboard/layout";
+import { billingRunIsStale, BILLING_STALE_HOURS } from "@/lib/dashboard/billing-health";
+import { DateTime } from "luxon";
 import {
   DashboardCustomizer,
   type DashboardBubble,
@@ -139,6 +141,26 @@ export default async function DashboardPage() {
   const canFinance = hasCapability(actingRole, "financials.view", settings.rolePermissions);
   const canCollect = hasCapability(actingRole, "payments.manage", settings.rolePermissions);
   const showProfit = canFinance && settings.modules.financials;
+  // Worker liveness: warn billing-responsible staff (managers/finance) when the
+  // billing worker hasn't completed a run recently — a stuck worker or a cron
+  // that isn't firing means rent charges silently stop posting.
+  const showBillingWarning =
+    (canCollect || canFinance) &&
+    billingRunIsStale(settings.lastBillingRunAt, now);
+  // Format the last-run time in the org timezone, DEFENSIVELY: defaultTimezone is
+  // free-text (Settings → Organization) and unvalidated, and Intl.toLocaleString
+  // throws on a bad zone — Luxon degrades to an invalid DateTime instead, so a
+  // typo'd timezone can never 500 the dashboard. Fall back to ISO (UTC) then.
+  const lastBillingRunLabel = settings.lastBillingRunAt
+    ? (() => {
+        const dt = DateTime.fromJSDate(settings.lastBillingRunAt, {
+          zone: settings.defaultTimezone,
+        });
+        return dt.isValid
+          ? dt.toFormat("MMM d, yyyy, h:mm a ZZZZ")
+          : settings.lastBillingRunAt.toISOString();
+      })()
+    : null;
 
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const [d, profit, vacancies, expirations, kpis, trend] = await Promise.all([
@@ -635,6 +657,21 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Dashboard" />
+      {showBillingWarning && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <p className="font-semibold">Automated billing may not be running</p>
+          <p className="mt-1">
+            {lastBillingRunLabel
+              ? `The billing worker last completed a run on ${lastBillingRunLabel} — over ${BILLING_STALE_HOURS} hours ago.`
+              : "The billing worker has not completed a run yet."}{" "}
+            New rent charges and late fees won’t post until it runs. Check that the
+            billing worker process is up.
+          </p>
+        </div>
+      )}
       <DashboardCustomizer bubbles={bubbles} sections={sections} initial={layout} />
     </div>
   );

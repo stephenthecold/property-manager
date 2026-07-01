@@ -311,6 +311,10 @@ model AppSettings {
   reminderSendHour        Int?
   dueSoonRemindersEnabled Boolean @default(true)
   overdueRemindersEnabled Boolean @default(true)
+  // The billing worker stamps this at the end of every completed billing run.
+  // The dashboard surfaces a warning when it goes stale (worker down / cron not
+  // firing), so a missed run is visible instead of silent. null -> never run.
+  lastBillingRunAt        DateTime?
   // When on, the first SMS to a tenant who hasn't consented sends a one-time
   // consent request; the triggering message is held and delivered once they
   // reply YES. Off = a no-consent SMS is silently skipped (prior behavior).
