@@ -4,7 +4,7 @@ import { requireCapability, getDisplayRole } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { hasCapability } from "@/lib/auth/permissions";
 import { getApplication } from "@/lib/services/applications";
-import { formatDateLong } from "@/lib/ui/datetime";
+import { formatDate, formatDateLong } from "@/lib/ui/datetime";
 import { listBackgroundChecks } from "@/lib/services/background-check";
 import { formatCurrency, fromCents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -340,11 +340,7 @@ export default async function ApplicationDetail({
                         <BackgroundCheckBadge status={c.status} />
                         <span className="text-xs text-muted-foreground">
                           {c.provider} ·{" "}
-                          {c.requestedAt.toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {formatDate(c.requestedAt, settings.defaultTimezone)}
                         </span>
                       </div>
                       {c.summary && <p className="text-sm">{c.summary}</p>}

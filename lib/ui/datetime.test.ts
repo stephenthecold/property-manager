@@ -1,5 +1,12 @@
+import { Settings } from "luxon";
 import { describe, expect, it } from "vitest";
 import { formatDate, formatDateLong, formatDateTime } from "./datetime";
+
+// Pin the Luxon display locale so the hard-coded en-US format assertions below
+// are deterministic regardless of the host's ICU default locale (CI hosts vary).
+// The helpers use `toLocaleString()` with no explicit locale, so this only
+// affects the test, not production behaviour.
+Settings.defaultLocale = "en-US";
 
 // A fixed instant: 2026-07-01T02:30:00Z. In UTC this is the 1st at 02:30, but
 // in America/New_York (UTC-4 in July) it is still the previous evening —
