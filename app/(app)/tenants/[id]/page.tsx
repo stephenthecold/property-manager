@@ -1517,9 +1517,19 @@ export default async function TenantDetail({
                 <span key="t" className="capitalize">
                   {r.reminderType.replace(/_/g, " ")}
                 </span>,
-                <span key="s" className="capitalize">
-                  {r.status.replace(/_/g, " ")}
-                </span>,
+                <div key="s" className="space-y-0.5">
+                  <span className="capitalize">
+                    {r.status.replace(/_/g, " ")}
+                  </span>
+                  {r.status === "failed" && r.failedReason && (
+                    <span
+                      className="block max-w-[14rem] truncate text-xs text-red-700 dark:text-red-300"
+                      title={r.failedReason}
+                    >
+                      {r.failedReason}
+                    </span>
+                  )}
+                </div>,
               ],
             }))}
           />
