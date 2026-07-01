@@ -16,6 +16,8 @@ export interface NotificationsInitial {
   notifyMaintenanceDigest: boolean;
   notifyLeaseExpiration: boolean;
   notifyCashPickup: boolean;
+  notifyPaymentRecorded: boolean;
+  notifyMaintenanceRequest: boolean;
 }
 
 const TOGGLES = [
@@ -41,6 +43,18 @@ const TOGGLES = [
     label: "Cash-pickup requests (email + text)",
     description:
       "Immediate alert when a tenant asks to pay rent in cash; texted too when a phone number is set below.",
+  },
+  {
+    name: "notifyPaymentRecorded" as const,
+    label: "Payment recorded (email + text)",
+    description:
+      "Immediate alert whenever a payment posts to a tenant's ledger — amount, method, and property/unit.",
+  },
+  {
+    name: "notifyMaintenanceRequest" as const,
+    label: "New maintenance request (email + text)",
+    description:
+      "Immediate alert when a tenant submits a maintenance request from the portal.",
   },
 ];
 

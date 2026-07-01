@@ -35,6 +35,8 @@ export async function saveMyNotificationsAction(
     notifyMaintenanceDigest: fd.get("notifyMaintenanceDigest") === "on",
     notifyLeaseExpiration: fd.get("notifyLeaseExpiration") === "on",
     notifyCashPickup: fd.get("notifyCashPickup") === "on",
+    notifyPaymentRecorded: fd.get("notifyPaymentRecorded") === "on",
+    notifyMaintenanceRequest: fd.get("notifyMaintenanceRequest") === "on",
   };
   await withAudit(
     {
@@ -48,6 +50,8 @@ export async function saveMyNotificationsAction(
         notifyMaintenanceDigest: dbUser.notifyMaintenanceDigest,
         notifyLeaseExpiration: dbUser.notifyLeaseExpiration,
         notifyCashPickup: dbUser.notifyCashPickup,
+        notifyPaymentRecorded: dbUser.notifyPaymentRecorded,
+        notifyMaintenanceRequest: dbUser.notifyMaintenanceRequest,
       },
     },
     async (tx) => {

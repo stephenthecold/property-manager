@@ -4,7 +4,10 @@ import type {
   TenantRequestType,
 } from "@/lib/generated/prisma/enums";
 import { writeAudit, type AuditContext, type Tx } from "@/lib/audit/audit";
-import { notifyStaffCashPickup } from "@/lib/services/staff-alerts";
+import {
+  notifyStaffCashPickup,
+  notifyStaffMaintenanceRequest,
+} from "@/lib/services/staff-alerts";
 
 /**
  * Tenant requests (portal submissions): maintenance issues and "I'll pay cash
@@ -63,8 +66,10 @@ export async function createTenantRequest(i: {
     return row;
   });
 
-  // Pickup requests page staff immediately (email + SMS); best-effort.
-  if (i.type === "cash_pickup") {
+  // Alert opted-in staff immediately (email + SMS) for the request types that
+  // page staff — cash pickups and maintenance issues. Best-effort: never blocks
+  // or fails the tenant's submission (the request row is already committed).
+  if (i.type === "cash_pickup" || i.type === "maintenance") {
     const tenant = await prisma.tenant.findUnique({
       where: { id: i.tenantId },
       select: { firstName: true, lastName: true },
@@ -75,15 +80,17 @@ export async function createTenantRequest(i: {
           include: { unit: { include: { property: true } } },
         })
       : null;
+    const alert = {
+      tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}`.trim() : "A tenant",
+      propertyName: lease?.unit.property.name ?? null,
+      unitLabel: lease?.unit.unitNumber ?? null,
+      message,
+    };
     try {
-      await notifyStaffCashPickup({
-        tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}`.trim() : "A tenant",
-        propertyName: lease?.unit.property.name ?? null,
-        unitLabel: lease?.unit.unitNumber ?? null,
-        message,
-      });
+      if (i.type === "cash_pickup") await notifyStaffCashPickup(alert);
+      else await notifyStaffMaintenanceRequest(alert);
     } catch (e) {
-      console.error("[tenant-requests] cash-pickup alert failed:", e);
+      console.error("[tenant-requests] staff alert failed:", e);
     }
   }
 

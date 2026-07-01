@@ -168,6 +168,11 @@ model User {
   notifyMaintenanceDigest Boolean @default(true)
   notifyLeaseExpiration   Boolean @default(true)
   notifyCashPickup        Boolean @default(true)
+  // Event-driven (not weekly): immediate alert when a payment posts to the
+  // ledger, and when a tenant submits a maintenance request. Email to opted-in
+  // staff; texted too when a phone number is set.
+  notifyPaymentRecorded    Boolean @default(true)
+  notifyMaintenanceRequest Boolean @default(true)
   // Personal dashboard layout: { order: string[], collapsed: {id:true} }.
   // Per-user UI preference only — resolved/clamped to known sections in
   // lib/dashboard/layout.ts; never security-relevant.

@@ -48,11 +48,13 @@ export interface StaffDigestResult {
 export const STAFF_ROLES: Role[] = ["owner", "admin", "finance", "manager"];
 
 /** Per-user opt-out columns, one per notification type. */
-type NotifyFlag =
+export type NotifyFlag =
   | "notifyOverdueDigest"
   | "notifyMaintenanceDigest"
   | "notifyLeaseExpiration"
-  | "notifyCashPickup";
+  | "notifyCashPickup"
+  | "notifyPaymentRecorded"
+  | "notifyMaintenanceRequest";
 
 /**
  * Active staff (manager+) who have the given notification toggle on. Returns

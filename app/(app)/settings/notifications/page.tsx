@@ -35,6 +35,8 @@ export default async function NotificationsSettingsPage() {
             notifyMaintenanceDigest: dbUser.notifyMaintenanceDigest,
             notifyLeaseExpiration: dbUser.notifyLeaseExpiration,
             notifyCashPickup: dbUser.notifyCashPickup,
+            notifyPaymentRecorded: dbUser.notifyPaymentRecorded,
+            notifyMaintenanceRequest: dbUser.notifyMaintenanceRequest,
           }}
         />
       </CardContent>

@@ -9,6 +9,7 @@ import {
   planFifoAllocation,
 } from "@/lib/accounting/allocation";
 import { ensureReceiptForPayment } from "@/lib/services/receipts";
+import { notifyStaffPaymentRecorded } from "@/lib/services/staff-alerts";
 
 /**
  * Record a payment: one interactive transaction creates the Payment row, its
@@ -167,6 +168,8 @@ export async function postPayment(
     // Best-effort after the payment commits: a receipt failure must never
     // fail or re-run the payment.
     await ensureReceiptBestEffort(result.paymentId, input.actor);
+    // Fire-and-forget staff alert; only on a fresh post (never an idempotent retry).
+    if (!result.alreadyExisted) void notifyPaymentRecordedBestEffort(result.paymentId);
 
     return result;
   } catch (e) {
@@ -260,6 +263,45 @@ async function ensureReceiptBestEffort(
     await ensureReceiptForPayment(paymentId, actor);
   } catch (receiptError) {
     console.warn(`Receipt creation failed for payment ${paymentId}`, receiptError);
+  }
+}
+
+/**
+ * Alert opted-in staff that a payment posted (Settings → Notifications). Loads
+ * the tenant/property/currency for the message, then fires the alert. Best-effort
+ * AFTER the payment commits and fully isolated (own try/catch) so a notification
+ * hiccup can NEVER affect, delay, or re-run the payment. Callers invoke this
+ * fire-and-forget (`void`) so external email/SMS latency doesn't block the staff
+ * action — safe on the app's persistent-node deployment — and only on a freshly
+ * posted payment, so staff aren't double-alerted on an idempotent retry.
+ */
+async function notifyPaymentRecordedBestEffort(paymentId: string): Promise<void> {
+  try {
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment || payment.status !== "posted") return;
+    const [tenant, unit] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: payment.tenantId },
+        select: { firstName: true, lastName: true },
+      }),
+      payment.unitId
+        ? prisma.unit.findUnique({
+            where: { id: payment.unitId },
+            include: { property: { select: { name: true, currency: true } } },
+          })
+        : Promise.resolve(null),
+    ]);
+    await notifyStaffPaymentRecorded({
+      tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}`.trim() : "A tenant",
+      tenantId: payment.tenantId,
+      propertyName: unit?.property.name ?? null,
+      unitLabel: unit?.unitNumber ?? null,
+      amountCents: payment.amountCents,
+      currency: unit?.property.currency ?? "USD",
+      method: payment.method,
+    });
+  } catch (e) {
+    console.warn(`Payment-recorded staff alert failed for payment ${paymentId}`, e);
   }
 }
 
@@ -506,8 +548,11 @@ export async function confirmSelfReportedPayment(input: {
     return { paymentId: payment.id, alreadyPosted: false, leftoverCreditCents: leftoverCents };
   });
 
-  // Best-effort receipt after commit (only when we actually posted just now).
-  if (!result.alreadyPosted) await ensureReceiptBestEffort(result.paymentId, input.actor);
+  // Best-effort receipt + staff alert after commit (only when we posted just now).
+  if (!result.alreadyPosted) {
+    await ensureReceiptBestEffort(result.paymentId, input.actor);
+    void notifyPaymentRecordedBestEffort(result.paymentId);
+  }
   return result;
 }
 

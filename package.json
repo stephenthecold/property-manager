@@ -19,6 +19,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "worker": "tsx worker/index.ts",
+    "demo:consent": "tsx scripts/demo-consent.ts",
     "bootstrap": "tsx scripts/bootstrap.ts",
     "breakglass": "tsx scripts/bootstrap.ts breakglass"
   },
