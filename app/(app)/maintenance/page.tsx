@@ -38,6 +38,7 @@ import {
   statusLabel,
 } from "@/lib/maintenance/status";
 import { slaState } from "@/lib/maintenance/sla";
+import { formatDate, formatDateTime } from "@/lib/ui/datetime";
 import type { MaintenancePriority } from "@/lib/generated/prisma/enums";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DataTable } from "@/components/app/data-table";
@@ -115,6 +116,7 @@ export default async function MaintenancePage({
   await requireCapability("maintenance.manage");
   const settings = await getAppSettings();
   if (!settings.modules.maintenance) redirect("/dashboard");
+  const tz = settings.defaultTimezone;
 
   const sp = await searchParams;
   const first = (k: string) => {
@@ -511,7 +513,7 @@ export default async function MaintenancePage({
                   null,
                 ],
                 cells: [
-                  j.createdAt.toLocaleDateString(),
+                  formatDate(j.createdAt, tz),
                   j.property.name,
                   j.unit?.unitNumber ?? "—",
                   <span key="t" title={j.details ?? undefined} className="font-medium">
@@ -726,7 +728,7 @@ export default async function MaintenancePage({
                           <li key={u.id} className="rounded-md border p-2">
                             <div className="whitespace-pre-wrap">{u.note}</div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {u.createdAt.toLocaleString()}
+                              {formatDateTime(u.createdAt, tz)}
                             </div>
                           </li>
                         ))}

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listApplications } from "@/lib/services/applications";
+import { formatDate } from "@/lib/ui/datetime";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
@@ -33,7 +34,7 @@ export default async function ApplicationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("applications.view");
-  const { modules } = await getAppSettings();
+  const { modules, defaultTimezone: tz } = await getAppSettings();
   if (!modules.applications) redirect("/dashboard");
 
   const sp = await searchParams;
@@ -149,7 +150,7 @@ export default async function ApplicationsPage({
                   {a.status}
                 </ToneBadge>,
                 <span key="d" className="tabular-nums text-muted-foreground">
-                  {a.createdAt.toLocaleDateString()}
+                  {formatDate(a.createdAt, tz)}
                 </span>,
               ],
             }))}

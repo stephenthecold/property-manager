@@ -5,7 +5,9 @@ import { requireCapability } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { fromCents } from "@/lib/money";
 import { getEnv } from "@/lib/config/env";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { getDocumentDownloadUrl } from "@/lib/services/documents";
+import { formatDateTime } from "@/lib/ui/datetime";
 import {
   suggestFromOcrText,
   type OcrSuggestion,
@@ -52,6 +54,7 @@ export default async function DocumentDetailPage({
 }) {
   // Documents can hold sensitive PII/financial scans — manager+ only.
   await requireCapability("documents.manage");
+  const { defaultTimezone: tz } = await getAppSettings();
   const { id } = await params;
   const sp = await searchParams;
   const formError = FORM_ERRORS[String(sp.error ?? "")];
@@ -152,7 +155,7 @@ export default async function DocumentDetailPage({
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Uploaded</TableCell>
-                <TableCell>{doc.createdAt.toLocaleString()}</TableCell>
+                <TableCell>{formatDateTime(doc.createdAt, tz)}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Notes</TableCell>

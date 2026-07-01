@@ -2,6 +2,8 @@ import Link from "next/link";
 import { BellIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { formatDateTime } from "@/lib/ui/datetime";
 import type {
   ReminderStatus,
   ReminderType,
@@ -69,6 +71,7 @@ export default async function RemindersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("reminders.send");
+  const { defaultTimezone: tz } = await getAppSettings();
   const sp = await searchParams;
   const first = (v: string | string[] | undefined) =>
     (Array.isArray(v) ? v[0] : v) ?? "";
@@ -211,7 +214,7 @@ export default async function RemindersPage({
             null,
           ],
           cells: [
-            r.createdAt.toLocaleString(),
+            formatDateTime(r.createdAt, tz),
             <Link
               key="t"
               href={`/tenants/${r.tenantId}`}
@@ -232,7 +235,7 @@ export default async function RemindersPage({
                 className="capitalize"
                 title={
                   r.status === "delivered" && r.deliveredAt
-                    ? `Delivered ${r.deliveredAt.toLocaleString()}`
+                    ? `Delivered ${formatDateTime(r.deliveredAt, tz)}`
                     : r.status === "failed" && r.failedReason
                       ? r.failedReason
                       : undefined

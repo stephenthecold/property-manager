@@ -12,6 +12,7 @@ import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
+import { formatDateTime } from "@/lib/ui/datetime";
 import type { Tone } from "@/lib/ui/status-tone";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +51,7 @@ export default async function InboxPage({
   await requireCapability("mailbox.manage");
   const app = await getAppSettings();
   if (!app.modules.mailbox) redirect("/dashboard");
+  const tz = app.defaultTimezone;
 
   const sp = await searchParams;
   const raw = Array.isArray(sp.view) ? sp.view[0] : sp.view;
@@ -148,7 +150,7 @@ export default async function InboxPage({
               ],
               cells: [
                 <span key="r" className="whitespace-nowrap text-sm">
-                  {m.receivedAt.toLocaleString()}
+                  {formatDateTime(m.receivedAt, tz)}
                   {!m.readAt && (
                     <ToneBadge tone="info" className="ml-2">
                       New

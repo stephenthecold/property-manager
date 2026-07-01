@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listNotices } from "@/lib/services/notices";
+import { formatDate } from "@/lib/ui/datetime";
 import {
   NOTICE_TYPES,
   noticeTypeLabel,
@@ -45,6 +46,7 @@ export default async function NoticesPage({
   await requireCapability("notices.manage");
   const settings = await getAppSettings();
   if (!settings.modules.notices) redirect("/dashboard");
+  const tz = settings.defaultTimezone;
 
   const sp = await searchParams;
   const first = (k: string): string => {
@@ -233,7 +235,7 @@ export default async function NoticesPage({
             null,
           ],
           cells: [
-            n.createdAt.toLocaleDateString("en-US"),
+            formatDate(n.createdAt, tz),
             <div key="t">
               <Link
                 href={`/tenants/${n.lease.tenantId}`}

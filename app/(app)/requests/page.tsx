@@ -12,6 +12,7 @@ import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { ToneBadge } from "@/components/status-badge";
+import { formatDate } from "@/lib/ui/datetime";
 import type { Tone } from "@/lib/ui/status-tone";
 import { convertRequestToJobAction, setRequestStatusAction } from "./actions";
 
@@ -34,7 +35,7 @@ export default async function RequestsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("portal.manage");
-  const { modules } = await getAppSettings();
+  const { modules, defaultTimezone: tz } = await getAppSettings();
   if (!modules.tenantPortal) redirect("/dashboard");
   const sp = await searchParams;
   const error = (Array.isArray(sp.error) ? sp.error[0] : sp.error)?.trim();
@@ -160,7 +161,7 @@ export default async function RequestsPage({
               null,
             ],
             cells: [
-              r.createdAt.toLocaleDateString(),
+              formatDate(r.createdAt, tz),
               <Link
                 key="t"
                 href={`/tenants/${r.tenant.id}`}

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { MessageSquareIcon } from "lucide-react";
 import { requireCapability } from "@/lib/auth/session";
+import { getAppSettings } from "@/lib/services/app-settings";
 import {
   listInboundMessages,
   type InboundMessageRow,
 } from "@/lib/services/inbound-messages";
+import { formatDateTime } from "@/lib/ui/datetime";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
@@ -28,6 +30,7 @@ export default async function MessagesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("tenants.manage");
+  const { defaultTimezone: tz } = await getAppSettings();
   const sp = await searchParams;
   const rawFilter = Array.isArray(sp.filter) ? sp.filter[0] : sp.filter;
   const unreadOnly = rawFilter === "unread";
@@ -116,7 +119,7 @@ export default async function MessagesPage({
               ],
               cells: [
                 <span key="r" className="whitespace-nowrap text-sm">
-                  {m.receivedAt.toLocaleString()}
+                  {formatDateTime(m.receivedAt, tz)}
                   {!m.readAt && (
                     <Badge
                       variant="outline"

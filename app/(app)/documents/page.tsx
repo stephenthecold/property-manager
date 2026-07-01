@@ -2,7 +2,9 @@ import Link from "next/link";
 import { FileTextIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
+import { getAppSettings } from "@/lib/services/app-settings";
 import { listDocuments } from "@/lib/services/documents";
+import { formatDate } from "@/lib/ui/datetime";
 import type { UploadType } from "@/lib/generated/prisma/enums";
 import { UploadDocumentDialog } from "@/components/app/upload-document-dialog";
 import { DataTable } from "@/components/app/data-table";
@@ -35,6 +37,7 @@ export default async function DocumentsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireCapability("documents.manage");
+  const { defaultTimezone: tz } = await getAppSettings();
   const sp = await searchParams;
   const rawType = typeof sp.uploadType === "string" ? sp.uploadType : "";
   const uploadType = (UPLOAD_TYPES as readonly string[]).includes(rawType)
@@ -130,7 +133,7 @@ export default async function DocumentsPage({
             null,
           ],
           cells: [
-            d.createdAt.toLocaleDateString(),
+            formatDate(d.createdAt, tz),
             <Link
               key="f"
               href={`/documents/${d.id}`}

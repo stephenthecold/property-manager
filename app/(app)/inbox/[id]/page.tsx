@@ -40,6 +40,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/ui/datetime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +82,7 @@ export default async function InboxDetailPage({
   await requireCapability("mailbox.manage");
   const app = await getAppSettings();
   if (!app.modules.mailbox) redirect("/dashboard");
+  const tz = app.defaultTimezone;
 
   const { id } = await params;
   const sp = await searchParams;
@@ -194,7 +196,7 @@ export default async function InboxDetailPage({
               {email.fromName ? `${email.fromName} · ` : ""}
               {email.fromEmail}
             </span>{" "}
-            · {email.receivedAt.toLocaleString()}
+            · {formatDateTime(email.receivedAt, tz)}
           </>
         }
         actions={
@@ -555,7 +557,7 @@ export default async function InboxDetailPage({
             <p className="text-sm text-muted-foreground">
               This email was posted to Financials as a property expense
               {email.handledAt
-                ? ` on ${email.handledAt.toLocaleString()}`
+                ? ` on ${formatDateTime(email.handledAt, tz)}`
                 : ""}
               . The ledger and tenant balances are untouched.
             </p>
