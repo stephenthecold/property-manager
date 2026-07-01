@@ -187,6 +187,8 @@ export async function setUserNotifications(fd: FormData): Promise<void> {
     notifyMaintenanceDigest: fd.get("notifyMaintenanceDigest") === "on",
     notifyLeaseExpiration: fd.get("notifyLeaseExpiration") === "on",
     notifyCashPickup: fd.get("notifyCashPickup") === "on",
+    notifyPaymentRecorded: fd.get("notifyPaymentRecorded") === "on",
+    notifyMaintenanceRequest: fd.get("notifyMaintenanceRequest") === "on",
   };
   await withAudit(
     {
@@ -200,6 +202,8 @@ export async function setUserNotifications(fd: FormData): Promise<void> {
         notifyMaintenanceDigest: target.notifyMaintenanceDigest,
         notifyLeaseExpiration: target.notifyLeaseExpiration,
         notifyCashPickup: target.notifyCashPickup,
+        notifyPaymentRecorded: target.notifyPaymentRecorded,
+        notifyMaintenanceRequest: target.notifyMaintenanceRequest,
       },
     },
     async (tx) => {

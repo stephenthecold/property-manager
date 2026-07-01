@@ -145,6 +145,8 @@ export default async function UsersSettingsPage({
                           ["notifyMaintenanceDigest", "Weekly maintenance digest", u.notifyMaintenanceDigest],
                           ["notifyLeaseExpiration", "Weekly lease-expiration digest", u.notifyLeaseExpiration],
                           ["notifyCashPickup", "Cash-pickup alerts (email + text)", u.notifyCashPickup],
+                          ["notifyPaymentRecorded", "Payment recorded (email + text)", u.notifyPaymentRecorded],
+                          ["notifyMaintenanceRequest", "New maintenance request (email + text)", u.notifyMaintenanceRequest],
                         ] as const
                       ).map(([name, label, checked]) => (
                         <label key={name} className="flex items-center gap-2 text-sm">
