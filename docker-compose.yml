@@ -63,11 +63,18 @@ x-logging: &logging
       max-size: "10m"
       max-file: "5"
 
+# Security defaults — applied to every service via <<: *security.
+# no-new-privileges stops a process from gaining privileges through setuid/
+# setgid binaries, so a compromised container can't escalate that way.
+x-security: &security
+  security_opt:
+    - no-new-privileges:true
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
-    <<: *logging
+    <<: [*logging, *security]
     mem_limit: "${DB_MEM_LIMIT:-1g}"
     mem_reservation: 256m
     environment:
@@ -84,7 +91,7 @@ services:
 
   app:
     # merge-key with a list merges both anchors in order (Compose v2 supports this)
-    <<: [*app-image, *logging]
+    <<: [*app-image, *logging, *security]
     restart: unless-stopped
     mem_limit: "${APP_MEM_LIMIT:-1g}"
     mem_reservation: 256m
@@ -115,7 +122,7 @@ services:
 
   worker:
     # merge-key with a list merges both anchors in order (Compose v2 supports this)
-    <<: [*app-image, *logging]
+    <<: [*app-image, *logging, *security]
     restart: unless-stopped
     mem_limit: "${WORKER_MEM_LIMIT:-512m}"
     mem_reservation: 128m
@@ -143,6 +150,7 @@ services:
     image: postgres:17-alpine
     profiles: ["idp"]
     restart: unless-stopped
+    <<: *security
     environment:
       POSTGRES_USER: authentik
       POSTGRES_PASSWORD: "${AUTHENTIK_PG_PASS:-authentik}"
@@ -159,6 +167,7 @@ services:
     image: redis:7-alpine
     profiles: ["idp"]
     restart: unless-stopped
+    <<: *security
     volumes:
       - authentik-redis:/data
 
@@ -166,6 +175,7 @@ services:
     image: "ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2}"
     profiles: ["idp"]
     restart: unless-stopped
+    <<: *security
     command: server
     environment:
       AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret}"
@@ -187,6 +197,7 @@ services:
     image: "ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2}"
     profiles: ["idp"]
     restart: unless-stopped
+    <<: *security
     command: worker
     environment:
       AUTHENTIK_SECRET_KEY: "${AUTHENTIK_SECRET_KEY:-change-me-authentik-secret}"
@@ -206,6 +217,7 @@ services:
     image: minio/minio:latest
     profiles: ["storage"]
     restart: unless-stopped
+    <<: *security
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: "${S3_ACCESS_KEY_ID:-minioadmin}"
@@ -221,6 +233,7 @@ services:
     image: caddy:2-alpine
     profiles: ["proxy"]
     restart: unless-stopped
+    <<: *security
     ports:
       - "80:80"
       - "443:443"
