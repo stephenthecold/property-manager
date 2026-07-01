@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/deposit-disposition";
 import { listInboundForTenant } from "@/lib/services/inbound-messages";
 import { getAppSettings } from "@/lib/services/app-settings";
+import { formatDate } from "@/lib/ui/datetime";
 import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { PortalAccessCard } from "./portal-access-card";
@@ -300,6 +301,7 @@ export default async function TenantDetail({
   // client component and must not import lib/reminders). With no active lease,
   // fall back to the most recent lease's figures, else empty strings.
   const appSettings = await getAppSettings();
+  const tz = appSettings.defaultTimezone;
   const { actingRole } = await getDisplayRole();
   const canManagePortal =
     appSettings.modules.tenantPortal &&
@@ -419,7 +421,7 @@ export default async function TenantDetail({
                 className="border-red-200 bg-red-100 font-medium text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300"
                 title={`Email ${tenant.emailDeliveryStatus}${
                   tenant.emailSuppressedAt
-                    ? ` on ${tenant.emailSuppressedAt.toLocaleDateString()}`
+                    ? ` on ${formatDate(tenant.emailSuppressedAt, tz)}`
                     : ""
                 } — email reminders are skipped until cleared.`}
               >
@@ -1474,7 +1476,7 @@ export default async function TenantDetail({
                 d.fileSize,
               ],
               cells: [
-                d.createdAt.toLocaleDateString(),
+                formatDate(d.createdAt, tz),
                 <Link
                   key="f"
                   href={`/documents/${d.id}`}
@@ -1513,7 +1515,7 @@ export default async function TenantDetail({
               key: r.id,
               sortValues: [r.createdAt.toISOString(), r.reminderType, r.status],
               cells: [
-                r.createdAt.toLocaleDateString(),
+                formatDate(r.createdAt, tz),
                 <span key="t" className="capitalize">
                   {r.reminderType.replace(/_/g, " ")}
                 </span>,
@@ -1564,7 +1566,7 @@ export default async function TenantDetail({
               sortValues: [m.receivedAt.toISOString(), null],
               cells: [
                 <span key="r" className="whitespace-nowrap text-sm">
-                  {m.receivedAt.toLocaleDateString()}
+                  {formatDate(m.receivedAt, tz)}
                   {!m.readAt && (
                     <Badge
                       variant="outline"
@@ -1768,7 +1770,7 @@ export default async function TenantDetail({
               !!portalAccount?.inviteExpiresAt &&
               portalAccount.inviteExpiresAt > now,
             lastLoginAt: portalAccount?.lastLoginAt
-              ? portalAccount.lastLoginAt.toLocaleDateString()
+              ? formatDate(portalAccount.lastLoginAt, tz)
               : null,
             email: portalAccount?.email ?? null,
             phone: portalAccount?.phone ?? null,

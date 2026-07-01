@@ -7,6 +7,7 @@ import { getFileStorage } from "@/lib/providers/storage";
 import { getDisplayRole, requireCapability } from "@/lib/auth/session";
 import { hasCapability } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/money";
+import { formatDate } from "@/lib/ui/datetime";
 import { markSentAction } from "@/app/(app)/receipts/actions";
 import { EmailReceiptButton } from "./email-receipt-button";
 import { BackLink } from "@/components/app/back-link";
@@ -119,7 +120,7 @@ export default async function ReceiptPage({
         </form>
         {receipt.sentAt && (
           <span className="text-sm text-muted-foreground">
-            Sent via {receipt.sentMethod} on {receipt.sentAt.toLocaleDateString()}
+            Sent via {receipt.sentMethod} on {formatDate(receipt.sentAt, app.defaultTimezone)}
           </span>
         )}
       </div>

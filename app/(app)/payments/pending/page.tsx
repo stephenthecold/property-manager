@@ -3,6 +3,8 @@ import { InboxIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth/session";
 import { formatCurrency } from "@/lib/money";
+import { getAppSettings } from "@/lib/services/app-settings";
+import { formatDate } from "@/lib/ui/datetime";
 import {
   confirmSelfReportedPaymentAction,
   rejectSelfReportedPaymentAction,
@@ -26,6 +28,7 @@ export const metadata = { title: "Pending self-reports" };
  */
 export default async function PendingPaymentsPage() {
   await requireCapability("payments.manage");
+  const { defaultTimezone: tz } = await getAppSettings();
 
   const pending = await prisma.payment.findMany({
     where: { status: "pending", reportedAt: { not: null } },
@@ -90,7 +93,7 @@ export default async function PendingPaymentsPage() {
                     </span>
                     {p.referenceNumber && <span>Ref: {p.referenceNumber}</span>}
                     {p.reportedAt && (
-                      <span>Reported {p.reportedAt.toLocaleDateString()}</span>
+                      <span>Reported {formatDate(p.reportedAt, tz)}</span>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

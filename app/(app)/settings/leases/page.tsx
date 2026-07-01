@@ -2,6 +2,7 @@ import { requireCapability } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/services/app-settings";
 import { listDocuments } from "@/lib/services/documents";
 import { getFileStorage } from "@/lib/providers/storage";
+import { formatDate } from "@/lib/ui/datetime";
 import {
   DEFAULT_LEASE_AGREEMENT_TEXT,
   LEASE_AGREEMENT_PLACEHOLDERS,
@@ -114,7 +115,7 @@ export default async function LeaseSettingsPage() {
                 {currentTemplate.fileName ?? "Untitled .docx"}
               </span>{" "}
               <span className="text-muted-foreground">
-                (uploaded {currentTemplate.createdAt.toLocaleDateString()})
+                (uploaded {formatDate(currentTemplate.createdAt, app.defaultTimezone)})
               </span>
             </p>
           ) : (
