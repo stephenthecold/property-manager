@@ -134,6 +134,9 @@ enum ReminderStatus {
   sent
   delivered
   failed
+  // Held pending SMS consent: the triggering message is stored and released
+  // once the tenant opts in (else expired after a grace window).
+  held_for_consent
 }
 
 /// Delivery channel for reminders / notifications. Consent is absolute and
@@ -308,6 +311,10 @@ model AppSettings {
   reminderSendHour        Int?
   dueSoonRemindersEnabled Boolean @default(true)
   overdueRemindersEnabled Boolean @default(true)
+  // When on, the first SMS to a tenant who hasn't consented sends a one-time
+  // consent request; the triggering message is held and delivered once they
+  // reply YES. Off = a no-consent SMS is silently skipped (prior behavior).
+  autoRequestSmsConsent   Boolean @default(true)
   // Window (days) for the lease-expiration alert: the dashboard "Lease
   // expirations" section and the weekly staff expiration digest both surface
   // active leases ending within this many days. null -> the shipped default
@@ -696,6 +703,10 @@ model Tenant {
   emergencyContactName  String?
   emergencyContactPhone String?
   smsConsent            Boolean  @default(false)
+  // When the one-time "reply YES to get texts" consent request was auto-sent.
+  // Set once, ever — dedups the request so an un-opted-in tenant is never
+  // re-pestered on subsequent sends.
+  smsConsentRequestedAt DateTime?
   // Email reminders: consent is absolute and independent of SMS consent.
   emailConsent          Boolean  @default(false)
   // Preferred channel for automated reminders. Delivery still requires that

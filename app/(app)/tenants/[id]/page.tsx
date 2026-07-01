@@ -1518,7 +1518,7 @@ export default async function TenantDetail({
                   {r.reminderType.replace(/_/g, " ")}
                 </span>,
                 <span key="s" className="capitalize">
-                  {r.status}
+                  {r.status.replace(/_/g, " ")}
                 </span>,
               ],
             }))}

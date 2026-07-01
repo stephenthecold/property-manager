@@ -9,7 +9,11 @@ import {
   getAppSettings,
   resolveEmailProvider,
   resolveSmsProvider,
+  type ResolvedAppSettings,
 } from "@/lib/services/app-settings";
+import { toE164ForSend } from "@/lib/sms/phone";
+import { phoneKey } from "@/lib/portal/identity";
+import { smsConsentRequestText } from "@/lib/sms/consent-text";
 import type { NotificationChannel } from "@/lib/generated/prisma/enums";
 import {
   resolveReminderDelivery,
@@ -106,7 +110,14 @@ async function deliver(
         text: body,
       });
     }
-    return await (await resolveSmsProvider()).send({ to: destination, body });
+    // Normalize to E.164 at the wire: providers (Telnyx/Twilio) silently reject
+    // bare 10-digit numbers. Fall back to the raw value so a number we can't
+    // parse still reaches the provider (which surfaces the error) rather than
+    // being dropped.
+    return await (await resolveSmsProvider()).send({
+      to: toE164ForSend(destination) ?? destination,
+      body,
+    });
   } catch (e) {
     return { provider: "unknown", status: "failed", error: errorMessage(e) };
   }
@@ -196,6 +207,164 @@ export interface SendReminderResult {
   error?: string;
 }
 
+/**
+ * Render a reminder's body (+ email subject) from an explicit messageBody or the
+ * lease's financials. Shared by the normal send path and the consent-hold path,
+ * so a held message carries exactly what the tenant would have received. Returns
+ * a skip `error` when a scheduled type is missing its lease.
+ */
+async function renderReminderMessage(
+  i: SendReminderInput,
+  tenant: Tenant,
+  now: Date,
+  settings: ResolvedAppSettings,
+): Promise<{ body: string; subject: string } | { error: string }> {
+  if (i.messageBody && i.messageBody.trim() !== "") {
+    return {
+      body: i.messageBody,
+      subject: renderTemplate(settings.emailSubjects[i.reminderType], {
+        property: settings.businessName,
+      }),
+    };
+  }
+  if (!i.leaseId) return { error: "messageBody or leaseId required" };
+  const lease =
+    i.lease ??
+    (await prisma.lease.findUnique({
+      where: { id: i.leaseId },
+      include: { unit: { include: { property: true } } },
+    }));
+  if (!lease) return { error: "lease not found" };
+  return renderDefaultBody(
+    i.reminderType,
+    tenant,
+    lease,
+    i.periodKey ?? null,
+    now,
+    i.dueDate,
+    i.accounting,
+  );
+}
+
+/**
+ * First-contact SMS consent flow (auto-request on, tenant not opted in, never
+ * solicited before). Atomically claim the one-time solicitation via a CAS on
+ * smsConsentRequestedAt so concurrent charges/sweeps text at most once, send the
+ * YES/STOP request, and HOLD the message that triggered this — the worker
+ * releases it on opt-in (else it expires). Never writes a ConsentRecord: this is
+ * a request, not consent. The stamp is kept even when the solicitation send
+ * fails, so a bad number isn't re-pestered on every future charge.
+ */
+async function requestConsentAndHold(
+  i: SendReminderInput,
+  tenant: Tenant,
+  settings: ResolvedAppSettings,
+  now: Date,
+): Promise<SendReminderResult> {
+  const sendPhone = toE164ForSend(tenant.phone);
+  if (!sendPhone) {
+    return { reminderId: null, status: "skipped", error: "no phone number" };
+  }
+  // Respect a prior opt-out: NEVER solicit (or text) a tenant who has an SMS
+  // opt-out on record — they replied STOP, or staff/portal opted them out.
+  // smsConsent=false alone can't tell "never asked" from "opted out"; the
+  // append-only ConsentRecord history can. Match by tenant AND phone key: an
+  // opt-out may predate the tenant row, or have been recorded with no tenantId
+  // (public opt-out form). Only the truly never-engaged are solicited.
+  const pk = phoneKey(tenant.phone);
+  const optedOut = await prisma.consentRecord.findFirst({
+    where: {
+      channel: "sms",
+      consent: false,
+      OR: pk ? [{ tenantId: tenant.id }, { phone: pk }] : [{ tenantId: tenant.id }],
+    },
+    select: { id: true },
+  });
+  if (optedOut) {
+    return { reminderId: null, status: "skipped", error: "no consent (opted out)" };
+  }
+  // Render the deferred message BEFORE claiming, so a render failure (e.g. a
+  // scheduled type missing its lease) doesn't burn the once-ever request stamp.
+  const rendered = await renderReminderMessage(i, tenant, now, settings);
+  if ("error" in rendered) {
+    return { reminderId: null, status: "skipped", error: rendered.error };
+  }
+
+  // CAS: exactly ONE concurrent caller wins first-contact for this tenant and
+  // becomes responsible for BOTH the solicitation and the single held message.
+  // Losers skip without holding — so a tenant can never accrue duplicate holds
+  // (which matters for manual sends, whose null periodKey has no unique index to
+  // collapse a double-insert). A scheduled loser isn't lost: its slot stays open
+  // and the next sweep after opt-in re-sends it normally.
+  const claimed = await prisma.tenant.updateMany({
+    where: { id: tenant.id, smsConsentRequestedAt: null },
+    data: { smsConsentRequestedAt: now },
+  });
+  if (claimed.count === 0) {
+    return { reminderId: null, status: "skipped", error: "consent already requested" };
+  }
+
+  const result = await deliver(
+    "sms",
+    sendPhone,
+    "",
+    smsConsentRequestText(settings.businessName),
+  );
+  await writeAudit(prisma, {
+    ...i.actor,
+    action: "tenant.sms_consent_requested",
+    entityType: "Tenant",
+    entityId: tenant.id,
+    after: {
+      channel: "sms",
+      to: redactDestination("sms", sendPhone),
+      status: result.status,
+      provider: result.provider,
+    },
+  });
+  return holdReminder(i, tenant, sendPhone, rendered.body);
+}
+
+/**
+ * Store the message we deferred pending SMS opt-in as a held_for_consent
+ * Reminder, filling the same (lease, tenant, type, period) idempotency slot as a
+ * real send so a duplicate hold collapses to one row. Only ever called by the
+ * first-contact CAS winner.
+ */
+async function holdReminder(
+  i: SendReminderInput,
+  tenant: Tenant,
+  destinationPhone: string,
+  body: string,
+): Promise<SendReminderResult> {
+  try {
+    const held = await prisma.reminder.create({
+      data: {
+        tenantId: tenant.id,
+        leaseId: i.leaseId ?? null,
+        reminderType: i.reminderType,
+        periodKey: i.periodKey ?? null,
+        channel: "sms",
+        destinationPhone,
+        messageBody: body,
+        status: "held_for_consent",
+        sentBy: i.actor.actorId ?? null,
+      },
+    });
+    return {
+      reminderId: held.id,
+      status: "skipped",
+      error: "consent requested; message held",
+    };
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      // A row already fills this slot (a prior hold/send) — nothing to add.
+      return { reminderId: null, status: "skipped", error: "duplicate" };
+    }
+    throw e;
+  }
+}
+
 export async function sendReminder(
   i: SendReminderInput,
 ): Promise<SendReminderResult> {
@@ -241,46 +410,30 @@ export async function sendReminder(
     emailSuppressed: isEmailSuppressed(tenant.emailDeliveryStatus),
   });
   if (!delivery.ok) {
+    // Auto-consent-on-first-contact: the first time we WOULD text a tenant who
+    // hasn't opted in (and auto-request is on), send a one-time YES/STOP consent
+    // solicitation and HOLD this message — the worker releases it once they
+    // reply YES (else it expires). Solicited once, ever (smsConsentRequestedAt),
+    // and only when there's a number we can actually text.
+    if (
+      delivery.reason === "no consent" &&
+      effectiveChannel === "sms" &&
+      settings.autoRequestSmsConsent &&
+      !tenant.smsConsentRequestedAt &&
+      toE164ForSend(tenant.phone)
+    ) {
+      return await requestConsentAndHold(i, tenant, settings, now);
+    }
     const error = skipReasonMessage(delivery.reason, effectiveChannel);
     return { reminderId: null, status: "skipped", error };
   }
   const { channel, destination } = delivery;
 
-  let body: string;
-  let subject = renderTemplate(settings.emailSubjects[i.reminderType], {
-    property: settings.businessName,
-  });
-  if (i.messageBody && i.messageBody.trim() !== "") {
-    body = i.messageBody;
-  } else {
-    if (!i.leaseId) {
-      return {
-        reminderId: null,
-        status: "skipped",
-        error: "messageBody or leaseId required",
-      };
-    }
-    const lease =
-      i.lease ??
-      (await prisma.lease.findUnique({
-        where: { id: i.leaseId },
-        include: { unit: { include: { property: true } } },
-      }));
-    if (!lease) {
-      return { reminderId: null, status: "skipped", error: "lease not found" };
-    }
-    const rendered = await renderDefaultBody(
-      i.reminderType,
-      tenant,
-      lease,
-      i.periodKey ?? null,
-      now,
-      i.dueDate,
-      i.accounting,
-    );
-    body = rendered.body;
-    subject = rendered.subject;
+  const rendered = await renderReminderMessage(i, tenant, now, settings);
+  if ("error" in rendered) {
+    return { reminderId: null, status: "skipped", error: rendered.error };
   }
+  const { body, subject } = rendered;
 
   // Create the row first (status queued): the partial unique on
   // (leaseId, tenantId, reminderType, periodKey) makes scheduled sends
@@ -800,4 +953,149 @@ export async function recordDeliveryStatus(
 
   const res = await prisma.reminder.updateMany({ where, data });
   return res.count > 0;
+}
+
+export interface HeldConsentSweepResult {
+  released: number;
+  failed: number;
+  expired: number;
+  skipped: number;
+}
+
+/**
+ * Grace window for an unanswered consent request: a held_for_consent message the
+ * tenant never opts into is marked failed after this many days rather than held
+ * forever.
+ */
+export const HELD_CONSENT_MAX_AGE_DAYS = 7;
+
+/**
+ * Worker sweep for auto-consent held messages (run frequently, ~every 5 min):
+ *  - RELEASE: for each held_for_consent reminder whose tenant has SINCE opted in
+ *    (smsConsent) with SMS enabled, deliver the stored message and flip the row
+ *    to sent/failed. The ~5-minute "after they accept" delay the user asked for
+ *    falls out of the sweep cadence — there is no per-row schedule column.
+ *  - EXPIRE: a held reminder older than the grace window whose tenant still
+ *    hasn't opted in is marked failed ("consent not granted").
+ * Consent + master switch are re-checked at release; each row is isolated so a
+ * bad row never aborts the sweep, and a CAS on the held status keeps a release
+ * single-shot (the worker also serializes the sweep in-process).
+ */
+export async function runHeldConsentReminders(
+  now: Date = new Date(),
+): Promise<HeldConsentSweepResult> {
+  const result: HeldConsentSweepResult = {
+    released: 0,
+    failed: 0,
+    expired: 0,
+    skipped: 0,
+  };
+  const settings = await getAppSettings();
+  const actor: AuditContext = { actorType: "system", actorId: null };
+
+  const held = await prisma.reminder.findMany({
+    where: { status: "held_for_consent" },
+  });
+  if (held.length === 0) return result;
+  // Reminder has no tenant relation (tenantId is a bare scalar) — batch-load the
+  // tenants once and map by id rather than N per-row lookups.
+  const tenants = await prisma.tenant.findMany({
+    where: { id: { in: [...new Set(held.map((r) => r.tenantId))] } },
+    select: { id: true, smsConsent: true, phone: true },
+  });
+  const tenantById = new Map(tenants.map((t) => [t.id, t]));
+  const cutoff = new Date(
+    now.getTime() - HELD_CONSENT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
+  );
+
+  for (const row of held) {
+    try {
+      const tenant = tenantById.get(row.tenantId);
+      const optedIn = tenant?.smsConsent === true;
+      if (optedIn && settings.smsEnabled) {
+        const sendPhone = toE164ForSend(
+          row.destinationPhone ?? tenant?.phone ?? null,
+        );
+        if (!sendPhone) {
+          // No usable number anymore — leave held; it will expire on age.
+          result.skipped++;
+          continue;
+        }
+        // Consent is absolute: re-read it immediately before sending, in case
+        // the tenant replied STOP after the batch snapshot at the top of this
+        // sweep (brings the release path to parity with retryExistingSlot's
+        // re-check-then-send). The batch snapshot alone drives which rows we
+        // consider; this fresh read is the authoritative gate on delivery.
+        const fresh = await prisma.tenant.findUnique({
+          where: { id: row.tenantId },
+          select: { smsConsent: true },
+        });
+        if (fresh?.smsConsent !== true) {
+          result.skipped++;
+          continue;
+        }
+        // Deliver BEFORE the CAS. This is safe because the worker serializes the
+        // sweep in-process (heldConsentSweeping guard) AND the deployment runs a
+        // single worker, so there is never a concurrent sender; the CAS then
+        // finalizes the row exactly once. NOTE: held_for_consent is inert to
+        // retryExistingSlot (it only retries failed/stale-queued), so a
+        // concurrent scheduled send for the same slot correctly skips as a
+        // duplicate rather than double-sending. A future multi-worker deployment
+        // must add a cross-process lock here before delivering.
+        const delivered = await deliver("sms", sendPhone, "", row.messageBody);
+        const ok = delivered.status !== "failed";
+        const claimed = await prisma.$transaction(async (tx) => {
+          const upd = await tx.reminder.updateMany({
+            where: { id: row.id, status: "held_for_consent" },
+            data: {
+              status: ok ? "sent" : "failed",
+              provider: delivered.provider,
+              providerMessageId: delivered.providerMessageId ?? null,
+              destinationPhone: sendPhone,
+              sentAt: ok ? now : null,
+              failedReason: ok
+                ? null
+                : (delivered.error ?? "send failed").slice(0, 280),
+            },
+          });
+          if (upd.count === 0) return 0; // another pass already released it
+          await writeAudit(tx, {
+            ...actor,
+            action: ok ? "reminder.sent" : "reminder.failed",
+            entityType: "Reminder",
+            entityId: row.id,
+            after: {
+              reminderType: row.reminderType,
+              channel: "sms",
+              to: redactDestination("sms", sendPhone),
+              releasedFromConsentHold: true,
+            },
+          });
+          return upd.count;
+        });
+        if (claimed === 0) result.skipped++;
+        else if (ok) result.released++;
+        else result.failed++;
+      } else if (!optedIn && row.createdAt < cutoff) {
+        const upd = await prisma.reminder.updateMany({
+          where: { id: row.id, status: "held_for_consent" },
+          data: {
+            status: "failed",
+            failedReason: "consent not granted within grace window",
+          },
+        });
+        if (upd.count > 0) result.expired++;
+      } else {
+        // Opted in but SMS disabled, or still waiting inside the grace window.
+        result.skipped++;
+      }
+    } catch (e) {
+      result.failed++;
+      console.error(
+        `[reminders] held-consent sweep failed for reminder ${row.id}:`,
+        e,
+      );
+    }
+  }
+  return result;
 }

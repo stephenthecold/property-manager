@@ -14,6 +14,7 @@ import {
 } from "@/lib/services/app-settings";
 import { isValidComplianceUrl } from "@/lib/config/compliance";
 import { unsafeOutboundUrlReason } from "@/lib/http/safe-url";
+import { toE164ForSend } from "@/lib/sms/phone";
 import type { ReminderType } from "@/lib/generated/prisma/enums";
 
 export interface MessagingState {
@@ -107,6 +108,7 @@ export async function saveMessagingAction(
         reminderSendHour,
         dueSoonRemindersEnabled: fd.get("dueSoonRemindersEnabled") === "on",
         overdueRemindersEnabled: fd.get("overdueRemindersEnabled") === "on",
+        autoRequestSmsConsent: fd.get("autoRequestSmsConsent") === "on",
         smsTemplates,
       },
       await auditActor(),
@@ -318,8 +320,11 @@ export async function sendTestSmsAction(
   fd: FormData,
 ): Promise<MessagingState> {
   await requireCapability("messaging.settings");
-  const to = String(fd.get("testPhone") ?? "").trim();
-  if (!to) return { error: "Enter a phone number for the test message." };
+  const rawTo = String(fd.get("testPhone") ?? "").trim();
+  if (!rawTo) return { error: "Enter a phone number for the test message." };
+  // Send to E.164 when we can normalize (providers reject bare 10-digit); an
+  // unparseable value is passed through so the provider surfaces the error.
+  const to = toE164ForSend(rawTo) ?? rawTo;
 
   const settings = await getAppSettings();
   if (!settings.smsEnabled) {

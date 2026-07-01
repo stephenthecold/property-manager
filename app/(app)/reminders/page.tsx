@@ -17,7 +17,13 @@ import type { Tone } from "@/lib/ui/status-tone";
 
 export const runtime = "nodejs";
 
-const STATUSES: ReminderStatus[] = ["queued", "sent", "delivered", "failed"];
+const STATUSES: ReminderStatus[] = [
+  "queued",
+  "sent",
+  "delivered",
+  "failed",
+  "held_for_consent",
+];
 const TYPES: ReminderType[] = [
   "rent_due_soon",
   "rent_overdue",
@@ -31,6 +37,7 @@ const STATUS_TONE: Record<ReminderStatus, Tone> = {
   sent: "info",
   queued: "warning",
   failed: "danger",
+  held_for_consent: "hold",
 };
 
 const SELECT_CLASS =
@@ -124,8 +131,8 @@ export default async function RemindersPage({
           >
             <option value="">All</option>
             {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
+              <option key={s} value={s} className="capitalize">
+                {s.replace(/_/g, " ")}
               </option>
             ))}
           </select>
@@ -231,7 +238,7 @@ export default async function RemindersPage({
                       : undefined
                 }
               >
-                {r.status}
+                {r.status.replace(/_/g, " ")}
               </ToneBadge>
               {r.status === "failed" && r.failedReason && (
                 <span

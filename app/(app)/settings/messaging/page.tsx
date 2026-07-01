@@ -57,6 +57,7 @@ export default async function MessagingSettingsPage() {
               envProvider: env.SMS_PROVIDER,
               dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
               overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
+              autoRequestSmsConsent: row?.autoRequestSmsConsent ?? true,
               templates: TEMPLATE_LABELS.map(({ type, label }) => ({
                 type,
                 label,

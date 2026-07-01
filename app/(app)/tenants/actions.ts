@@ -18,11 +18,23 @@ import { recordStaffConsentChange } from "@/lib/services/sms-consent";
 import { clearEmailSuppression } from "@/lib/services/email-suppression";
 import { clientIpFromXff } from "@/lib/http/client-ip";
 import { publicBaseUrl } from "@/lib/http/base-url";
+import { toE164 } from "@/lib/sms/phone";
 import { getFormString as str, type FormState } from "@/lib/forms";
 
 /** "" → null; anything else must be a PaymentMethod enum value. */
 function parsePreferredMethod(raw: string): PaymentMethod | null {
   return raw in PaymentMethod ? (raw as PaymentMethod) : null;
+}
+
+/**
+ * Store phone numbers in E.164 (+1XXXXXXXXXX) when we can confidently normalize
+ * — SMS providers reject bare 10-digit numbers. A number we can't parse is kept
+ * exactly as typed (never corrupted); "" → null.
+ */
+function normalizePhone(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return toE164(trimmed) ?? trimmed;
 }
 
 function parseReminderChannel(raw: string): NotificationChannel {
@@ -41,7 +53,7 @@ export async function createTenant(
   }
   const smsConsent = fd.get("smsConsent") === "on";
   const emailConsent = fd.get("emailConsent") === "on";
-  const phone = str(fd, "phone") || null;
+  const phone = normalizePhone(str(fd, "phone"));
   const email = str(fd, "email") || null;
   const actor = await auditActor();
   const tenant = await prisma.$transaction(async (tx) => {
@@ -100,7 +112,7 @@ export async function updateTenant(
   const data = {
     firstName,
     lastName,
-    phone: str(fd, "phone") || null,
+    phone: normalizePhone(str(fd, "phone")),
     email: str(fd, "email") || null,
     mailingAddress: str(fd, "mailingAddress") || null,
     emergencyContactName: str(fd, "emergencyContactName") || null,
@@ -294,7 +306,7 @@ export async function createTenantInline(
   if (!firstName || !lastName) {
     return { error: "First and last name are required." };
   }
-  const phone = str(fd, "phone") || null;
+  const phone = normalizePhone(str(fd, "phone"));
   const email = str(fd, "email") || null;
   const actor = await auditActor();
   const tenant = await prisma.$transaction(async (tx) => {
