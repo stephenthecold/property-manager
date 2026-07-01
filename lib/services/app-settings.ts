@@ -213,6 +213,9 @@ export interface ResolvedAppSettings {
   /** When on, the first SMS to a not-yet-consented tenant sends a one-time
    *  consent request and holds the triggering message until they opt in. */
   autoRequestSmsConsent: boolean;
+  /** When the billing worker last completed a run (worker liveness signal); the
+   *  dashboard warns when this goes stale. null -> it has never run. */
+  lastBillingRunAt: Date | null;
   /** Days-ahead window for the lease-expiration dashboard section + weekly
    *  digest; clamped to 1..365, default 60. */
   leaseExpirationAlertDays: number;
@@ -331,6 +334,22 @@ export function invalidateAppSettingsCache(): void {
   cache = null;
 }
 
+/**
+ * Stamp the completion of a billing-worker run — the dashboard's worker-liveness
+ * signal (a stale value surfaces a warning). Called after every completed run,
+ * including zero-charge ones, since "the worker checked" is what liveness means.
+ * Not audited (high-frequency worker bookkeeping, like the inbox-poll health
+ * fields); no cache invalidation needed (nothing in-process reads it, and the
+ * dashboard's own 30s cache refreshes well within the staleness window).
+ */
+export async function recordBillingRun(now: Date = new Date()): Promise<void> {
+  await prisma.appSettings.upsert({
+    where: { id: "singleton" },
+    create: { id: "singleton", lastBillingRunAt: now },
+    update: { lastBillingRunAt: now },
+  });
+}
+
 export async function getAppSettings(): Promise<ResolvedAppSettings> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
   const value = await resolve();
@@ -398,6 +417,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
     overdueRemindersEnabled: row?.overdueRemindersEnabled ?? true,
     autoRequestSmsConsent: row?.autoRequestSmsConsent ?? true,
+    lastBillingRunAt: row?.lastBillingRunAt ?? null,
     leaseExpirationAlertDays: sanitizeAlertWindowDays(
       row?.leaseExpirationAlertDays ?? null,
     ),
