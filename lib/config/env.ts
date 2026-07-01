@@ -73,6 +73,9 @@ const envSchema = z.object({
   SMS_ACCOUNT_SID: z.string().optional(),
   SMS_AUTH_TOKEN: z.string().optional(),
   SMS_FROM_NUMBER: z.string().optional(),
+  // Telnyx account Ed25519 public key (base64) for verifying webhooks when SMS is
+  // env-configured to telnyx (DB config uses AppSettings.telnyxPublicKey instead).
+  TELNYX_PUBLIC_KEY: z.string().optional(),
 
   // OCR (Phase 5).
   OCR_ENABLED: boolish.default(false),

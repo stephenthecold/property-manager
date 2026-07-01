@@ -19,10 +19,11 @@ export interface TelnyxSmsProviderOptions {
  * SMS_AUTH_TOKEN holds the API key and SMS_FROM_NUMBER the sender;
  * SMS_ACCOUNT_SID is unused (Telnyx authenticates with the key alone).
  *
- * Delivery-status webhooks are NOT wired up: /api/sms/status verifies
- * Twilio's HMAC scheme, while Telnyx signs webhooks with Ed25519. Sends are
- * still confirmed by the API response; rows just stay at "sent" rather than
- * advancing to "delivered". getStatus() supports on-demand lookups.
+ * Inbound + delivery-status webhooks are handled at /api/sms/inbound (Telnyx
+ * posts both message.received and message.sent/finalized to that one URL),
+ * verified with Ed25519 against the account PUBLIC key (Settings → Messaging).
+ * Rows advance to delivered/failed with the carrier error; getStatus() also
+ * supports on-demand lookups.
  */
 export class TelnyxSmsProvider implements SmsProvider {
   readonly name = "telnyx";

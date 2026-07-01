@@ -49,6 +49,7 @@ export default async function MessagingSettingsPage() {
               smsAccountSid: row?.smsAccountSid ?? "",
               hasAuthToken: !!row?.smsAuthTokenCiphertext,
               smsFromNumber: row?.smsFromNumber ?? "",
+              telnyxPublicKey: row?.telnyxPublicKey ?? "",
               reminderDueSoonDays:
                 row?.reminderDueSoonDays != null ? String(row.reminderDueSoonDays) : "",
               envDueSoonDays: env.REMINDER_DUE_SOON_DAYS,

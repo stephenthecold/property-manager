@@ -18,6 +18,8 @@ export interface MessagingInitial {
   smsAccountSid: string;
   hasAuthToken: boolean;
   smsFromNumber: string;
+  /** Telnyx account public key (base64) for webhook signature verification. */
+  telnyxPublicKey: string;
   reminderDueSoonDays: string; // "" = env default
   envDueSoonDays: number;
   reminderSendHour: string; // "" = env REMINDER_CRON / 09:00 default
@@ -150,25 +152,42 @@ export function MessagingForm({ initial }: { initial: MessagingInitial }) {
         )}
 
         {provider === "telnyx" && (
-          <div className="space-y-2">
-            <Label htmlFor="smsAuthToken">Telnyx API key</Label>
-            <Input
-              id="smsAuthToken"
-              name="smsAuthToken"
-              type="password"
-              placeholder={
-                initial.hasAuthToken
-                  ? "Configured — leave blank to keep"
-                  : "Required (KEY…)"
-              }
-              autoComplete="off"
-            />
-            <p className="text-xs text-muted-foreground">
-              Stored encrypted (AES-256-GCM) and never shown again. Delivery
-              receipts are not tracked for Telnyx — sends are confirmed, but
-              statuses stay at &ldquo;sent&rdquo;.
-            </p>
-          </div>
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="smsAuthToken">Telnyx API key</Label>
+              <Input
+                id="smsAuthToken"
+                name="smsAuthToken"
+                type="password"
+                placeholder={
+                  initial.hasAuthToken
+                    ? "Configured — leave blank to keep"
+                    : "Required (KEY…)"
+                }
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Stored encrypted (AES-256-GCM) and never shown again.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telnyxPublicKey">Telnyx public key</Label>
+              <Input
+                id="telnyxPublicKey"
+                name="telnyxPublicKey"
+                defaultValue={initial.telnyxPublicKey}
+                placeholder="base64 public key from Telnyx"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                From Telnyx → Account Settings → Keys &amp; Credentials. Verifies
+                inbound + delivery webhooks (it&rsquo;s public, not a secret). Set
+                this and point your Telnyx Messaging Profile webhook URL at{" "}
+                <code>/api/sms/inbound</code> to receive replies and delivery
+                receipts (STOP/START, delivered/failed reasons).
+              </p>
+            </div>
+          </>
         )}
 
         <div className="space-y-3 rounded-md border p-3">

@@ -305,6 +305,11 @@ model AppSettings {
   smsAuthTokenNonce       String?
   smsAuthTokenTag         String?
   smsFromNumber           String?
+  // Telnyx account Ed25519 PUBLIC key (base64), used to verify inbound + delivery
+  // webhooks (message.received / message.finalized). Public, not a secret → stored
+  // plaintext (unlike the API token above). null -> Telnyx webhooks unverifiable
+  // (route fails closed). Twilio verifies via the auth token instead.
+  telnyxPublicKey         String?
   reminderDueSoonDays     Int? // null -> env REMINDER_DUE_SOON_DAYS
   // H4: hour of day (0-23, server local) the worker runs the daily reminder +
   // digest sweeps; null -> env REMINDER_CRON (default 09:00).
