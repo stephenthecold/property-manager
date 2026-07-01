@@ -104,6 +104,8 @@ export async function saveMessagingAction(
         // leaves it stored but unused.
         smsAuthToken: tokenRaw === "" ? undefined : tokenRaw,
         smsFromNumber: fromNumber,
+        // Non-secret Telnyx account public key for webhook verification (blank clears).
+        telnyxPublicKey: str(fd, "telnyxPublicKey"),
         reminderDueSoonDays,
         reminderSendHour,
         dueSoonRemindersEnabled: fd.get("dueSoonRemindersEnabled") === "on",

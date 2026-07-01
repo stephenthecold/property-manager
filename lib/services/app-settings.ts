@@ -205,6 +205,9 @@ export interface ResolvedAppSettings {
   smsConfigSource: "db" | "env";
   smsFromNumber: string | null;
   smsHasAuthToken: boolean;
+  /** Telnyx account Ed25519 public key (base64) for verifying inbound/delivery
+   *  webhooks; null -> Telnyx webhooks can't be verified (route fails closed). */
+  telnyxPublicKey: string | null;
   dueSoonDays: number;
   /** H4 hour (0-23) the worker runs the daily sweeps; null -> env/default cron. */
   reminderSendHour: number | null;
@@ -412,6 +415,7 @@ async function resolve(): Promise<ResolvedAppSettings> {
     smsConfigSource: dbSms ? "db" : "env",
     smsFromNumber: row?.smsFromNumber ?? env.SMS_FROM_NUMBER ?? null,
     smsHasAuthToken: !!row?.smsAuthTokenCiphertext,
+    telnyxPublicKey: row?.telnyxPublicKey ?? null,
     dueSoonDays: row?.reminderDueSoonDays ?? env.REMINDER_DUE_SOON_DAYS,
     reminderSendHour: sanitizeReminderSendHour(row?.reminderSendHour ?? null),
     dueSoonRemindersEnabled: row?.dueSoonRemindersEnabled ?? true,
@@ -587,6 +591,31 @@ export async function getEffectiveTwilioAuthToken(): Promise<string | null> {
     return env.SMS_AUTH_TOKEN;
   }
   return null;
+}
+
+/**
+ * The effective Telnyx public key for verifying inbound + delivery webhooks —
+ * DB-configured (Settings → Messaging) when AppSettings selects Telnyx, else the
+ * env key when env selects Telnyx. Returns null when Telnyx is NOT the effective
+ * provider (so the webhook route fails closed — no legitimate Telnyx caller), or
+ * when Telnyx is effective but no key is configured (unverifiable → also closed).
+ * Mirrors getEffectiveTwilioAuthToken + the DB-over-env resolution.
+ */
+export async function getEffectiveTelnyxPublicKey(): Promise<string | null> {
+  const row = await prisma.appSettings.findUnique({ where: { id: "singleton" } });
+  const dbSms =
+    row?.smsProvider === "twilio" ||
+    row?.smsProvider === "telnyx" ||
+    row?.smsProvider === "stub";
+  if (dbSms) {
+    return row!.smsProvider === "telnyx"
+      ? row!.telnyxPublicKey?.trim() || null
+      : null;
+  }
+  const env = getEnv();
+  return env.SMS_PROVIDER === "telnyx"
+    ? env.TELNYX_PUBLIC_KEY?.trim() || null
+    : null;
 }
 
 /**
@@ -1115,6 +1144,8 @@ export interface MessagingSettingsInput {
   /** undefined = keep the stored token; a string replaces it (Twilio auth token / Telnyx API key). */
   smsAuthToken?: string;
   smsFromNumber: string | null;
+  /** Telnyx account public key (base64) for webhook verification; "" clears it. */
+  telnyxPublicKey: string | null;
   reminderDueSoonDays: number | null;
   /** Hour 0-23 the worker runs daily sweeps; null -> env REMINDER_CRON / default. */
   reminderSendHour: number | null;
@@ -1153,6 +1184,7 @@ export async function saveMessagingSettings(
     smsProvider: input.smsProvider,
     smsAccountSid: input.smsAccountSid,
     smsFromNumber: input.smsFromNumber,
+    telnyxPublicKey: input.telnyxPublicKey,
     reminderDueSoonDays: input.reminderDueSoonDays,
     reminderSendHour: input.reminderSendHour,
     dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,
@@ -1178,6 +1210,7 @@ export async function saveMessagingSettings(
         smsEnabled: input.smsEnabled,
         smsProvider: input.smsProvider,
         smsFromNumber: input.smsFromNumber,
+        telnyxPublicKeySet: !!input.telnyxPublicKey,
         reminderDueSoonDays: input.reminderDueSoonDays,
         reminderSendHour: input.reminderSendHour,
         dueSoonRemindersEnabled: input.dueSoonRemindersEnabled,

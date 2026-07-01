@@ -488,6 +488,9 @@ export async function sendReminder(
         provider: result.provider,
         providerMessageId: result.providerMessageId ?? null,
         sentAt: ok ? now : null,
+        failedReason: ok
+          ? null
+          : (result.error ?? "send failed").slice(0, FAILED_REASON_MAX),
       },
     });
     await writeAudit(tx, {
@@ -580,6 +583,9 @@ async function retryExistingSlot(
         destinationPhone: channel === "sms" ? destination : row.destinationPhone,
         destinationEmail: channel === "email" ? destination : row.destinationEmail,
         sentAt: ok ? now : row.sentAt,
+        failedReason: ok
+          ? null
+          : (result.error ?? "send failed").slice(0, FAILED_REASON_MAX),
       },
     });
     await writeAudit(tx, {
