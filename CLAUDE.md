@@ -7,11 +7,16 @@ SMS, reports, RBAC capability matrix, Financials/Maintenance modules, theming) �
 enterprise-gap features have since shipped — two-way SMS inbox, ⌘K global search, per-tenant activity
 timeline, work-order lifecycle, preventive-maintenance log, asset/warranty registry + warranty
 alerts, lease-expiration alerts, portal notices, lease abstract, reminder delivery tracking,
-maintenance/audit photos & CSV export; then renewals, lease amendments, deposit→ledger move-out,
-inspection templates, turnover/make-ready; most recently a payments module (offline self-report →
-staff confirm), an own-LLC portfolio rollup, a public `/vacancies` page, report PDF/Excel export +
-scheduled delivery, email-bounce + reminder-preference hardening, optional staff 2FA/TOTP, and an
-app-wide UI-consistency harden — the prioritized enterprise-gap backlog
+maintenance/audit photos & CSV export; renewals, lease amendments, deposit→ledger move-out,
+inspection templates, turnover/make-ready; a payments module (offline self-report → staff confirm),
+an own-LLC portfolio rollup, a public `/vacancies` page, report PDF/Excel export + scheduled
+delivery, email-bounce + reminder-preference hardening, optional staff 2FA/TOTP, and an app-wide
+UI-consistency harden; most recently a reliability/compliance hardening pass — SMS numbers
+normalized to E.164 with an auto-consent-request on first contact (held + released on opt-in),
+two-way Telnyx SMS with signature-verified inbound/delivery webhooks, a timezone-resilient billing
+worker (hourly by default, with a stale-run dashboard warning), granular staff alert toggles
+(payment recorded, new maintenance request) plus a self-cleaning consent-flow test command, and
+org-timezone rendering for every staff-page timestamp — the prioritized enterprise-gap backlog
 ([`docs/IMPROVEMENT_BACKLOG.md`](docs/IMPROVEMENT_BACKLOG.md))
 tracks what shipped, what's left, and the pending live-DB verification pass (refresh it with
 `/competitive-audit`; turn an item into a build with `/feature-intake`). This file is the working
@@ -174,6 +179,19 @@ UI/visual and behavioural changes are not "done" until rendered and observed. If
   in_progress/on_hold/completed/canceled). Test "is this job open?" with `isOpenStatus()` /
   `OPEN_STATUSES` from [`lib/maintenance/status.ts`](lib/maintenance/status.ts) — never
   `status === "pending"`. Completion (cost → `PropertyExpense` mirror) is still tied to `completed`.
+- **Instant timestamps render in the org timezone, not the server's.** RSC pages format `Date`
+  instants (created/received/sent/handled/reported/last-login/delivered/etc.) with whatever
+  timezone the *container* runs in (UTC) by default — a bare `date.toLocaleString()` reads hours
+  in the future for a behind-UTC org. Use `formatDateTime`/`formatDate`/`formatDateLong` from
+  [`lib/ui/datetime.ts`](lib/ui/datetime.ts) with `AppSettings.defaultTimezone` instead; they fall
+  back to an ISO string if the (free-text, unvalidated) org timezone is invalid rather than
+  throwing. Civil date-only fields (due/effective/payment dates) already pin their own zone —
+  leave those alone.
+- **Billing worker cron defaults to hourly** (`BILLING_CRON`, `0 * * * *`) so a behind-UTC
+  property's midnight rollover doesn't sit uncharged for most of a day (a charge is only "due"
+  once midnight arrives in the *property's* timezone). Each completed run stamps
+  `AppSettings.lastBillingRunAt`; the dashboard warns if it's gone stale
+  ([`lib/dashboard/billing-health.ts`](lib/dashboard/billing-health.ts), >26h).
 - `npm run lint` is clean (zero errors); keep it that way.
 
 When extending (Phases 2–5), attach to existing seams (`sourceType/sourceId`, provider

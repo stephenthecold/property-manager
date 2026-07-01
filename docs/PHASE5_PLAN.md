@@ -1,10 +1,10 @@
 # Phase 5 — Next large phase (plan)
 
 Phases 1–4.7 are built (see [ROADMAP.md](./ROADMAP.md)), and several Phase 5 workstreams have
-since shipped — **A (tenant portal)** is built, and the **F/G** backlog and parts of **H** have
-landed (see the per-section status notes below). This is the actionable plan for the rest of the
-phase. Everything here attaches to existing seams so the schema and core invariants don't get
-reshaped:
+since shipped — **A (tenant portal)** is built, the **F/G** backlog and parts of **H** have
+landed, and **I** collects incident-driven reliability/compliance hardening (see the per-section
+status notes below). This is the actionable plan for the rest of the phase. Everything here
+attaches to existing seams so the schema and core invariants don't get reshaped:
 
 - **Money** stays integer cents through `lib/money.ts`; the **ledger is the source of truth**
   (corrections are reversals, never edits — see [accounting.md](./accounting.md)).
@@ -157,8 +157,17 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   Organization) sets the initial `DataTable` page size app-wide. Options live in the pure
   `lib/config/table.ts` (`sanitizeTablePageSize` clamps to 10/20/50); the value is supplied once via
   a `TablePageSizeProvider` mounted in the app shell, so no page threads it and a per-table
-  `defaultPageSize` prop still wins. Locale (currency/number/date) is still pending — it needs
-  `formatCurrency`/date threading across many call sites.
+  `defaultPageSize` prop still wins.
+- ✅ **Done — instant-timestamp timezone rendering.** Every staff-page instant (created/received/
+  sent/handled/reported/last-login/delivered/etc.) renders via
+  [`lib/ui/datetime.ts`](../lib/ui/datetime.ts) (`formatDateTime`/`formatDate`/`formatDateLong`) in
+  `AppSettings.defaultTimezone` instead of the server container's UTC — fixes timestamps that read
+  hours in the future for a behind-UTC org. Luxon validates the (free-text, unvalidated) org
+  timezone defensively and falls back to an ISO string rather than throwing. Civil date-only fields
+  (due/effective/payment dates) already pinned their own zone and were left alone.
+- Still pending: currency/number/date **locale** (needs `formatCurrency`/date threading across many
+  call sites); validating the org timezone field as a real IANA zone; per-*viewer* (not just
+  per-org) timestamp rendering.
 
 ### H3. Documents & numbering
 - ✅ **Done — receipt number prefix.** `AppSettings.receiptPrefix` (Settings → Organization) drives
@@ -181,6 +190,14 @@ the accounting core stays in a clock-injected, unit-tested pure module.
   hour the worker runs its daily reminder + digest sweeps. The pure `lib/reminders/schedule.ts`
   (`reminderCron`) resolves DB-over-env: a saved hour → `0 H * * *`, else `REMINDER_CRON`, else
   09:00; read once at worker startup. `STAFF_DIGEST_CRON` (the weekly Monday digest) stays env-only.
+- ✅ **Done — granular staff alert toggles.** Beyond the existing weekly digests,
+  `User.notifyPaymentRecorded` / `notifyMaintenanceRequest` (Settings → Users) let each staff
+  member opt in/out of a real-time alert (email + SMS) when a payment is recorded or a tenant
+  submits a maintenance request. `lib/services/staff-alerts.ts` (`sendStaffAlert` + per-event
+  helpers) fires fire-and-forget *after* the triggering transaction commits (`postPayment`,
+  `confirmSelfReportedPayment`, `createTenantRequest`), so a failed send never rolls back the
+  ledger/request write, and idempotent retries don't double-alert. Still pending: cadence (daily
+  vs. weekly) and quiet-hours/frequency-cap controls beyond today's on/off.
 
 ### H5. Tenant-facing copy (Settings → Organization)
 - ✅ **Done** — `AppSettings.portalWelcomeText` (tenant portal home) and `AppSettings.applyIntroText`
@@ -221,11 +238,44 @@ pure modules with unit tests — the DB layer never re-implements it.
 
 ---
 
+## I. Reliability & compliance hardening (incident-driven)
+
+Unlike A–H (planned from the original audit), these shipped in direct response to specific
+production issues surfaced this phase — collected here so they're not lost track of, not as a
+backlog to work down proactively.
+
+- ✅ **Done — billing schedule resilience.** A live incident showed the worker's midnight-UTC cron
+  (`0 1 * * *`) left a behind-UTC property's rent uncharged for most of a day, because a charge is
+  only "due" once midnight arrives in the *property's* timezone. `BILLING_CRON` now defaults to
+  hourly (`0 * * * *`); `runOnce` stamps `AppSettings.lastBillingRunAt` on every completed run
+  ([`lib/services/app-settings.ts`](../lib/services/app-settings.ts)), and the dashboard warns when
+  it's gone stale ([`lib/dashboard/billing-health.ts`](../lib/dashboard/billing-health.ts),
+  `billingRunIsStale`, >26h) — Luxon-defensive against the org's free-text timezone.
+- ✅ **Done — SMS E.164 + auto-consent-on-first-contact.** Tenant phone numbers are normalized to
+  E.164 on write; the first time the app would text a non-consented tenant, it sends a one-time
+  "reply YES" consent request and **holds** the original message instead of dropping it, releasing
+  it on opt-in via a worker sweep (expires after 7 days). Compare-and-swap guarded so only one hold
+  fires per tenant/phone.
+- ✅ **Done — two-way Telnyx SMS hardening.** Signature verification over the raw UTF-8 bytes (not
+  the re-encoded string), a provider-scoped match for delivery-status webhooks, and inbound-message
+  idempotency so a provider retry doesn't double-post to the inbox.
+- ✅ **Done — granular staff alerts + safe testing.** See H4 — per-user payment-recorded /
+  maintenance-request alert toggles, plus a self-cleaning `npm run demo:consent` command that
+  exercises the SMS-consent flow (request → opt-in → release) against stub providers with **zero
+  ledger or permanent-row footprint**.
+- ✅ **Done — instant-timestamp org-timezone rendering.** See H2 — every staff-page instant now
+  renders via `lib/ui/datetime.ts` in `AppSettings.defaultTimezone` instead of the server
+  container's UTC.
+
+---
+
 ### Suggested order
 
 A and B are the high-value foundation (and B's ledger integration is low-risk because it reuses
 the payment service). C and D layer on once A exists. E, F, G are independent and can slot in
 between as smaller PRs. **H** is a backlog of small, independent customization PRs — most are
 low-risk free-text/preference fields that can be picked up any time (H4's email templates pair
-with C; H7 is last because it touches the accounting core). Keep each workstream to its own PR
-with tests + a Playwright check, the way 4.5 was shipped.
+with C; H7 is last because it touches the accounting core). **I** isn't planned work — it's a
+running log of incident-driven hardening; pick items off it only when a live issue surfaces, not
+proactively. Keep each workstream to its own PR with tests + a Playwright check, the way 4.5 was
+shipped.
