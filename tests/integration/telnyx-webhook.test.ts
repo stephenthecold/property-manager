@@ -25,7 +25,7 @@ function signedRequest(bodyObj: unknown, opts?: { key?: typeof privateKey; ts?: 
   const body = JSON.stringify(bodyObj);
   const ts = String(opts?.ts ?? Math.floor(Date.now() / 1000));
   const signature = crypto
-    .sign(null, Buffer.from(`${ts}|${body}`, "ascii"), opts?.key ?? privateKey)
+    .sign(null, Buffer.from(`${ts}|${body}`, "utf8"), opts?.key ?? privateKey)
     .toString("base64");
   return new Request("http://localhost/api/sms/inbound", {
     method: "POST",
@@ -106,6 +106,48 @@ describe("Telnyx inbound webhook", () => {
       where: { providerSid: `${P}-in-2` },
     });
     expect(inbound).toBe(1);
+  });
+
+  it("verifies + captures a non-ASCII inbound reply (UTF-8 body)", async () => {
+    // End-to-end guard for the ascii→utf8 signing fix: an emoji/accented body
+    // must verify and be captured, not 403'd.
+    const req = signedRequest({
+      data: {
+        event_type: "message.received",
+        payload: {
+          id: `${P}-in-emoji`,
+          from: { phone_number: phone },
+          to: [{ phone_number: "+15550000000" }],
+          text: "Café ☕ paid! 😀",
+        },
+      },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const inbound = await prisma.inboundMessage.findFirst({
+      where: { providerSid: `${P}-in-emoji` },
+    });
+    expect(inbound?.body).toContain("☕");
+  });
+
+  it("dedupes a re-delivered (retried) inbound webhook by providerSid", async () => {
+    const payload = {
+      data: {
+        event_type: "message.received",
+        payload: {
+          id: `${P}-in-dup`,
+          from: { phone_number: phone },
+          to: [{ phone_number: "+15550000000" }],
+          text: "Is maintenance coming today?",
+        },
+      },
+    };
+    expect((await POST(signedRequest(payload))).status).toBe(200);
+    expect((await POST(signedRequest(payload))).status).toBe(200); // retry
+    const count = await prisma.inboundMessage.count({
+      where: { providerSid: `${P}-in-dup` },
+    });
+    expect(count).toBe(1);
   });
 
   it("advances a reminder to failed with the carrier error (message.finalized)", async () => {

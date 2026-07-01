@@ -36,6 +36,28 @@ describe("verifyTelnyxSignature", () => {
     ).toBe(true);
   });
 
+  it("accepts a body with non-ASCII characters (emoji/accents/smart-quotes)", () => {
+    // Regression guard: the verifier must re-encode as UTF-8 (matching the
+    // route's req.text()), not ascii — else any emoji/accent in an inbound reply
+    // or an echoed outbound body breaks verification and drops the webhook.
+    const timestamp = String(NOW_SECONDS);
+    const body = JSON.stringify({
+      data: {
+        event_type: "message.received",
+        payload: { id: "u1", text: "Café ☕ 😀 — “smart quotes”" },
+      },
+    });
+    expect(
+      verifyTelnyxSignature({
+        publicKeyBase64: pubB64,
+        payload: body,
+        signatureBase64: sign(timestamp, body),
+        timestamp,
+        now: NOW,
+      }),
+    ).toBe(true);
+  });
+
   it("accepts an empty body when the signature covers it", () => {
     const timestamp = String(NOW_SECONDS);
     expect(

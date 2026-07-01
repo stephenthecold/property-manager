@@ -54,6 +54,17 @@ export async function recordInboundSms(
     const tenantId = await matchTenantIdByPhone(fromPhone);
     const providerSid = input.providerSid?.trim() || null;
 
+    // Idempotency: SMS providers RE-DELIVER a webhook when they miss the 2xx ack
+    // (and a signed webhook could be replayed within its timestamp window), which
+    // would otherwise duplicate the inbox row. Dedup on the provider message id.
+    if (providerSid) {
+      const existing = await prisma.inboundMessage.findFirst({
+        where: { providerSid },
+        select: { id: true },
+      });
+      if (existing) return existing.id;
+    }
+
     const row = await prisma.inboundMessage.create({
       data: { channel: "sms", fromPhone, body, tenantId, providerSid },
       select: { id: true },
@@ -67,7 +78,9 @@ export async function recordInboundSms(
         action: "inbound_message.received",
         entityType: "InboundMessage",
         entityId: row.id,
-        after: { fromPhone, tenantId, providerSid },
+        // Redact to last-4 in the audit log (the full number lives on the
+        // InboundMessage operational row), matching the SMS audit convention.
+        after: { fromPhone: fromPhone.slice(-4), tenantId, providerSid },
       });
     } catch (auditErr) {
       console.error(

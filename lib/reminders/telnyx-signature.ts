@@ -58,7 +58,11 @@ export function verifyTelnyxSignature(i: TelnyxSignatureInput): boolean {
     const der = Buffer.concat([ED25519_SPKI_PREFIX, rawKey]);
     const keyObject = createPublicKey({ key: der, format: "der", type: "spki" });
 
-    const message = Buffer.from(`${timestamp}|${payload}`, "ascii");
+    // UTF-8, NOT ascii: the route reads the body with req.text() (UTF-8 decode)
+    // and Telnyx signs the raw UTF-8 request bytes. Re-encoding as "ascii" would
+    // corrupt any non-ASCII byte (emoji/accents/smart-quotes — common in real SMS
+    // bodies echoed in inbound + delivery payloads) and reject valid signatures.
+    const message = Buffer.from(`${timestamp}|${payload}`, "utf8");
     return cryptoVerify(null, message, keyObject, signature);
   } catch {
     return false;
